@@ -28,7 +28,8 @@ PANDAENDCOMMENT */
 //#endif
 
 //#include "config.h"
-//#include "cpu.h"
+#include "cpu.h"
+
 
 //#ifdef CONFIG_ANDROID
 // definitions for BEFORE_LOADVM handler
@@ -52,10 +53,10 @@ PANDAENDCOMMENT */
 
 //int after_block_callback(CPUState *env, TranslationBlock *tb, TranslationBlock *next_tb);
 //int before_block_callback(CPUState *env, TranslationBlock *tb);
-//int guest_hypercall_callback(CPUState *env);
+int guest_hypercall_callback(CPUState *env);
 bool translate_callback(CPUState *env, target_ulong pc);
 int exec_callback(CPUState *env, target_ulong pc);
-//int monitor_callback(Monitor *mon, const char *cmd);
+int monitor_callback(Monitor *mon, const char *cmd);
 //int before_loadvm_callback(void);
 
 bool init_plugin(void *);
@@ -66,13 +67,14 @@ long long begin_at = 0;
 long long exit_at = -1;
 FILE *plugin_log;
 
-/*int guest_hypercall_callback(CPUState *env) {
+int guest_hypercall_callback(CPUState *env) {
 #ifdef TARGET_I386
-    if(env->regs[R_EAX] == 0xdeadbeef) printf("Hypercall called!\n");
+    printf("in hypercall back\n");
+//    if(env->regs[R_EAX] == 0xdeadbeef) printf("Hypercall called!\n");
 #endif
     return 1;
 }
-
+/*
 // write this program point to this file
 static void rr_spit_prog_point_fp(FILE *fp, RR_prog_point pp) {
     fprintf(fp, "{guest_instr_count=%llu pc=0x%08llx, secondary=0x%08llx}\n",
@@ -115,11 +117,12 @@ int after_block_callback(CPUState *env, TranslationBlock *tb, TranslationBlock *
         next_tb ? next_tb->pc : 0);
     return 1;
 }
-
+*/
 
 // Monitor callback. This gets a string that you can then parse for
 // commands. Could do something more complex here, e.g. getopt.
 int monitor_callback(Monitor *mon, const char *cmd) {
+  printf("in monitor callback\n");
   if (!active) return 1;
 #ifdef CONFIG_SOFTMMU
     char *cmd_work = g_strdup(cmd);
@@ -141,18 +144,21 @@ int monitor_callback(Monitor *mon, const char *cmd) {
 #endif
     return 1;
 }
-*/
+
 
 // We're going to log all user instructions
 bool translate_callback(CPUState *env, target_ulong pc) {
     // We have access to env here, so we could choose to
     // read the bytes and do something fancy with the insn
-    return pc < 0x80000000;
+    //return pc > 0x80000000;
+    //printf("in translate_callback\n");  
+    return true;
 }
 
 int exec_callback(CPUState *env, target_ulong pc) {
     if (!active) return 1;
     fprintf(plugin_log, "Kernel insn 0x" TARGET_FMT_lx " executed:", pc);
+    printf("Kernel insn 0x" TARGET_FMT_lx " executed:", pc);
     // An x86 instruction must always fit in 15 bytes; this does not
     // make much sense for other architectures, but is just for
     // testing and debugging
@@ -163,7 +169,8 @@ int exec_callback(CPUState *env, target_ulong pc) {
         fprintf(plugin_log, " %02x", buf[i]);
     }
     fprintf(plugin_log, "\n");
-    return 1;
+    //return 1;
+    return 0;
 }
 
 
@@ -232,16 +239,24 @@ int other_sample_function(CPUState *env, int foo){
     return 1;
 }
 
-
 panda_arg_list *args;
 
 bool init_plugin(void *self) {
     panda_cb pcb;
 
-    int i;
-    char *tblog_filename = NULL;
-    args = panda_get_args("sample");
-    if (args != NULL) {
+//  int i;
+//  const char *tblog_filename = "trace_sample.log.txt";
+    args = panda_get_args("trace_sample");
+    printf("get args of trace_sample\n");
+    printf("now parse it\n");
+    const char *tblog_filename = panda_parse_string_opt (args, "file", "", "file name for log");
+    printf("\nget file name \t%s\n\n", tblog_filename);
+    
+    //size_t arg_len = strlen(arg_str);
+    //if (arg_len >0){
+    //	memcpy();
+    //  }
+/*  if (args != NULL) {
         for (i = 0; i < args->nargs; i++) {
             // Format is sample:file=<file>
             if (0 == strncmp(args->list[i].key, "file", 4)) {
@@ -272,31 +287,50 @@ bool init_plugin(void *self) {
             }
         }
     }
-
+*/
     if (!tblog_filename) {
-        fprintf(stderr, "Plugin 'sample' needs argument: -panda-arg sample:file=<file>\n");
+        fprintf(stderr, "Plugin 'sample' needs argument: -panda trace_sample:file=<file>\n");
         return false;
+    }else{
+	fprintf(stderr, "\nGOOD\n");
     }
 
     plugin_log = fopen(tblog_filename, "w");    
     if(!plugin_log) return false;
 
+    printf("file opened.....\n");
+
+    //panda_do_flush_tb();
+    //printf("do_flush_tb enabled\n");
+
+    panda_enable_precise_pc();
+    printf("precise_pc enabled\n");
+
+    panda_enable_memcb();
+    printf("memcb enabled\n");
+
     // In general you should always register your callbacks last, because
     // if you return false your plugin will be unloaded and there may be stale
     // pointers hanging around.
-/*    pcb.guest_hypercall = guest_hypercall_callback;
+
+    pcb.guest_hypercall = guest_hypercall_callback;
     panda_register_callback(self, PANDA_CB_GUEST_HYPERCALL, pcb);
-    pcb.after_block_exec = after_block_callback;
+/*    pcb.after_block_exec = after_block_callback;
     panda_register_callback(self, PANDA_CB_AFTER_BLOCK_EXEC, pcb);
     pcb.before_block_exec = before_block_callback;
     panda_register_callback(self, PANDA_CB_BEFORE_BLOCK_EXEC, pcb);
+*/
     pcb.monitor = monitor_callback;
     panda_register_callback(self, PANDA_CB_MONITOR, pcb);
-    pcb.insn_translate = translate_callback;
-*/
-    panda_register_callback(self, PANDA_CB_INSN_TRANSLATE, pcb);
-    pcb.insn_exec = exec_callback;
-    panda_register_callback(self, PANDA_CB_INSN_EXEC, pcb);
+
+    panda_cb pcb1 = { .insn_translate = translate_callback };
+    panda_register_callback(self, PANDA_CB_INSN_TRANSLATE, pcb1);
+    printf("callback PANDA_CB_INSN_TRANSLATE registered.....\n");
+
+    panda_cb pcb2 = { .insn_exec = exec_callback } ;
+    panda_register_callback(self, PANDA_CB_INSN_EXEC, pcb2);
+    printf("callback PANDA_CB_INSN_EXEC registered.....\n");
+
 //#ifdef CONFIG_ANDROID
 //    pcb.before_loadvm = before_loadvm_callback;
 //    panda_register_callback(self, PANDA_CB_BEFORE_REPLAY_LOADVM, pcb);
@@ -305,11 +339,16 @@ bool init_plugin(void *self) {
     return true;
 }
 
-void uninit_plugin(void *self) {
+void uninit_plugin(void *self) {    
+
     printf("Unloading sample plugin.\n");
-    panda_free_args(args);
+    printf("closing file.\n");
     fflush(plugin_log);
     fclose(plugin_log);
+    printf("free args.\n");
+    panda_free_args(args);
+    printf("trace_sample unplugged.\n");
+
 }
 
 
