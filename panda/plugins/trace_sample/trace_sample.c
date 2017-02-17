@@ -53,20 +53,21 @@ PANDAENDCOMMENT */
 
 //int after_block_callback(CPUState *env, TranslationBlock *tb, TranslationBlock *next_tb);
 //int before_block_callback(CPUState *env, TranslationBlock *tb);
-int guest_hypercall_callback(CPUState *env);
+//int guest_hypercall_callback(CPUState *env);
 bool translate_callback(CPUState *env, target_ulong pc);
 int exec_callback(CPUState *env, target_ulong pc);
-int monitor_callback(Monitor *mon, const char *cmd);
+//int monitor_callback(Monitor *mon, const char *cmd);
 //int before_loadvm_callback(void);
 
 bool init_plugin(void *);
 void uninit_plugin(void *);
 
-bool active = false;
+bool active = true;
 long long begin_at = 0;
 long long exit_at = -1;
 FILE *plugin_log;
 
+/*
 int guest_hypercall_callback(CPUState *env) {
 #ifdef TARGET_I386
     printf("in hypercall back\n");
@@ -74,7 +75,7 @@ int guest_hypercall_callback(CPUState *env) {
 #endif
     return 1;
 }
-/*
+
 // write this program point to this file
 static void rr_spit_prog_point_fp(FILE *fp, RR_prog_point pp) {
     fprintf(fp, "{guest_instr_count=%llu pc=0x%08llx, secondary=0x%08llx}\n",
@@ -121,7 +122,7 @@ int after_block_callback(CPUState *env, TranslationBlock *tb, TranslationBlock *
 
 // Monitor callback. This gets a string that you can then parse for
 // commands. Could do something more complex here, e.g. getopt.
-int monitor_callback(Monitor *mon, const char *cmd) {
+/*int monitor_callback(Monitor *mon, const char *cmd) {
   printf("in monitor callback\n");
   if (!active) return 1;
 #ifdef CONFIG_SOFTMMU
@@ -144,7 +145,7 @@ int monitor_callback(Monitor *mon, const char *cmd) {
 #endif
     return 1;
 }
-
+*/
 
 // We're going to log all user instructions
 bool translate_callback(CPUState *env, target_ulong pc) {
@@ -313,22 +314,22 @@ bool init_plugin(void *self) {
     // if you return false your plugin will be unloaded and there may be stale
     // pointers hanging around.
 
-    pcb.guest_hypercall = guest_hypercall_callback;
-    panda_register_callback(self, PANDA_CB_GUEST_HYPERCALL, pcb);
+    //pcb.guest_hypercall = guest_hypercall_callback;
+    //panda_register_callback(self, PANDA_CB_GUEST_HYPERCALL, pcb);
 /*    pcb.after_block_exec = after_block_callback;
     panda_register_callback(self, PANDA_CB_AFTER_BLOCK_EXEC, pcb);
     pcb.before_block_exec = before_block_callback;
     panda_register_callback(self, PANDA_CB_BEFORE_BLOCK_EXEC, pcb);
 */
-    pcb.monitor = monitor_callback;
-    panda_register_callback(self, PANDA_CB_MONITOR, pcb);
+    //pcb.monitor = monitor_callback;
+    //panda_register_callback(self, PANDA_CB_MONITOR, pcb);
 
-    panda_cb pcb1 = { .insn_translate = translate_callback };
-    panda_register_callback(self, PANDA_CB_INSN_TRANSLATE, pcb1);
+    pcb.insn_translate = translate_callback;
+    panda_register_callback(self, PANDA_CB_INSN_TRANSLATE, pcb);
     printf("callback PANDA_CB_INSN_TRANSLATE registered.....\n");
 
-    panda_cb pcb2 = { .insn_exec = exec_callback } ;
-    panda_register_callback(self, PANDA_CB_INSN_EXEC, pcb2);
+    pcb.insn_exec = exec_callback;
+    panda_register_callback(self, PANDA_CB_INSN_EXEC, pcb);
     printf("callback PANDA_CB_INSN_EXEC registered.....\n");
 
 //#ifdef CONFIG_ANDROID
