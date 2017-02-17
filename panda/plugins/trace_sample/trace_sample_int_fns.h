@@ -1,6 +1,6 @@
 
-#ifndef __SAMPLE_INT_FNS_H__
-#define __SAMPLE_INT_FNS_H__
+#ifndef __TRACE_SAMPLE_INT_FNS_H__
+#define __TRACE_SAMPLE_INT_FNS_H__
 
 int sample_function(CPUState *env);
 

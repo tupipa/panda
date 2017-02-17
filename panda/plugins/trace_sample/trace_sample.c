@@ -11,36 +11,52 @@
  * See the COPYING file in the top-level directory. 
  * 
 PANDAENDCOMMENT */
-#include "config.h"
-#include "qemu-common.h"
-#include "monitor.h"
-#include "cpu.h"
-#include "disas.h"
 
-#include "panda_plugin.h"
+//This needs to be defined before anything is included in order to get
+// the PRIx64 macro
+#define __STDC_FORMAT_MACROS
 
-#ifdef CONFIG_ANDROID
+
+#include "panda/plugin.h"
+//#include "panda/plugin_plugin.h"
+//#include "qemu-common.h"
+#include "monitor/monitor.h"
+#include "disas/disas.h"
+
+//#ifdef __cplusplus
+//extern "C" {
+//#endif
+
+//#include "config.h"
+//#include "cpu.h"
+
+//#ifdef CONFIG_ANDROID
 // definitions for BEFORE_LOADVM handler
-#include "hw/goldfish_device.h"
-#include "hw/goldfish_nand.h"
-#include "hw/goldfish_mmc.h"
-#endif
+//#include "hw/goldfish_device.h"
+//#include "hw/goldfish_nand.h"
+//#include "hw/goldfish_mmc.h"
+//#endif
 
 // This is a C file, so we don't need "extern C"
-#include "sample_int_fns.h"
+#include "trace_sample_int_fns.h"
 
-#include "rr_log.h"
+#include "panda/rr/rr_log.h"
 
-#include <stdio.h>
-#include <stdlib.h>
+//#include <stdio.h>
+//#include <stdlib.h>
 
-int after_block_callback(CPUState *env, TranslationBlock *tb, TranslationBlock *next_tb);
-int before_block_callback(CPUState *env, TranslationBlock *tb);
-int guest_hypercall_callback(CPUState *env);
+//#ifdef __cplusplus
+//}
+//#endif
+
+
+//int after_block_callback(CPUState *env, TranslationBlock *tb, TranslationBlock *next_tb);
+//int before_block_callback(CPUState *env, TranslationBlock *tb);
+//int guest_hypercall_callback(CPUState *env);
 bool translate_callback(CPUState *env, target_ulong pc);
 int exec_callback(CPUState *env, target_ulong pc);
-int monitor_callback(Monitor *mon, const char *cmd);
-int before_loadvm_callback(void);
+//int monitor_callback(Monitor *mon, const char *cmd);
+//int before_loadvm_callback(void);
 
 bool init_plugin(void *);
 void uninit_plugin(void *);
@@ -50,7 +66,7 @@ long long begin_at = 0;
 long long exit_at = -1;
 FILE *plugin_log;
 
-int guest_hypercall_callback(CPUState *env) {
+/*int guest_hypercall_callback(CPUState *env) {
 #ifdef TARGET_I386
     if(env->regs[R_EAX] == 0xdeadbeef) printf("Hypercall called!\n");
 #endif
@@ -100,6 +116,7 @@ int after_block_callback(CPUState *env, TranslationBlock *tb, TranslationBlock *
     return 1;
 }
 
+
 // Monitor callback. This gets a string that you can then parse for
 // commands. Could do something more complex here, e.g. getopt.
 int monitor_callback(Monitor *mon, const char *cmd) {
@@ -124,6 +141,7 @@ int monitor_callback(Monitor *mon, const char *cmd) {
 #endif
     return 1;
 }
+*/
 
 // We're going to log all user instructions
 bool translate_callback(CPUState *env, target_ulong pc) {
@@ -134,7 +152,7 @@ bool translate_callback(CPUState *env, target_ulong pc) {
 
 int exec_callback(CPUState *env, target_ulong pc) {
     if (!active) return 1;
-    fprintf(plugin_log, "User insn 0x" TARGET_FMT_lx " executed:", pc);
+    fprintf(plugin_log, "Kernel insn 0x" TARGET_FMT_lx " executed:", pc);
     // An x86 instruction must always fit in 15 bytes; this does not
     // make much sense for other architectures, but is just for
     // testing and debugging
@@ -148,12 +166,15 @@ int exec_callback(CPUState *env, target_ulong pc) {
     return 1;
 }
 
-#ifdef CONFIG_ANDROID
+
+//#ifdef CONFIG_ANDROID
 
 /* For interposing on loadvm, we need an exact copy of the struct used 
  * by the device for serialization. In this case, we are capturing the
  * state of the goldfish_nand and goldfish_mmc devices, which use structs
  * defined in header files */
+
+/* 
 GoldfishNandDevice __GoldfishNandDevice; //store NAND state here
 GoldfishMmcDevice  __GoldfishMmcDevice;  //store MMC state here
 int before_loadvm_callback(void){
@@ -163,13 +184,14 @@ int before_loadvm_callback(void){
   struct DeviceInfo *info;
   const struct VMStateDescription* nand_vmsd = NULL, *mmc_vmsd = NULL;
 
-  /* First, find the VMSDs for the existing devices.
+ */ /* First, find the VMSDs for the existing devices.
      Device initialization must have already occured for the list to be populated,
      and the device must be present.
      Devices that have explicit load and save functions instead of a declarative VMSD
      still end up having a VMSD, so this should work in all cases.
      
      Look up the device by it's string ID.*/
+/*
   for (info = device_info_list; info != NULL; info = info->next) {
     // the fields are name, fw_name, and alias
     if(info->name && 0 == strncmp(info->name, "goldfish_nand", strlen("goldfish_nand"))){
@@ -198,6 +220,7 @@ int before_loadvm_callback(void){
 }
 
 #endif // CONFIG_ANDROID
+**/
 
 int sample_function(CPUState *env){
     printf("sample was passed a cpustate\n");
@@ -261,7 +284,7 @@ bool init_plugin(void *self) {
     // In general you should always register your callbacks last, because
     // if you return false your plugin will be unloaded and there may be stale
     // pointers hanging around.
-    pcb.guest_hypercall = guest_hypercall_callback;
+/*    pcb.guest_hypercall = guest_hypercall_callback;
     panda_register_callback(self, PANDA_CB_GUEST_HYPERCALL, pcb);
     pcb.after_block_exec = after_block_callback;
     panda_register_callback(self, PANDA_CB_AFTER_BLOCK_EXEC, pcb);
@@ -270,13 +293,14 @@ bool init_plugin(void *self) {
     pcb.monitor = monitor_callback;
     panda_register_callback(self, PANDA_CB_MONITOR, pcb);
     pcb.insn_translate = translate_callback;
+*/
     panda_register_callback(self, PANDA_CB_INSN_TRANSLATE, pcb);
     pcb.insn_exec = exec_callback;
     panda_register_callback(self, PANDA_CB_INSN_EXEC, pcb);
-#ifdef CONFIG_ANDROID
-    pcb.before_loadvm = before_loadvm_callback;
-    panda_register_callback(self, PANDA_CB_BEFORE_REPLAY_LOADVM, pcb);
-#endif
+//#ifdef CONFIG_ANDROID
+//    pcb.before_loadvm = before_loadvm_callback;
+//    panda_register_callback(self, PANDA_CB_BEFORE_REPLAY_LOADVM, pcb);
+//#endif
 
     return true;
 }
@@ -287,3 +311,5 @@ void uninit_plugin(void *self) {
     fflush(plugin_log);
     fclose(plugin_log);
 }
+
+
