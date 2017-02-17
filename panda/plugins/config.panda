@@ -18,3 +18,4 @@ trace_sample
 trace_mem
 trace_insthist
 #trace_instr
+trace_instrblock
