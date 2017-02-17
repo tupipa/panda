@@ -18,46 +18,15 @@ PANDAENDCOMMENT */
 
 
 #include "panda/plugin.h"
-//#include "panda/plugin_plugin.h"
-//#include "qemu-common.h"
 #include "monitor/monitor.h"
 #include "disas/disas.h"
-
-//#ifdef __cplusplus
-//extern "C" {
-//#endif
-
-//#include "config.h"
 #include "cpu.h"
-
-
-//#ifdef CONFIG_ANDROID
-// definitions for BEFORE_LOADVM handler
-//#include "hw/goldfish_device.h"
-//#include "hw/goldfish_nand.h"
-//#include "hw/goldfish_mmc.h"
-//#endif
-
-// This is a C file, so we don't need "extern C"
-#include "trace_sample_int_fns.h"
-
 #include "panda/rr/rr_log.h"
 
-//#include <stdio.h>
-//#include <stdlib.h>
+#include "trace_sample_int_fns.h"
 
-//#ifdef __cplusplus
-//}
-//#endif
-
-
-//int after_block_callback(CPUState *env, TranslationBlock *tb, TranslationBlock *next_tb);
-//int before_block_callback(CPUState *env, TranslationBlock *tb);
-//int guest_hypercall_callback(CPUState *env);
 bool translate_callback(CPUState *env, target_ulong pc);
 int exec_callback(CPUState *env, target_ulong pc);
-//int monitor_callback(Monitor *mon, const char *cmd);
-//int before_loadvm_callback(void);
 
 bool init_plugin(void *);
 void uninit_plugin(void *);
@@ -66,86 +35,6 @@ bool active = true;
 long long begin_at = 0;
 long long exit_at = -1;
 FILE *plugin_log;
-
-/*
-int guest_hypercall_callback(CPUState *env) {
-#ifdef TARGET_I386
-    printf("in hypercall back\n");
-//    if(env->regs[R_EAX] == 0xdeadbeef) printf("Hypercall called!\n");
-#endif
-    return 1;
-}
-
-// write this program point to this file
-static void rr_spit_prog_point_fp(FILE *fp, RR_prog_point pp) {
-    fprintf(fp, "{guest_instr_count=%llu pc=0x%08llx, secondary=0x%08llx}\n",
-        (unsigned long long)pp.guest_instr_count,
-        (unsigned long long)pp.pc,
-        (unsigned long long)pp.secondary);
-}
-
-int before_block_callback(CPUState *env, TranslationBlock *tb) {
-    RR_prog_point pp = rr_prog_point();
-    if (pp.guest_instr_count >= begin_at) active = true;
-    if (exit_at != -1 && pp.guest_instr_count >= exit_at) {
-        rr_end_replay_requested = 1;
-        active = false;
-    }
-    if (!active) return 1;
-    rr_spit_prog_point_fp(plugin_log, pp);
-    fprintf(plugin_log, "Next TB: " TARGET_FMT_lx 
-#ifdef TARGET_I386
-        ", CR3=" TARGET_FMT_lx
-#endif
-         "%s\n", tb->pc,
-#ifdef TARGET_I386
-        env->cr[3],
-#endif
-        "");
-    return 0;
-}
-
-int after_block_callback(CPUState *env, TranslationBlock *tb, TranslationBlock *next_tb) {
-    if (!active) return 1;
-    fprintf(plugin_log, "After TB " TARGET_FMT_lx 
-#ifdef TARGET_I386
-        ", CR3=" TARGET_FMT_lx
-#endif
-        " next TB: " TARGET_FMT_lx "\n", tb->pc,
-#ifdef TARGET_I386
-        env->cr[3],
-#endif
-        next_tb ? next_tb->pc : 0);
-    return 1;
-}
-*/
-
-// Monitor callback. This gets a string that you can then parse for
-// commands. Could do something more complex here, e.g. getopt.
-/*int monitor_callback(Monitor *mon, const char *cmd) {
-  printf("in monitor callback\n");
-  if (!active) return 1;
-#ifdef CONFIG_SOFTMMU
-    char *cmd_work = g_strdup(cmd);
-    char *word;
-    word = strtok(cmd_work, " ");
-    do {
-        if (strncmp("help", word, 4) == 0) {
-            monitor_printf(mon,
-                "sample plugin help:\n"
-                "  sample_foo: do the foo action\n"
-            );
-        }
-        else if (strncmp("sample_foo", word, 10) == 0) {
-            printf("Doing the foo action\n");
-            monitor_printf(mon, "I did the foo action!\n");
-        }
-    } while((word = strtok(NULL, " ")) != NULL);
-    g_free(cmd_work);
-#endif
-    return 1;
-}
-*/
 
 // We're going to log all user instructions
 bool translate_callback(CPUState *env, target_ulong pc) {
@@ -158,8 +47,8 @@ bool translate_callback(CPUState *env, target_ulong pc) {
 
 int exec_callback(CPUState *env, target_ulong pc) {
     if (!active) return 1;
-    fprintf(plugin_log, "Kernel insn 0x" TARGET_FMT_lx " executed:", pc);
-    printf("Kernel insn 0x" TARGET_FMT_lx " executed:", pc);
+    fprintf(plugin_log, "pc: 0x" TARGET_FMT_lx " executed:", pc);
+    printf("pc: 0x" TARGET_FMT_lx " executed:", pc);
     // An x86 instruction must always fit in 15 bytes; this does not
     // make much sense for other architectures, but is just for
     // testing and debugging
@@ -174,61 +63,6 @@ int exec_callback(CPUState *env, target_ulong pc) {
     return 0;
 }
 
-
-//#ifdef CONFIG_ANDROID
-
-/* For interposing on loadvm, we need an exact copy of the struct used 
- * by the device for serialization. In this case, we are capturing the
- * state of the goldfish_nand and goldfish_mmc devices, which use structs
- * defined in header files */
-
-/* 
-GoldfishNandDevice __GoldfishNandDevice; //store NAND state here
-GoldfishMmcDevice  __GoldfishMmcDevice;  //store MMC state here
-int before_loadvm_callback(void){
-  // register ourselves as the loadvm handler for mmc and nand!!
-  // NOTE: this example assumes one instance of each of the devices of interest.
-  // If there are more, take care to handle each instance.
-  struct DeviceInfo *info;
-  const struct VMStateDescription* nand_vmsd = NULL, *mmc_vmsd = NULL;
-
- */ /* First, find the VMSDs for the existing devices.
-     Device initialization must have already occured for the list to be populated,
-     and the device must be present.
-     Devices that have explicit load and save functions instead of a declarative VMSD
-     still end up having a VMSD, so this should work in all cases.
-     
-     Look up the device by it's string ID.*/
-/*
-  for (info = device_info_list; info != NULL; info = info->next) {
-    // the fields are name, fw_name, and alias
-    if(info->name && 0 == strncmp(info->name, "goldfish_nand", strlen("goldfish_nand"))){
-      nand_vmsd = info->vmsd;
-    }else if (info->name && 0 == strncmp(info->name, "goldfish_mmc", strlen("goldfish_mmc"))){
-      mmc_vmsd = info->vmsd;
-    }
-  }
-
-  if(!nand_vmsd || !mmc_vmsd){
-    fprintf(stderr, "example: Failed to find VMSD for NAND or MMC\n");
-    exit(1);
-  }
-
-  // Remove all existing handlers for this device.
-  vmstate_unregister_all(nand_vmsd);
-  vmstate_unregister_all(mmc_vmsd);
-
-  // Re-register handlers, using our structs as the location to dump state to.
-  // If there are multiple copies of a device, make sure to register multiple times,
-  // and use separate copies of the struct for any data you want to keep.
-  vmstate_register(NULL,0,nand_vmsd,&__GoldfishNandDevice);
-  vmstate_register(NULL,0,mmc_vmsd,&__GoldfishMmcDevice);
-
-  return 0;
-}
-
-#endif // CONFIG_ANDROID
-**/
 
 int sample_function(CPUState *env){
     printf("sample was passed a cpustate\n");
@@ -245,50 +79,11 @@ panda_arg_list *args;
 bool init_plugin(void *self) {
     panda_cb pcb;
 
-//  int i;
-//  const char *tblog_filename = "trace_sample.log.txt";
     args = panda_get_args("trace_sample");
     printf("get args of trace_sample\n");
-    printf("now parse it\n");
     const char *tblog_filename = panda_parse_string_opt (args, "file", "", "file name for log");
     printf("\nget file name \t%s\n\n", tblog_filename);
     
-    //size_t arg_len = strlen(arg_str);
-    //if (arg_len >0){
-    //	memcpy();
-    //  }
-/*  if (args != NULL) {
-        for (i = 0; i < args->nargs; i++) {
-            // Format is sample:file=<file>
-            if (0 == strncmp(args->list[i].key, "file", 4)) {
-                tblog_filename = args->list[i].value;
-            }
-            else if (0 == strncmp(args->list[i].key, "easter", 9)) {
-                // Second parameter just to show how it's done
-                if (0 == strncmp(args->list[i].value, "egg", 3)) {
-                    printf(
-                        "\n"
-                        "    _____    \n"
-                        "  .'     '.  \n"
-                        " /         \\\n"
-                        "Y           Y\n"
-                        "|v^v^v^v^v^v|\n"
-                        "|===========|\n"
-                        "|v^v^v^v^v^v|\n"
-                        "Y           Y\n"
-                        " \\         /\n"
-                        "  '._____.'  \n");
-                }
-            } else if (0 == strncmp(args->list[i].key, "begin_at", 8)) {
-                begin_at = atoll(args->list[i].value);
-                fprintf(stderr, "Will begin at %lld\n", begin_at);
-            } else if (0 == strncmp(args->list[i].key, "exit_at", 7)) {
-                exit_at = atoll(args->list[i].value);
-                fprintf(stderr, "Will exit at %lld\n", exit_at);
-            }
-        }
-    }
-*/
     if (!tblog_filename) {
         fprintf(stderr, "Plugin 'sample' needs argument: -panda trace_sample:file=<file>\n");
         return false;
@@ -310,17 +105,6 @@ bool init_plugin(void *self) {
     panda_enable_memcb();
     printf("memcb enabled\n");
 
-    // In general you should always register your callbacks last, because
-    // if you return false your plugin will be unloaded and there may be stale
-    // pointers hanging around.
-
-    //pcb.guest_hypercall = guest_hypercall_callback;
-    //panda_register_callback(self, PANDA_CB_GUEST_HYPERCALL, pcb);
-/*    pcb.after_block_exec = after_block_callback;
-    panda_register_callback(self, PANDA_CB_AFTER_BLOCK_EXEC, pcb);
-    pcb.before_block_exec = before_block_callback;
-    panda_register_callback(self, PANDA_CB_BEFORE_BLOCK_EXEC, pcb);
-*/
     //pcb.monitor = monitor_callback;
     //panda_register_callback(self, PANDA_CB_MONITOR, pcb);
 
