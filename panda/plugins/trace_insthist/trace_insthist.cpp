@@ -2,22 +2,7 @@
 // the PRIx64 macro
 #define __STDC_FORMAT_MACROS
 
-//extern "C" {
-
-//#include "config.h"
-//#include "qemu-common.h"
-
-
-//#include "panda/plugin.h"
-//#include "panda/panda_common.h"
-//#include "panda/rr/rr_log.h"
-//#include <capstone/capstone.h>
-
-//}
-
 #include "panda/plugin.h"
-//#include "panda/panda_common.h"
-//#include "panda/rr/rr_log.h"
 #include <capstone/capstone.h>
 
 #include <map>
@@ -153,8 +138,8 @@ bool init_plugin(void *self) {
     panda_cb pcb;
     
     printf("in init_plugin..\n");
-    panda_arg_list *args = panda_get_args("trace_sample2");
-    const char *name = panda_parse_string(args, "name", "insthist");
+    panda_arg_list *args = panda_get_args("trace_insthist");
+    const char *name = panda_parse_string(args, "name", "trace_inst");
     asid = panda_parse_ulong(args, "asid", 0);
     sample_rate = panda_parse_uint32(args, "sample_rate", 1000);
 
