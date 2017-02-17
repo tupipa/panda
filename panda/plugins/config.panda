@@ -15,6 +15,6 @@ win7x86intro
 wintrospection
 asid_instr_count
 trace_sample
-trace_sample2
 trace_mem
+trace_insthist
 #trace_instr
