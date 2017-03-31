@@ -1,9 +1,26 @@
+/*
+ * plugin: trace_deadspy, based on trace_instrblock
+ * 
+ * This plugin is used to print all instructions during the replay.
+ * It disassembles the instructions using tool capstone
+ * 
+ */
+
+// This needs to be defined before anything is included in order to get
+// the PRIx64 macro
+#define __STDC_FORMAT_MACROS
+
+#include "panda/plugin.h"
+#include <capstone/capstone.h>
+
+#include <map>
+#include <string>
 
 
 #include <stdio.h>
 #include <stdlib.h>
 //#include "pin.H"
-#include <map>
+//#include <map>
 #include <ext/hash_map>
 #include <list>
 #include <stdint.h>
@@ -25,7 +42,7 @@
 #include <exception>
 #include <sys/time.h>
 #include <signal.h>
-#include <string.h>
+//#include <string.h>
 #include <setjmp.h>
 #include <sstream>
 // Need GOOGLE sparse hash tables
@@ -36,33 +53,109 @@ using google::dense_hash_map;      // namespace where class lives by default
 using namespace __gnu_cxx;
 using namespace std;
 
- //else // no MULTI_THREADED
 
-// The following functions accummulates the number of bytes written in this basic block categorized by the write size. 
+//typedef std::map<std::string,int> instr_hist;
 
-inline VOID InstructionContributionOfBBL1Byte(uint32_t count){    
-    gContextTreeVector[(uint32_t)PIN_ThreadId()].mt1ByteWriteInstrCount  +=  count;
+#define MAX_FILE_PATH   (200)
+
+
+#define WINDOW_SIZE 100
+
+// These need to be extern "C" so that the ABI is compatible with
+// QEMU/PANDA, which is written in C
+extern "C" {
+
+bool init_plugin(void *);
+void uninit_plugin(void *);
+
+}
+
+
+csh handle;
+cs_insn *insn;
+bool init_capstone_done = false;
+target_ulong asid;
+int sample_rate = 100;
+FILE *log_file;
+
+#ifdef GATHER_STATS
+FILE *statsFile;
+#endif //end GATHER_STATS
+
+
+
+#ifdef IP_AND_CCT
+sparse_hash_map<ADDRINT, TraceNode *>::iterator gTraceIter;
+//dense_hash_map<ADDRINT, void *> gTraceShadowMap;
+hash_map<ADDRINT, void *> gTraceShadowMap;
+TraceNode * gCurrentTrace;
+
+bool gInitiatedCall = true;
+TraceNode ** gCurrentIpVector;
+
+uint32_t gContextTreeIndex;
+
+struct ContextTree{
+    ContextNode * rootContext;
+    ContextNode * currentContext;
+};
+vector<ContextTree> gContextTreeVector;
+
+VOID GoDownCallChain(ADDRINT);
+VOID UpdateDataOnFunctionEntry(ADDRINT currentIp);
+VOID Instruction(INS ins, uint32_t slot);
+
+//#ifndef MULTI_THREADED
+// The following functions accummulates the number of bytes written in this basic block for the calling thread categorized by the write size. 
+
+inline VOID InstructionContributionOfBBL1Byte(uint32_t count){
+    g1ByteWriteInstrCount += count;
 }
 inline VOID InstructionContributionOfBBL2Byte(uint32_t count){
-    gContextTreeVector[(uint32_t)PIN_ThreadId()].mt2ByteWriteInstrCount += count;
+    g2ByteWriteInstrCount += count;
 }
 inline VOID InstructionContributionOfBBL4Byte(uint32_t count){
-    gContextTreeVector[(uint32_t)PIN_ThreadId()].mt4ByteWriteInstrCount += count;
+    g4ByteWriteInstrCount += count;
 }
 inline VOID InstructionContributionOfBBL8Byte(uint32_t count){
-    gContextTreeVector[(uint32_t)PIN_ThreadId()].mt8ByteWriteInstrCount += count;
+    g8ByteWriteInstrCount += count;
 }
 inline VOID InstructionContributionOfBBL10Byte(uint32_t count){
-    gContextTreeVector[(uint32_t)PIN_ThreadId()].mt10ByteWriteInstrCount += count;
+    g16ByteWriteInstrCount += count;
 }
 inline VOID InstructionContributionOfBBL16Byte(uint32_t count){
-    gContextTreeVector[(uint32_t)PIN_ThreadId()].mt16ByteWriteInstrCount +=  count;
+    g16ByteWriteInstrCount += count;
 }
 inline VOID InstructionContributionOfBBLLargeByte(uint32_t count){
-    gContextTreeVector[(uint32_t)PIN_ThreadId()].mtLargeByteWriteInstrCount += count;
+    gLargeByteWriteInstrCount += count;
 }
+// //#else  // no MULTI_THREADED
 
-//#endif // end MULTI_THREADED
+// // The following functions accummulates the number of bytes written in this basic block categorized by the write size. 
+
+// inline VOID InstructionContributionOfBBL1Byte(uint32_t count){    
+//     gContextTreeVector[(uint32_t)PIN_ThreadId()].mt1ByteWriteInstrCount  +=  count;
+// }
+// inline VOID InstructionContributionOfBBL2Byte(uint32_t count){
+//     gContextTreeVector[(uint32_t)PIN_ThreadId()].mt2ByteWriteInstrCount += count;
+// }
+// inline VOID InstructionContributionOfBBL4Byte(uint32_t count){
+//     gContextTreeVector[(uint32_t)PIN_ThreadId()].mt4ByteWriteInstrCount += count;
+// }
+// inline VOID InstructionContributionOfBBL8Byte(uint32_t count){
+//     gContextTreeVector[(uint32_t)PIN_ThreadId()].mt8ByteWriteInstrCount += count;
+// }
+// inline VOID InstructionContributionOfBBL10Byte(uint32_t count){
+//     gContextTreeVector[(uint32_t)PIN_ThreadId()].mt10ByteWriteInstrCount += count;
+// }
+// inline VOID InstructionContributionOfBBL16Byte(uint32_t count){
+//     gContextTreeVector[(uint32_t)PIN_ThreadId()].mt16ByteWriteInstrCount +=  count;
+// }
+// inline VOID InstructionContributionOfBBLLargeByte(uint32_t count){
+//     gContextTreeVector[(uint32_t)PIN_ThreadId()].mtLargeByteWriteInstrCount += count;
+// }
+
+// #endif // end MULTI_THREADED
 
 
 // Called each time a new trace is JITed.
@@ -146,6 +239,147 @@ inline VOID PopulateIPReverseMapAndAccountTraceInstructions(TRACE trace){
     *pNumWrites = slot;
     
 }
+
+
+
+// #ifdef CONTINUOUS_DEADINFO
+// // TODO - support MT. I dont think this needs to be thread safe since PIN guarantees that.
+// inline void ** GetNextIPVecBuffer(uint32_t size){
+//     void ** ret = gPreAllocatedContextBuffer + gCurPreAllocatedContextBufferIndex;
+//     gCurPreAllocatedContextBufferIndex += size;
+//     assert( gCurPreAllocatedContextBufferIndex  < (PRE_ALLOCATED_BUFFER_SIZE)/(sizeof(void **)));
+//     return ret;
+// }
+// #endif //end CONTINUOUS_DEADINFO
+
+
+
+// Does necessary work on a trace entry (called during runtime)
+// 1. If landed here due to function call, then go down in CCT.
+// 2. Look up the current trace under the CCT node creating new if if needed.
+// 3. Update global iterators and curXXXX pointers.
+
+inline void InstrumentTraceEntry(ADDRINT currentIp){
+    
+    // if landed due to function call, create a child context node
+    
+    if(gInitiatedCall){
+        UpdateDataOnFunctionEntry(currentIp); // it will reset   gInitiatedCall      
+    }
+    
+    // Check if a trace node with currentIp already exists under this context node
+    if( (gTraceIter = (gCurrentContext->childTraces).find(currentIp)) != gCurrentContext->childTraces.end()) {
+        gCurrentTrace = gTraceIter->second;
+        gCurrentIpVector = gCurrentTrace->childIPs;
+    } else {
+        // Create new trace node and insert under the context node.
+        
+        TraceNode * newChild = new TraceNode();
+        newChild->parent = gCurrentContext;
+        newChild->address = currentIp;
+    	uint64_t * currentTraceShadowIP = (uint64_t *) gTraceShadowMap[currentIp];
+        uint64_t recordedSlots = currentTraceShadowIP[-1]; // present one behind
+        if(recordedSlots){
+#ifdef CONTINUOUS_DEADINFO
+            // if CONTINUOUS_DEADINFO is set, then all ip vecs come from a fixed 4GB buffer
+            newChild->childIPs  = (TraceNode **)GetNextIPVecBuffer(recordedSlots);
+#else            //no CONTINUOUS_DEADINFO
+            newChild->childIPs = (TraceNode **) malloc( (recordedSlots) * sizeof(TraceNode **) );
+#endif //end CONTINUOUS_DEADINFO
+            newChild->nSlots = recordedSlots;
+            //cerr<<"\n***:"<<recordedSlots; 
+            for(uint32_t i = 0 ; i < recordedSlots ; i++) {
+                newChild->childIPs[i] = newChild;
+            }
+        } else {
+            newChild->nSlots = 0;
+            newChild->childIPs = 0;            
+        }          
+        
+        gCurrentContext->childTraces[currentIp] = newChild;
+        gCurrentTrace = newChild;
+        gCurrentIpVector = gCurrentTrace->childIPs;
+    }    
+}
+
+// Instrument a trace, take the first instruction in the first BBL and insert the analysis function before that
+static void InstrumentTrace(TRACE trace, void * f){
+    BBL bbl = TRACE_BblHead(trace);
+    INS ins = BBL_InsHead(bbl);
+    INS_InsertCall (ins, IPOINT_BEFORE, (AFUNPTR)InstrumentTraceEntry,IARG_INST_PTR,IARG_END);    
+    PopulateIPReverseMapAndAccountTraceInstructions(trace);
+}
+
+
+static void OnSig(THREADID threadIndex, CONTEXT_CHANGE_REASON reason, const CONTEXT *ctxtFrom,
+                  CONTEXT *ctxtTo, INT32 sig, VOID *v) {
+#if 0    
+    switch (reason) {
+        case CONTEXT_CHANGE_REASON_FATALSIGNAL:
+            cerr<<"\n FATAL SIGNAL";
+        case CONTEXT_CHANGE_REASON_SIGNAL:
+            
+            cerr<<"\n SIGNAL";
+            
+            gContextTreeVector[gContextTreeIndex].currentContext = gCurrentContext;
+            gContextTreeIndex++;
+            gCurrentContext = gContextTreeVector[gContextTreeIndex].currentContext;
+            gRootContext = gContextTreeVector[gContextTreeIndex].rootContext;
+            // rest will be set as we enter the signal callee
+            gInitiatedCall = true; // so that we create a child node        
+            
+            break;
+            
+        case CONTEXT_CHANGE_REASON_SIGRETURN:
+        {
+            
+            cerr<<"\n SIG RET";
+            gContextTreeIndex--;
+            gCurrentContext = gContextTreeVector[gContextTreeIndex].currentContext;
+            gRootContext = gContextTreeVector[gContextTreeIndex].rootContext;
+            gCurrentTraceIP = gCurrentContext->address;
+            gCurrentTraceShadowIP = gTraceShadowMap[gCurrentTraceIP];
+            break;
+        }
+        default: assert(0 && "\n BAD CONTEXT SWITCH");
+    }
+#endif    
+}
+
+
+// Analysis routine called on entering a function (found in symbol table only)
+inline VOID UpdateDataOnFunctionEntry(ADDRINT currentIp){
+    
+    // if I enter here due to a tail-call, then we will make it a child under the parent context node
+    if (!gInitiatedCall){
+        gCurrentContext = gCurrentContext->parent;
+    } else {
+        // normal function call, so unset gInitiatedCall
+        gInitiatedCall = false;
+    }
+    
+    // Let GoDownCallChain do the work needed to setup pointers for child nodes.
+    GoDownCallChain(currentIp);
+    
+}
+
+// Analysis routine called on making a function call
+inline VOID SetCallInitFlag(){
+    gInitiatedCall = true;
+}
+
+
+// Instrumentation for the function entry (found in symbol table only).
+// Get the first instruction of the first BBL and insert call to the analysis routine before it.
+
+inline VOID InstrumentFunctionEntry(RTN rtn, void *f){
+    RTN_Open(rtn);
+    INS ins = RTN_InsHeadOnly(rtn);
+    INS_InsertCall (ins, IPOINT_BEFORE, (AFUNPTR)UpdateDataOnFunctionEntry, IARG_INST_PTR,IARG_END);
+    RTN_Close(rtn);    
+}
+#endif //end IP_AND_CCT
+
 
 
 
@@ -414,15 +648,165 @@ VOID Instruction(INS ins, uint32_t slot) {
         
     }
     
+
+#ifndef MULTI_THREADED 
+
+// Initialized the fields of the root node of all context trees
+VOID InitContextTree(){
+#ifdef IP_AND_CCT
+    // MAX 10 context trees
+    gContextTreeVector.reserve(CONTEXT_TREE_VECTOR_SIZE);
+    for(uint8_t i = 0 ; i < CONTEXT_TREE_VECTOR_SIZE ; i++){
+        ContextNode * rootNode = new ContextNode();
+        rootNode->address = 0;
+        rootNode->parent = 0;        
+        gContextTreeVector[i].rootContext = rootNode;
+        gContextTreeVector[i].currentContext = rootNode;
+    }
+    gCurrentContext = gContextTreeVector[0].rootContext;
+    gRootContext = gContextTreeVector[0].rootContext;
+#else // no IP_AND_CCT
+    gCurrentContext = gRootContext = new ContextNode();
+    gRootContext->parent = 0;
+    gRootContext->address = 0;
     
-    int main(int argc, char *argv[]) {
+#endif // end IP_AND_CCT    
+    
+    // Init the  segv handler that may happen (due to PIN bug) when unwinding the stack during the printing    
+    memset (&gSigAct, 0, sizeof(struct sigaction));
+    gSigAct.sa_handler = SegvHandler;
+    gSigAct.sa_flags = SA_NOMASK ;
+    
+}
+
+// #else // MULTI_THREADED
+
+// // Initialized the fields of the root node of all context trees
+// VOID InitContextTree(){
+//     // Multi threaded coded have a ContextTree per thread, my code assumes a max of 10 threads, for other values redefine CONTEXT_TREE_VECTOR_SIZE
+//     // We intialize all fields of the context tree which includes per thread stats
+    
+    
+//     // MAX 10 context trees
+//     gContextTreeVector.reserve(CONTEXT_TREE_VECTOR_SIZE);
+//     for(uint8_t i = 0 ; i < CONTEXT_TREE_VECTOR_SIZE ; i++){
+//         ContextNode * rootNode = new ContextNode();
+//         rootNode->address = 0;
+//         rootNode->parent = 0;        
+//         gContextTreeVector[i].rootContext = rootNode;
+//         gContextTreeVector[i].currentContext = rootNode;
+//         gContextTreeVector[i].mt1ByteWriteInstrCount = 0;
+//         gContextTreeVector[i].mt2ByteWriteInstrCount = 0;
+//         gContextTreeVector[i].mt4ByteWriteInstrCount = 0;
+//         gContextTreeVector[i].mt8ByteWriteInstrCount = 0;
+//         gContextTreeVector[i].mt10ByteWriteInstrCount = 0;
+//         gContextTreeVector[i].mt16ByteWriteInstrCount = 0;
+//         gContextTreeVector[i].mtLargeByteWriteInstrCount = 0;
+//         gContextTreeVector[i].mtLargeByteWriteByteCount = 0;
+//     }
+    
+//     // Init the  segv handler that may happen (due to PIN bug) when unwinding the stack during the printing    
+    
+//     memset (&gSigAct, 0, sizeof(struct sigaction));
+//     gSigAct.sa_handler = SegvHandler;
+//     gSigAct.sa_flags = SA_NOMASK ;
+    
+// }
+
+#endif // end MULTI_THREADED
+
+
+// Initialized the needed data structures before launching the target program
+
+void InitDeadSpy(){
+    
+    printf("in init_plugin..\n");
+    panda_arg_list *args = panda_get_args("deadspy");
+    const char *name_pre = panda_parse_string(args, "name", "deadspy_out");
+    asid = panda_parse_ulong(args, "asid", 0);
+    //sample_rate = panda_parse_uint32(args, "sample_rate", 1000);
+
+       
+        
+#if defined(CONTINUOUS_DEADINFO)
+        // prealloc 4GB (or 32GB) ip vec
+        // IMPROVEME ... actually this can be as high as 24 GB since lower 3 bits are always zero for pointers
+        gPreAllocatedContextBuffer = (void **) mmap(0, PRE_ALLOCATED_BUFFER_SIZE, PROT_WRITE
+                                                    | PROT_READ, MAP_NORESERVE | MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+        // start from index 1 so that we can use 0 as empty key for the google hash table
+        gCurPreAllocatedContextBufferIndex = 1;
+        //DeadMap.set_empty_key(0);
+#else //no defined(CONTINUOUS_DEADINFO)        
+        // FIX ME FIX ME ... '3092462950186394283' may not be the right one to use, but dont know what to use :(.
+        // 3092462950186394283 is derived as the hash of two '0' contexts which is impossible.
+        DeadMap.set_empty_key(3092462950186394283);
+#endif //end defined(CONTINUOUS_DEADINFO)        
+        // 0 can never be a ADDRINT key of a trace        
+#ifdef IP_AND_CCT
+        //gTraceShadowMap.set_empty_key(0);
+#endif //end   IP_AND_CCT   
+        
+        
+        
+        // Create output file 
+        
+        char name[MAX_FILE_PATH];
+        
+        //char fname[260];
+        sprintf(name, "%s_", name_pre);
+
+        char * envPath = getenv("DEADSPY_OUTPUT_FILE");
+        if(envPath){
+            // assumes max of MAX_FILE_PATH
+            strcpy(name, envPath);
+        } 
+        
+        gethostname(name + strlen(name), MAX_FILE_PATH - strlen(name));
+        pid_t pid = getpid();
+        
+        sprintf(name + strlen(name),"%d.trace",pid);
+
+        cerr << "\n Creating dead info file at:" << name << "\n";
+        
+        log_file = fopen(name, "w");
+
+
+        // print the arguments passed
+
+        fprintf (log_file, "asid: 0x" TARGET_FMT_lx "\n", asid);
+        //fprintf (log_file, "address:\tmnemonic\top_str\n");
+
+        // fprintf(log_file,"\n");
+        // for(int i = 0 ; i < argc; i++){
+        //     fprintf(log_file,"%s ",argv[i]);
+        // }
+        // fprintf(log_file,"\n");
+        
+#ifdef GATHER_STATS
+        string statFileName(name);
+        statFileName += ".stats";
+        statsFile = fopen(statFileName.c_str() , "w");
+        fprintf(statsFile,"\n");
+        // for(int i = 0 ; i < argc; i++){
+        //     fprintf(statsFile,"%s ",argv[i]);
+        // }
+        fprintf(statsFile,"\n");
+#endif //end   GATHER_STATS      
+        
+        // Initialize the context tree
+        InitContextTree();        
+    }
+ 
+
+    bool init_plugin(void *self) {
+//    int main(int argc, char *argv[]) {
         
         // Initialize PIN
-        if (PIN_Init(argc, argv))
-            return Usage();
+       // if (PIN_Init(argc, argv))
+         //   return Usage();
         
         // Initialize Symbols, we need them to report functions and lines
-        PIN_InitSymbols();
+        //PIN_InitSymbols();
         
         // Intialize DeadSpy
         InitDeadSpy(argc, argv);
@@ -437,11 +821,11 @@ VOID Instruction(INS ins, uint32_t slot) {
         
         // Since some functions may not be known, instrument every "trace"
         TRACE_AddInstrumentFunction(InstrumentTrace,0);
-#else //no IP_AND_CCT        
-        //IP_AND_CCT case calls via TRACE_AddInstrumentFunction
+// #else //no IP_AND_CCT        
+//         //IP_AND_CCT case calls via TRACE_AddInstrumentFunction
         
-        // When line level info in not needed, simplt instrument each instruction
-        INS_AddInstrumentFunction(Instruction, 0);
+//         // When line level info in not needed, simplt instrument each instruction
+//         INS_AddInstrumentFunction(Instruction, 0);
 #endif //end  IP_AND_CCT    
         
         // capture write or other sys call that read from user space
