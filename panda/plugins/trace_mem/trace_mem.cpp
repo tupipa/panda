@@ -4,7 +4,8 @@
  *  Lele Ma               lelema.zh@gmail.com
  * 
  * This plugin traces every memory accesses of given asid, and print them to file
- *	
+ *	baesed on work of stringsearch plugin
+ *
  * This work is licensed under the terms of the GNU GPL, version 2. 
  * See the COPYING file in the top-level directory. 
  * 
@@ -55,6 +56,11 @@ PPP_PROT_REG_CB(on_trace_mem_asid);
 struct match_strings {
     int val[MAX_STRINGS];
 };
+
+char matchfile[128] = {};
+char matchfile_user[128] = {};
+
+
 struct string_pos {
     uint32_t val[MAX_STRINGS];
 };
@@ -67,6 +73,7 @@ struct fullstack {
 };
 
 std::map<prog_point,fullstack> matchstacks;
+std::map<prog_point,fullstack> matchstacks_user;
 std::map<prog_point,match_strings> matches;
 std::map<prog_point,string_pos> read_text_tracker;
 std::map<prog_point,string_pos> write_text_tracker;
@@ -76,6 +83,7 @@ int num_strings = 0;
 int n_callers = 16;
 
 FILE *mem_report = NULL;
+FILE *mem_report_user = NULL;
 
 // this creates BOTH the global for this callback fn (on_ssm_func)
 // and the function used by other plugins to register a fn (add_on_ssm)
@@ -118,14 +126,59 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
         for (int i = f.n-1; i >= 0; i--) {
             fprintf(mem_report, TARGET_FMT_lx " ", f.callers[i]);
         }
+	if (f.n == 0){
+            fprintf(mem_report, "\tno callers\t");
+	}
 
        	fprintf(mem_report, TARGET_FMT_lx " ", f.pc);
+       	fprintf(mem_report, TARGET_FMT_lx " ", f.asid);
         // Print strings that matched and how many times
         fprintf(mem_report, "\n");
+
+        // call the i-found-a-mem-access-in-asid registered callbacks here
+        //PPP_RUN_CB(on_trace_mem_asid, env, pc, addr, tofind[str_idx], strlens[str_idx], is_write)
+
+    }else{
+
+
+	//printf("%s\t" TARGET_FMT_lx
+ 	//		"\t %lu \t" TARGET_FMT_lx 
+	//		"\t" TARGET_FMT_lx 
+	//		"\n",
+        //    (is_write ? "W" : "R"), addr, 
+	//		rr_get_guest_instr_count(), p.caller,
+	//		p.pc);
+
+        // Also get the full stack here
+        fullstack f = {0};
+        f.n = get_callers(f.callers, n_callers, env);
+        f.pc = p.pc;
+        f.asid = p.cr3;
+
+
+       // Print prog point
+	// ORDER:
+	// W/R	addr callers1 ... callersn pc asid
+       	fprintf(mem_report_user, "%s\t", (is_write ? "W" : "R"));
+
+       	fprintf(mem_report_user, TARGET_FMT_lx " ", addr);
+
+        for (int i = f.n-1; i >= 0; i--) {
+            fprintf(mem_report_user, TARGET_FMT_lx " ", f.callers[i]);
+        }
+	if (f.n == 0){
+            fprintf(mem_report_user, "\tno callers\t");
+	}
+
+       	fprintf(mem_report_user, TARGET_FMT_lx " ", f.pc);
+       	fprintf(mem_report_user, TARGET_FMT_lx " ", f.asid);
+        // Print strings that matched and how many times
+        fprintf(mem_report_user, "\n");
 
 
         // call the i-found-a-mem-access-in-asid registered callbacks here
         //PPP_RUN_CB(on_trace_mem_asid, env, pc, addr, tofind[str_idx], strlens[str_idx], is_write)
+
 
     }
 /********************************************
@@ -237,23 +290,23 @@ bool init_plugin(void *self) {
     }
 
     prefix="trace_mem_test";
-    char matchfile[128] = {};
     sprintf(matchfile, "%s_trace_mem.txt", prefix);
+    sprintf(matchfile_user, "%s_trace_mem_user.txt", prefix);
     mem_report = fopen(matchfile, "w");
+    mem_report_user = fopen(matchfile_user, "w");
     if(!mem_report) {
-        printf("Couldn't write report:\n");
+        printf("Couldn't write report for kernel:\n");
         perror("fopen");
         return false;
     }
-       	fprintf(mem_report, "R/W\t");
-
-       	fprintf(mem_report, "addr\t");
-
-        fprintf(mem_report, "[callers]\t");
-
-       	fprintf(mem_report, "pc\t");
-        // Print strings that matched and how many times
-        fprintf(mem_report, "\n");
+    if(!mem_report_user) {
+        printf("Couldn't write report for user:\n");
+        perror("fopen");
+        return false;
+    }
+        // Print rw/ addr callers, pc , asid
+       	fprintf(mem_report, "R/W\taddr\t\t[callers]\tpc\tasid\n");
+       	fprintf(mem_report_user, "R/W\taddr\t\t[callers]\tpc\tasid\n");
 
 
     if(!init_callstack_instr_api()) return false;
@@ -262,7 +315,6 @@ bool init_plugin(void *self) {
     panda_enable_precise_pc();
     // Enable memory logging
     panda_enable_memcb();
-
 
     pcb.virt_mem_before_write = mem_write_callback;
     panda_register_callback(self, PANDA_CB_VIRT_MEM_BEFORE_WRITE, pcb);
@@ -274,9 +326,8 @@ bool init_plugin(void *self) {
 }
 
 void uninit_plugin(void *self) {
+
     std::map<prog_point,match_strings>::iterator it;
-
-
 
     for(it = matches.begin(); it != matches.end(); it++) {
         // Print prog point
@@ -295,5 +346,10 @@ void uninit_plugin(void *self) {
             fprintf(mem_report, " %d", it->second.val[i]);
         fprintf(mem_report, "\n");
     }
+
+    printf("\nlog writtent to %s\n", matchfile);
+    printf("\nlog writtent to %s\n", matchfile_user);
+
     fclose(mem_report);
+    fclose(mem_report_user);
 }
