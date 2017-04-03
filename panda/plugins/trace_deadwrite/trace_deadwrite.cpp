@@ -3,8 +3,12 @@
  * Authors:
  *  Lele Ma               lelema.zh@gmail.com
  * 
- * This plugin traces every memory accesses of given asid, and print them to file
- *	baesed on work of stringsearch plugin
+ * This plugin traces deadwrites, and print them to file 
+ *	TODO:
+ *      - data structure for state(M) and context(M) as in deadspy paper.
+ *      - use shadow memory with state(M) and context(M), as in deadspy paper.
+ *      - store 3-tuple map of deadwrites <dead context, killing context, frequency>
+ *      - report method once a deadwrite is found.
  *
  * This work is licensed under the terms of the GNU GPL, version 2. 
  * See the COPYING file in the top-level directory. 
@@ -27,7 +31,8 @@ PANDAENDCOMMENT */
 #include "panda/plugin.h"
 
 extern "C" {
-#include "trace_mem.h"
+// #include "trace_mem.h"
+#include "trace_deadwrite.h"
 }
 
 #include "callstack_instr/callstack_instr.h"
@@ -166,9 +171,9 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
         for (int i = f.n-1; i >= 0; i--) {
             fprintf(mem_report_user, TARGET_FMT_lx " ", f.callers[i]);
         }
-	if (f.n == 0){
-            fprintf(mem_report_user, "\tno callers\t");
-	}
+        if (f.n == 0){
+                fprintf(mem_report_user, "\tno callers\t");
+        }
 
        	fprintf(mem_report_user, TARGET_FMT_lx " ", f.pc);
        	fprintf(mem_report_user, TARGET_FMT_lx " ", f.asid);
