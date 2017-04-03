@@ -1,15 +1,33 @@
 /* PANDABEGINCOMMENT
  * 
- * Authors:
- *  Lele Ma               lelema.zh@gmail.com
- * 
- * This plugin traces deadwrites, and print them to file 
- *	TODO:
- *      - data structure for state(M) and context(M) as in deadspy paper.
- *      - use shadow memory with state(M) and context(M), as in deadspy paper.
- *      - store 3-tuple map of deadwrites <dead context, killing context, frequency>
- *      - report method once a deadwrite is found.
- *
+Authors:
+    Lele Ma               lelema.zh@gmail.com
+
+This plugin traces deadwrites, and print them to file 
+    - mem_callback() called every time a memory access.
+        inside this function, a prog_point is got from the plugin of callstack_instr plugin
+    - prog_point:  3-tuple: 
+        target_ulong caller;//
+        target_ulong pc;    //
+        target_ulong cr3;   //
+    - deadspy: add define of 'CONTINUOUS_DEADINFO', refer this branch of deadspy code as the base
+    - deadspy: store 3-tuple map of deadwrites <dead context, killing context, frequency>
+        -- port "DeadMap" from deadspy.cpp; to store 3-tuple map of deadwrites <dead context, killing context, frequency> as <hashValue, frequency>, where hashValue = (dead_context_offset<<32 | killing_context_offset)
+            - add def of "DeadMap", 'gPreAllocatedContextBuffer', 
+            - init gPreAllocatedContextBuffer
+            - 
+        -- 
+TODO:
+
+    - data structure for state(M) and context(M) as in deadspy paper.
+        state(M): 'R'/'W'
+        context(M): *prog_point?
+
+    
+    - report method once a deadwrite is found.
+
+    - use shadow memory with state(M) and context(M), as in deadspy paper.
+
  * This work is licensed under the terms of the GNU GPL, version 2. 
  * See the COPYING file in the top-level directory. 
  * 
@@ -40,6 +58,8 @@ extern "C" {
 
 using namespace std;
 
+#define CONTINUOUS_DEADINFO
+
 // These need to be extern "C" so that the ABI is compatible with
 // QEMU/PANDA, which is written in C
 extern "C" {
@@ -54,6 +74,35 @@ int mem_read_callback(CPUState *env, target_ulong pc, target_ulong addr, target_
 //PPP_PROT_REG_CB(on_deadwrite);
 
 }
+
+
+//map < void *, Status > MemState;
+#if defined(CONTINUOUS_DEADINFO)
+hash_map<uint64_t, uint64_t> DeadMap;
+hash_map<uint64_t, uint64_t>::iterator gDeadMapIt;
+
+#define DECLARE_HASHVAR(name) uint64_t name
+
+#define REPORT_DEAD(curCtxt, lastCtxt,hashVar, size) do { \
+CONTEXT_HASH_128BITS_TO_64BITS(curCtxt, lastCtxt,hashVar)  \
+if ( (gDeadMapIt = DeadMap.find(hashVar))  == DeadMap.end()) {    \
+DeadMap.insert(std::pair<uint64_t, uint64_t>(hashVar,size)); \
+} else {    \
+(gDeadMapIt->second) += size;    \
+}   \
+}while(0)
+
+#endif
+
+#ifdef CONTINUOUS_DEADINFO
+//#define PRE_ALLOCATED_BUFFER_SIZE (1L << 35)
+// default use this
+#define PRE_ALLOCATED_BUFFER_SIZE (1L << 32)
+void ** gPreAllocatedContextBuffer;
+uint64_t gCurPreAllocatedContextBufferIndex;
+#endif //end CONTINUOUS_DEADINFO
+
+
 
 // Silly: since we use these as map values, they have to be
 // copy constructible. Plain arrays aren't, but structs containing
@@ -331,6 +380,14 @@ bool init_plugin(void *self) {
 }
 
 void uninit_plugin(void *self) {
+
+    //Lele: from deadspy continuous deadinfo
+    gPreAllocatedContextBuffer = (void **) mmap(0, PRE_ALLOCATED_BUFFER_SIZE, PROT_WRITE
+                     | PROT_READ, MAP_NORESERVE | MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+        // start from index 1 so that we can use 0 as empty key for the google hash table
+        gCurPreAllocatedContextBufferIndex = 1;
+        //DeadMap.set_empty_key(0);
+
 
     std::map<prog_point,match_strings>::iterator it;
 
