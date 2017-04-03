@@ -281,41 +281,42 @@ struct ContextNode {
 
 
 
-    inline bool DeadInfoComparer(const DeadInfo &first, const DeadInfo &second) {
-        return first.count > second.count ? true : false;
-    }
-    
-    
-    // Returns true if the given address belongs to one of the loaded binaries
-    inline bool IsValidIP(ADDRINT ip){
-        for( IMG img= APP_ImgHead(); IMG_Valid(img); img = IMG_Next(img) ){
-            if(ip >= IMG_LowAddress(img) && ip <= IMG_HighAddress(img)){
-                return true;
-            }
-        }
-        return false;
-    }
-    
-    // Returns true if the given deadinfo belongs to one of the loaded binaries
-    inline bool IsValidIP(DeadInfo  di){
-        bool res = false;
-        for( IMG img= APP_ImgHead(); IMG_Valid(img); img = IMG_Next(img) ){
-            if((ADDRINT)di.firstIP >= IMG_LowAddress(img) && (ADDRINT)di.firstIP <= IMG_HighAddress(img)){
-                res = true;
-                break;	
-            }
-        }
-        if(!res)
-            return false;
-        for( IMG img= APP_ImgHead(); IMG_Valid(img); img = IMG_Next(img) ){
-            if((ADDRINT)di.secondIP >= IMG_LowAddress(img) && (ADDRINT)di.secondIP <= IMG_HighAddress(img)){  
-                return true;
-            }
-        }
-        return false;
-        
-    }
-    
+inline bool DeadInfoComparer(const DeadInfo &first, const DeadInfo &second) {
+    return first.count > second.count ? true : false;
+}
+
+
+// Returns true if the given address belongs to one of the loaded binaries
+inline bool IsValidIP(ADDRINT ip){
+    // for( IMG img= APP_ImgHead(); IMG_Valid(img); img = IMG_Next(img) ){
+    //     if(ip >= IMG_LowAddress(img) && ip <= IMG_HighAddress(img)){
+    //         return true;
+    //     }
+    // }
+    // return false;
+    return true;
+}
+
+// Returns true if the given deadinfo belongs to one of the loaded binaries
+inline bool IsValidIP(DeadInfo  di){
+    // bool res = false;
+    // for( IMG img= APP_ImgHead(); IMG_Valid(img); img = IMG_Next(img) ){
+    //     if((ADDRINT)di.firstIP >= IMG_LowAddress(img) && (ADDRINT)di.firstIP <= IMG_HighAddress(img)){
+    //         res = true;
+    //         break;	
+    //     }
+    // }
+    // if(!res)
+    //     return false;
+    // for( IMG img= APP_ImgHead(); IMG_Valid(img); img = IMG_Next(img) ){
+    //     if((ADDRINT)di.secondIP >= IMG_LowAddress(img) && (ADDRINT)di.secondIP <= IMG_HighAddress(img)){  
+    //         return true;
+    //     }
+    // }
+    // return false;
+    return true;
+}
+
 
 
 
