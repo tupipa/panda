@@ -225,7 +225,7 @@ struct DeadInfo {
 	uint64_t count;
 };
 
-
+inline bool MergedDeadInfoComparer(const DeadInfoForPresentation & first, const DeadInfoForPresentation  &second);
 inline bool DeadInfoComparer(const DeadInfo &first, const DeadInfo &second);
 inline bool IsValidIP(ADDRINT ip);
 inline bool IsValidIP(DeadInfo  di);
@@ -279,7 +279,9 @@ struct ContextNode {
 };
 
 
-
+inline bool MergedDeadInfoComparer(const DeadInfoForPresentation & first, const DeadInfoForPresentation  &second) {
+    return first.count > second.count ? true : false;
+}
 
 inline bool DeadInfoComparer(const DeadInfo &first, const DeadInfo &second) {
     return first.count > second.count ? true : false;
@@ -317,6 +319,31 @@ inline bool IsValidIP(DeadInfo  di){
     return true;
 }
 
+  // Prints the complete calling context including the line nunbers and the context's contribution, given a DeadInfo 
+    inline VOID PrintIPAndCallingContexts(const DeadInfoForPresentation & di, uint64_t measurementBaseCount){
+        
+        fprintf(gTraceFile,"\n%lu = %e",di.count, di.count * 100.0 / measurementBaseCount);
+        fprintf(gTraceFile,"\n-------------------------------------------------------\n");
+#ifdef MERGE_SAME_LINES
+        fprintf(gTraceFile,"\n%s",di.pMergedDeadInfo->line1.c_str());                                    
+#else // no MERGE_SAME_LINES
+        string file;
+        INT32 line;
+        PIN_GetSourceLocation( di.pMergedDeadInfo->ip1, NULL, &line,&file);
+        fprintf(gTraceFile,"\n%p:%s:%d",(void *)(di.pMergedDeadInfo->ip1),file.c_str(),line);                                    
+#endif //end MERGE_SAME_LINES        
+        PrintFullCallingContext(di.pMergedDeadInfo->context1);
+        fprintf(gTraceFile,"\n***********************\n");
+#ifdef MERGE_SAME_LINES
+        fprintf(gTraceFile,"\n%s",di.pMergedDeadInfo->line2.c_str());                                    
+#else //no MERGE_SAME_LINES        
+        PIN_GetSourceLocation( di.pMergedDeadInfo->ip2, NULL, &line,&file);
+        fprintf(gTraceFile,"\n%p:%s:%d",(void *)(di.pMergedDeadInfo->ip2),file.c_str(),line);
+#endif //end MERGE_SAME_LINES        
+        PrintFullCallingContext(di.pMergedDeadInfo->context2);
+        fprintf(gTraceFile,"\n-------------------------------------------------------\n");
+    }
+  
 
 
 
