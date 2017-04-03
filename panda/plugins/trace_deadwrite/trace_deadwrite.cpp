@@ -51,7 +51,7 @@ int mem_read_callback(CPUState *env, target_ulong pc, target_ulong addr, target_
 
 // prototype for the register-this-callback fn
 //PPP_PROT_REG_CB(on_ssm);
-PPP_PROT_REG_CB(on_deadwrite);
+//PPP_PROT_REG_CB(on_deadwrite);
 
 }
 
@@ -92,7 +92,7 @@ FILE *mem_report_user = NULL;
 
 // this creates BOTH the global for this callback fn (on_ssm_func)
 // and the function used by other plugins to register a fn (add_on_ssm)
-PPP_CB_BOILERPLATE(on_trace_mem_asid)
+//PPP_CB_BOILERPLATE(on_trace_mem_asid)
 
 // this creates the 
 
