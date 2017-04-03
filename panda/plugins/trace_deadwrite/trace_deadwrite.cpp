@@ -51,7 +51,7 @@ int mem_read_callback(CPUState *env, target_ulong pc, target_ulong addr, target_
 
 // prototype for the register-this-callback fn
 //PPP_PROT_REG_CB(on_ssm);
-PPP_PROT_REG_CB(on_trace_mem_asid);
+PPP_PROT_REG_CB(on_deadwrite);
 
 }
 
