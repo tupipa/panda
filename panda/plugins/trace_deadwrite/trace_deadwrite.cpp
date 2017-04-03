@@ -46,6 +46,11 @@ PANDAENDCOMMENT */
 #include <string>
 #include <iostream>
 
+//Lele: for deadspy
+//#include <ext/hash_map>
+#include <tr1/unordered_map>
+#include <sys/types.h>
+
 #include "panda/plugin.h"
 
 extern "C" {
@@ -57,6 +62,7 @@ extern "C" {
 #include "callstack_instr/callstack_instr_ext.h"
 
 using namespace std;
+using namespace std::tr1;
 
 #define CONTINUOUS_DEADINFO
 
@@ -78,8 +84,10 @@ int mem_read_callback(CPUState *env, target_ulong pc, target_ulong addr, target_
 
 //map < void *, Status > MemState;
 #if defined(CONTINUOUS_DEADINFO)
-hash_map<uint64_t, uint64_t> DeadMap;
-hash_map<uint64_t, uint64_t>::iterator gDeadMapIt;
+//hash_map<uint64_t, uint64_t> DeadMap;
+//hash_map<uint64_t, uint64_t>::iterator gDeadMapIt;
+unordered_map<uint64_t, uint64_t> DeadMap;
+unordered_map<uint64_t, uint64_t>::iterator gDeadMapIt;
 
 #define DECLARE_HASHVAR(name) uint64_t name
 
