@@ -15,10 +15,19 @@ This plugin traces deadwrites, and print them to file
         -- port "DeadMap" from deadspy.cpp; to store 3-tuple map of deadwrites <dead context, killing context, frequency> as <hashValue, frequency>, where hashValue = (dead_context_offset<<32 | killing_context_offset)
             - add def of "DeadMap", 'gPreAllocatedContextBuffer', 
             - init gPreAllocatedContextBuffer
-            - 
+
+    - deadspy: Context Tree
+        --structs from deadspy: 
+            ContextNode
+            MergedDeadInfo, 
+            DeadInfoForPresentation,
+            TraceNode,
+            DeadInfo,
+            include 'google sparse hash map'
+
+
         -- 
 TODO:
-
     - data structure for state(M) and context(M) as in deadspy paper.
         state(M): 'R'/'W'
         context(M): *prog_point?
@@ -51,6 +60,12 @@ PANDAENDCOMMENT */
 #include <tr1/unordered_map>
 #include <sys/types.h>
 
+#include <google/sparse_hash_map>
+#include <google/dense_hash_map>
+using google::sparse_hash_map;      // namespace where class lives by default
+using google::dense_hash_map;      // namespace where class lives by default
+
+
 #include "panda/plugin.h"
 
 extern "C" {
@@ -65,6 +80,7 @@ using namespace std;
 using namespace std::tr1;
 
 #define CONTINUOUS_DEADINFO
+#define IP_AND_CCT
 
 // These need to be extern "C" so that the ABI is compatible with
 // QEMU/PANDA, which is written in C
@@ -80,6 +96,82 @@ int mem_read_callback(CPUState *env, target_ulong pc, target_ulong addr, target_
 //PPP_PROT_REG_CB(on_deadwrite);
 
 }
+
+
+struct ContextNode;
+struct DeadInfo;
+
+
+#ifdef IP_AND_CCT
+struct MergedDeadInfo;
+struct TraceNode;
+struct DeadInfoForPresentation;
+inline ADDRINT GetIPFromInfo(void * ptr);
+inline string GetLineFromInfo(void * ptr);
+#endif // end IP_AND_CCT
+
+#ifdef IP_AND_CCT
+struct MergedDeadInfo{
+	ContextNode * context1;
+	ContextNode * context2;
+#ifdef MERGE_SAME_LINES
+	string line1;
+	string line2;
+#else    // no MERGE_SAME_LINES
+	ADDRINT ip1;
+	ADDRINT ip2;
+#endif // end MERGE_SAME_LINES
+    
+	bool operator==(const MergedDeadInfo  & x) const{
+#ifdef MERGE_SAME_LINES
+		if ( this->context1 == x.context1 && this->context2 == x.context2 &&
+            this->line1 == x.line1 && this->line2 == x.line2)
+#else            // no MERGE_SAME_LINES
+            if ( this->context1 == x.context1 && this->context2 == x.context2 &&
+				this->ip1 == x.ip1 && this->ip2 == x.ip2)
+#endif //end MERGE_SAME_LINES
+                return true;
+		return false;
+	}
+    
+    bool operator<(const MergedDeadInfo & x) const {
+#ifdef MERGE_SAME_LINES
+        if ((this->context1 < x.context1) ||
+            (this->context1 == x.context1 && this->context2 < x.context2) ||
+            (this->context1 == x.context1 && this->context2 == x.context2 && this->line1 < x.line1) ||
+            (this->context1 == x.context1 && this->context2 == x.context2 && this->line1 == x.line1 && this->line2 < x.line2) )
+#else            // no MERGE_SAME_LINES
+            if ((this->context1 < x.context1) ||
+                (this->context1 == x.context1 && this->context2 < x.context2) ||
+                (this->context1 == x.context1 && this->context2 == x.context2 && this->ip1 < x.ip1) ||
+                (this->context1 == x.context1 && this->context2 == x.context2 && this->ip1 == x.ip1 && this->ip2 < x.ip2) )
+#endif // end  MERGE_SAME_LINES               
+                return true;
+        return false;
+	}
+    
+};
+
+struct DeadInfoForPresentation{
+    const MergedDeadInfo * pMergedDeadInfo;
+    uint64_t count;
+};
+
+struct TraceNode{
+    ContextNode * parent;
+    TraceNode ** childIPs;
+    ADDRINT address;
+    uint32_t nSlots;
+};
+
+#endif // end IP_AND_CCT
+
+struct DeadInfo {
+	void *firstIP;
+	void *secondIP;
+	uint64_t count;
+};
+
 
 
 //map < void *, Status > MemState;
@@ -110,6 +202,25 @@ void ** gPreAllocatedContextBuffer;
 uint64_t gCurPreAllocatedContextBufferIndex;
 #endif //end CONTINUOUS_DEADINFO
 
+
+struct ContextNode {
+    ContextNode * parent;
+    sparse_hash_map<ADDRINT,ContextNode *> childContexts;
+#ifdef IP_AND_CCT
+    sparse_hash_map<ADDRINT,TraceNode *> childTraces;
+#endif // end IP_AND_CCT    
+    ADDRINT address;
+    
+#if defined(CONTINUOUS_DEADINFO) && !defined(IP_AND_CCT) 
+    void* operator new (size_t size) {
+        ContextNode  * ret =  ((ContextNode*)gPreAllocatedContextBuffer) + gCurPreAllocatedContextBufferIndex;
+        gCurPreAllocatedContextBufferIndex ++;
+        assert( gCurPreAllocatedContextBufferIndex  < (PRE_ALLOCATED_BUFFER_SIZE)/size);
+        return ret;
+    }
+#endif //end  defined(CONTINUOUS_DEADINFO) && !defined(IP_AND_CCT)    
+    
+};
 
 
 // Silly: since we use these as map values, they have to be
