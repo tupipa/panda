@@ -81,6 +81,57 @@ using namespace std::tr1;
 
 #define CONTINUOUS_DEADINFO
 #define IP_AND_CCT
+//#define IP_AND_CCT
+//#define MERGE_SAME_LINES	
+//#define TESTING_BYTES
+//#define GATHER_STATS
+//MT
+//#define MULTI_THREADED
+
+// All globals
+#define CONTEXT_TREE_VECTOR_SIZE (10)
+#define MAX_CCT_PRINT_DEPTH (20)
+#define MAX_FILE_PATH   (200)
+#ifndef MAX_DEAD_CONTEXTS_TO_LOG 
+#define MAX_DEAD_CONTEXTS_TO_LOG   (1000)
+#endif //MAX_DEAD_CONTEXTS_TO_LOG
+
+// 64KB shadow pages
+#define PAGE_OFFSET_BITS (16LL)
+#define PAGE_OFFSET(addr) ( addr & 0xFFFF)
+#define PAGE_OFFSET_MASK ( 0xFFFF)
+
+#define PAGE_SIZE (1 << PAGE_OFFSET_BITS)
+
+// 2 level page table
+#define PTR_SIZE (sizeof(struct Status *))
+#define LEVEL_1_PAGE_TABLE_BITS  (20)
+#define LEVEL_1_PAGE_TABLE_ENTRIES  (1 << LEVEL_1_PAGE_TABLE_BITS )
+#define LEVEL_1_PAGE_TABLE_SIZE  (LEVEL_1_PAGE_TABLE_ENTRIES * PTR_SIZE )
+
+#define LEVEL_2_PAGE_TABLE_BITS  (12)
+#define LEVEL_2_PAGE_TABLE_ENTRIES  (1 << LEVEL_2_PAGE_TABLE_BITS )
+#define LEVEL_2_PAGE_TABLE_SIZE  (LEVEL_2_PAGE_TABLE_ENTRIES * PTR_SIZE )
+
+#define LEVEL_1_PAGE_TABLE_SLOT(addr) ((((uint64_t)addr) >> (LEVEL_2_PAGE_TABLE_BITS + PAGE_OFFSET_BITS)) & 0xfffff)
+#define LEVEL_2_PAGE_TABLE_SLOT(addr) ((((uint64_t)addr) >> (PAGE_OFFSET_BITS)) & 0xFFF)
+
+
+// have R, W representative macros
+#define READ_ACTION (0) 
+#define WRITE_ACTION (0xff) 
+
+#define ONE_BYTE_READ_ACTION (0)
+#define TWO_BYTE_READ_ACTION (0)
+#define FOUR_BYTE_READ_ACTION (0)
+#define EIGHT_BYTE_READ_ACTION (0)
+
+#define ONE_BYTE_WRITE_ACTION (0xff)
+#define TWO_BYTE_WRITE_ACTION (0xffff)
+#define FOUR_BYTE_WRITE_ACTION (0xffffffff)
+#define EIGHT_BYTE_WRITE_ACTION (0xffffffffffffffff)
+
+
 
 // These need to be extern "C" so that the ABI is compatible with
 // QEMU/PANDA, which is written in C
@@ -175,6 +226,9 @@ struct DeadInfo {
 };
 
 
+inline bool DeadInfoComparer(const DeadInfo &first, const DeadInfo &second);
+inline bool IsValidIP(ADDRINT ip);
+inline bool IsValidIP(DeadInfo  di);
 
 //map < void *, Status > MemState;
 #if defined(CONTINUOUS_DEADINFO)
@@ -223,6 +277,46 @@ struct ContextNode {
 #endif //end  defined(CONTINUOUS_DEADINFO) && !defined(IP_AND_CCT)    
     
 };
+
+
+
+
+    inline bool DeadInfoComparer(const DeadInfo &first, const DeadInfo &second) {
+        return first.count > second.count ? true : false;
+    }
+    
+    
+    // Returns true if the given address belongs to one of the loaded binaries
+    inline bool IsValidIP(ADDRINT ip){
+        for( IMG img= APP_ImgHead(); IMG_Valid(img); img = IMG_Next(img) ){
+            if(ip >= IMG_LowAddress(img) && ip <= IMG_HighAddress(img)){
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    // Returns true if the given deadinfo belongs to one of the loaded binaries
+    inline bool IsValidIP(DeadInfo  di){
+        bool res = false;
+        for( IMG img= APP_ImgHead(); IMG_Valid(img); img = IMG_Next(img) ){
+            if((ADDRINT)di.firstIP >= IMG_LowAddress(img) && (ADDRINT)di.firstIP <= IMG_HighAddress(img)){
+                res = true;
+                break;	
+            }
+        }
+        if(!res)
+            return false;
+        for( IMG img= APP_ImgHead(); IMG_Valid(img); img = IMG_Next(img) ){
+            if((ADDRINT)di.secondIP >= IMG_LowAddress(img) && (ADDRINT)di.secondIP <= IMG_HighAddress(img)){  
+                return true;
+            }
+        }
+        return false;
+        
+    }
+    
+
 
 
 // Silly: since we use these as map values, they have to be
