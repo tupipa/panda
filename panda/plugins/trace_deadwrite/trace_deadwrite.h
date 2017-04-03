@@ -1,7 +1,7 @@
 
 
-#ifndef __STRINGSEARCH_H_
-#define __STRINGSEARCH_H_
+#ifndef __TRACE_DEADWRITE_H_
+#define __TRACE_DEADWRITE_H_
 
 
 #define MAX_STRINGS 100
