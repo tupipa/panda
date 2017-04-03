@@ -97,6 +97,8 @@ int mem_read_callback(CPUState *env, target_ulong pc, target_ulong addr, target_
 
 }
 
+#define ADDRINT target_ulong
+
 
 struct ContextNode;
 struct DeadInfo;
