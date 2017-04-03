@@ -79,8 +79,13 @@ extern "C" {
 using namespace std;
 using namespace std::tr1;
 
+//lele: make it comparable for the legacy codes from deadspy.cpp in PIN
+#define ADDRINT target_ulong
+#define VOID void
+
 #define CONTINUOUS_DEADINFO
 #define IP_AND_CCT
+
 //#define IP_AND_CCT
 //#define MERGE_SAME_LINES	
 //#define TESTING_BYTES
@@ -148,12 +153,13 @@ int mem_read_callback(CPUState *env, target_ulong pc, target_ulong addr, target_
 
 }
 
-#define ADDRINT target_ulong
 
 
 struct ContextNode;
 struct DeadInfo;
 
+
+FILE *gTraceFile;
 
 #ifdef IP_AND_CCT
 struct MergedDeadInfo;
