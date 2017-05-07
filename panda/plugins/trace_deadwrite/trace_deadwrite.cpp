@@ -580,7 +580,7 @@ struct CallStack {
 // uint8_t tofind[MAX_STRINGS][MAX_STRLEN];
 // uint32_t strlens[MAX_STRINGS];
 // int num_strings = 0;
-// int n_callers = 16;
+int n_callers = 16;
 
 
 // ######################################################
@@ -833,7 +833,7 @@ inline VOID ManageCallingContext(CallStack *fstack){
     ADDRINT curContextIp = gCurrentContext->address;
     ADDRINT parContextIp;
 
-    ADDRINT currentIp = fstack->pc;
+    // ADDRINT currentIp = fstack->pc;
     ADDRINT callerIp, callerCallerIp;
 
     if (fstack->n < 0){
@@ -2227,15 +2227,14 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
                 // if (INS_MemoryOperandIsRead(ins, memOp)) {
                     
                 if (! is_write) {
-                    Record1ByteMemRead(p.pc);                        
+                    Record1ByteMemRead((VOID *)p.pc);                        
                 }
                 else {
                     Record1ByteMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        p.pc);
-                    
+                        (VOID *) p.pc);                    
 //                     INS_InsertPredicatedCall(ins, IPOINT_BEFORE,
 //                                                 (AFUNPTR) Record1ByteMemWrite,
 // #ifdef IP_AND_CCT
@@ -2251,15 +2250,14 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             case 2:{
                        
                 if (! is_write) {
-                    Record2ByteMemRead(p.pc);                        
+                    Record2ByteMemRead((VOID *)p.pc);                        
                 }
                 else {
                     Record2ByteMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        p.pc);
-                }
+                        (VOID *) p.pc);                }
             }
                     
 //                 if (INS_MemoryOperandIsRead(ins, memOp)) {
@@ -2284,44 +2282,41 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             case 4:{
                        
                 if (! is_write) {
-                    Record4ByteMemRead(p.pc);                        
+                    Record4ByteMemRead((VOID *)p.pc);                        
                 }
                 else {
                     Record4ByteMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        p.pc);
-                }
+                        (VOID *) p.pc);                }
             }
                 break;
                 
             case 8:{
                        
                 if (! is_write) {
-                    Record8ByteMemRead(p.pc);                        
+                    Record8ByteMemRead((VOID *)p.pc);                        
                 }
                 else {
                     Record8ByteMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        p.pc);
-                }
+                        (VOID *) p.pc);                }
             }
                 break;
                 
             case 10:{
                 if (! is_write) {
-                    Record10ByteMemRead(p.pc);                        
+                    Record10ByteMemRead((VOID *)p.pc);                        
                 }
                 else {
                     Record10ByteMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        p.pc);
-                }
+                        (VOID *) p.pc);                }
                
             }
                 break;
@@ -2344,15 +2339,14 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 //                 }
 
                 if (! is_write) {
-                    Record16ByteMemRead(p.pc);                        
+                    Record16ByteMemRead((VOID *)p.pc);                        
                 }
                 else {
                     Record16ByteMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        p.pc);
-                }
+                        (VOID *) p.pc);                }
             }
                 break;
                 
