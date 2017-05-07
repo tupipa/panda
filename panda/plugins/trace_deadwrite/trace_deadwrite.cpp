@@ -546,7 +546,7 @@ vector<ContextTree> gContextTreeVector;
 
 VOID GoDownCallChain(ADDRINT);
 VOID UpdateDataOnFunctionEntry(ADDRINT currentIp);
-VOID Instruction(INS ins, uint32_t slot);
+// VOID Instruction(INS ins, uint32_t slot);
 
 #endif //IP_AND_CCT
 
