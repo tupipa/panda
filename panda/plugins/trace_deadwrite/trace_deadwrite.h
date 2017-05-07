@@ -6,6 +6,12 @@
 
 #define MAX_STRINGS 100
 #define MAX_CALLERS 128
+
+#define CALLERS_PER_INS 3
+#define CALLERS_LAST 0
+#define CALLERS_SECOND_LAST 1
+#define CALLERS_THIRD_LAST 2
+
 #define MAX_STRLEN  1024
 
 
