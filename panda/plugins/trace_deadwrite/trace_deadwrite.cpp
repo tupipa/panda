@@ -617,8 +617,74 @@ inline bool IsValidIP(DeadInfo  di);
 // ######################################################
 // ######################################################
 
-#ifdef IP_AND_CCT
 
+
+
+#ifndef MULTI_THREADED
+// The following functions accummulates the number of bytes written in this basic block for the calling thread categorized by the write size. 
+
+inline VOID InstructionContributionOfBBL1Byte(uint32_t count){
+    g1ByteWriteInstrCount += count;
+}
+inline VOID InstructionContributionOfBBL2Byte(uint32_t count){
+    g2ByteWriteInstrCount += count;
+}
+inline VOID InstructionContributionOfBBL4Byte(uint32_t count){
+    g4ByteWriteInstrCount += count;
+}
+inline VOID InstructionContributionOfBBL8Byte(uint32_t count){
+    g8ByteWriteInstrCount += count;
+}
+inline VOID InstructionContributionOfBBL10Byte(uint32_t count){
+    g16ByteWriteInstrCount += count;
+}
+inline VOID InstructionContributionOfBBL16Byte(uint32_t count){
+    g16ByteWriteInstrCount += count;
+}
+inline VOID InstructionContributionOfBBLLargeByte(uint32_t count){
+    gLargeByteWriteInstrCount += count;
+}
+#else  // no MULTI_THREADED
+
+// The following functions accummulates the number of bytes written in this basic block categorized by the write size. 
+
+inline VOID InstructionContributionOfBBL1Byte(uint32_t count){    
+    gContextTreeVector[(uint32_t)PIN_ThreadId()].mt1ByteWriteInstrCount  +=  count;
+}
+inline VOID InstructionContributionOfBBL2Byte(uint32_t count){
+    gContextTreeVector[(uint32_t)PIN_ThreadId()].mt2ByteWriteInstrCount += count;
+}
+inline VOID InstructionContributionOfBBL4Byte(uint32_t count){
+    gContextTreeVector[(uint32_t)PIN_ThreadId()].mt4ByteWriteInstrCount += count;
+}
+inline VOID InstructionContributionOfBBL8Byte(uint32_t count){
+    gContextTreeVector[(uint32_t)PIN_ThreadId()].mt8ByteWriteInstrCount += count;
+}
+inline VOID InstructionContributionOfBBL10Byte(uint32_t count){
+    gContextTreeVector[(uint32_t)PIN_ThreadId()].mt10ByteWriteInstrCount += count;
+}
+inline VOID InstructionContributionOfBBL16Byte(uint32_t count){
+    gContextTreeVector[(uint32_t)PIN_ThreadId()].mt16ByteWriteInstrCount +=  count;
+}
+inline VOID InstructionContributionOfBBLLargeByte(uint32_t count){
+    gContextTreeVector[(uint32_t)PIN_ThreadId()].mtLargeByteWriteInstrCount += count;
+}
+
+#endif // end MULTI_THREADED
+
+#ifdef CONTINUOUS_DEADINFO
+// TODO - support MT. I dont think this needs to be thread safe since PIN guarantees that.
+inline void ** GetNextIPVecBuffer(uint32_t size){
+    void ** ret = gPreAllocatedContextBuffer + gCurPreAllocatedContextBufferIndex;
+    gCurPreAllocatedContextBufferIndex += size;
+    assert( gCurPreAllocatedContextBufferIndex  < (PRE_ALLOCATED_BUFFER_SIZE)/(sizeof(void **)));
+    return ret;
+}
+#endif //end CONTINUOUS_DEADINFO
+
+
+
+#ifdef IP_AND_CCT
 
 // Analysis routine called on entering a function (found in symbol table only)
 inline VOID UpdateDataOnFunctionEntry(ADDRINT currentIp){
@@ -681,7 +747,7 @@ inline VOID GoUpCallChain(){
     
     if (gCurrentContext->parent == gRootContext) {
         // gInitiatedCall = true;//lele: why?
-        printf("lele: ret to root context node\n")
+        printf("lele: ret to root context node\n");
     }
     gCurrentContext = gCurrentContext->parent;
     
@@ -1126,59 +1192,6 @@ inline VOID DoLargeByteCount(target_ulong cnt) {
 
 #endif // end ifndef MULTI_THREADED
 
-
-
-#ifndef MULTI_THREADED
-// The following functions accummulates the number of bytes written in this basic block for the calling thread categorized by the write size. 
-
-inline VOID InstructionContributionOfBBL1Byte(uint32_t count){
-    g1ByteWriteInstrCount += count;
-}
-inline VOID InstructionContributionOfBBL2Byte(uint32_t count){
-    g2ByteWriteInstrCount += count;
-}
-inline VOID InstructionContributionOfBBL4Byte(uint32_t count){
-    g4ByteWriteInstrCount += count;
-}
-inline VOID InstructionContributionOfBBL8Byte(uint32_t count){
-    g8ByteWriteInstrCount += count;
-}
-inline VOID InstructionContributionOfBBL10Byte(uint32_t count){
-    g16ByteWriteInstrCount += count;
-}
-inline VOID InstructionContributionOfBBL16Byte(uint32_t count){
-    g16ByteWriteInstrCount += count;
-}
-inline VOID InstructionContributionOfBBLLargeByte(uint32_t count){
-    gLargeByteWriteInstrCount += count;
-}
-#else  // no MULTI_THREADED
-
-// The following functions accummulates the number of bytes written in this basic block categorized by the write size. 
-
-inline VOID InstructionContributionOfBBL1Byte(uint32_t count){    
-    gContextTreeVector[(uint32_t)PIN_ThreadId()].mt1ByteWriteInstrCount  +=  count;
-}
-inline VOID InstructionContributionOfBBL2Byte(uint32_t count){
-    gContextTreeVector[(uint32_t)PIN_ThreadId()].mt2ByteWriteInstrCount += count;
-}
-inline VOID InstructionContributionOfBBL4Byte(uint32_t count){
-    gContextTreeVector[(uint32_t)PIN_ThreadId()].mt4ByteWriteInstrCount += count;
-}
-inline VOID InstructionContributionOfBBL8Byte(uint32_t count){
-    gContextTreeVector[(uint32_t)PIN_ThreadId()].mt8ByteWriteInstrCount += count;
-}
-inline VOID InstructionContributionOfBBL10Byte(uint32_t count){
-    gContextTreeVector[(uint32_t)PIN_ThreadId()].mt10ByteWriteInstrCount += count;
-}
-inline VOID InstructionContributionOfBBL16Byte(uint32_t count){
-    gContextTreeVector[(uint32_t)PIN_ThreadId()].mt16ByteWriteInstrCount +=  count;
-}
-inline VOID InstructionContributionOfBBLLargeByte(uint32_t count){
-    gContextTreeVector[(uint32_t)PIN_ThreadId()].mtLargeByteWriteInstrCount += count;
-}
-
-#endif // end MULTI_THREADED
 
 
 inline bool MergedDeadInfoComparer(const DeadInfoForPresentation & first, const DeadInfoForPresentation  &second) {
