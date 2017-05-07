@@ -528,8 +528,8 @@ vector<ContextTree> gContextTreeVector;
 sparse_hash_map<ADDRINT, TraceNode *>::iterator gTraceIter;
 //dense_hash_map<ADDRINT, void *> gTraceShadowMap;
 // hash_map<ADDRINT, void *> gTraceShadowMap;
-//Lele: we don't use StartAddr of a trace as key, instead, we use pointer of ContextNode as key, to store an array, doing the same thing: ---mapping the slots index of each write instruction in a function to its corresponding IP.
-hash_map<ADDRINT, void *> gTraceShadowMap;
+//Lele: we don't use StartAddr of a trace as key, instead, we use ContextNode's address as key, to store an array, doing the same thing: ---mapping the slots index of each write instruction in a function to its corresponding IP. In order to be compatible with the legacy TraceNode, we use one tracenode to store the array, with StartAddr equal to the ContextNodes' address.
+unordered_map<ADDRINT, void *> gTraceShadowMap;
 TraceNode * gCurrentTrace;
 
 bool gInitiatedCall = true;
@@ -2606,11 +2606,11 @@ bool init_plugin(void *self) {
         
 #if defined(CONTINUOUS_DEADINFO)
         //sparse_hash_map<uint64_t, uint64_t>::iterator mapIt = DeadMap.begin();
-        hash_map<uint64_t, uint64_t>::iterator mapIt = DeadMap.begin();
+        unordered_map<uint64_t, uint64_t>::iterator mapIt = DeadMap.begin();
         //dense_hash_map<uint64_t, uint64_t>::iterator mapIt = DeadMap.begin();
 #else //no defined(CONTINUOUS_DEADINFO)        
         dense_hash_map<uint64_t, DeadInfo>::iterator mapIt = DeadMap.begin();
-        //hash_map<uint64_t, DeadInfo>::iterator mapIt = DeadMap.begin();
+        //unordered_map<uint64_t, DeadInfo>::iterator mapIt = DeadMap.begin();
 #endif //end defined(CONTINUOUS_DEADINFO)        
         map<MergedDeadInfo,uint64_t> mergedDeadInfoMap;
         
@@ -2743,12 +2743,12 @@ bool init_plugin(void *self) {
         fflush(gTraceFile);
         
 #if defined(CONTINUOUS_DEADINFO)
-        hash_map<uint64_t, uint64_t>::iterator mapIt;
+        unordered_map<uint64_t, uint64_t>::iterator mapIt;
         //dense_hash_map<uint64_t, uint64_t>::iterator mapIt;
         //sparse_hash_map<uint64_t, uint64_t>::iterator mapIt;
 #else // no defined(CONTINUOUS_DEADINFO)        
         dense_hash_map<uint64_t, DeadInfo>::iterator mapIt;
-        //hash_map<uint64_t, DeadInfo>::iterator mapIt;
+        //unordered_map<uint64_t, DeadInfo>::iterator mapIt;
 #endif  //end defined(CONTINUOUS_DEADINFO)        
         list<DeadInfo> deadList;
         
