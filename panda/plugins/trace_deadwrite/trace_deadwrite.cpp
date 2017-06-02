@@ -993,6 +993,7 @@ inline VOID ManageCallingContext(CallStack *fstack){
         // if tracenode is already exists
         // set the current Trace to the new trace
         // set the IpVector
+        printf("Trace Node already exists\n");
         gCurrentTrace = gTraceIter->second;
         gCurrentIpVector = gCurrentTrace->childIPs;
         //lele: set slot index
@@ -1002,7 +1003,8 @@ inline VOID ManageCallingContext(CallStack *fstack){
         //panda: if not in the current context node, this means in a new function and a new context node is created.
         
         // Create new trace node and insert under the context node.
-        
+        printf("Need to Create new Trace node.\n");
+
         TraceNode * newChild = new TraceNode();
         newChild->parent = gCurrentContext;
         newChild->address = callerIp;
