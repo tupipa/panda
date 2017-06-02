@@ -517,9 +517,9 @@ uint64_t gTotalMTDead = 0;
 
 // SEGVHANDLEING FOR BAD .plt
 // Lele: cmt this for panda
-// jmp_buf env;
-// struct sigaction gSigAct;
-// void SegvHandler(int);
+jmp_buf env;
+struct sigaction gSigAct;
+void SegvHandler(int);
 
 ContextNode * gRootContext;
 ContextNode * gCurrentContext;
