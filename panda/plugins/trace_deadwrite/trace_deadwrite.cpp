@@ -2501,13 +2501,13 @@ bool init_plugin(void *self) {
     const char *arg_str = panda_parse_string_opt(args, "asid", "", "a single asid to search for");
     size_t arg_len = strlen(arg_str);
     if (arg_len > 0) {
-        memcpy(tofind[num_strings], arg_str, arg_len);
-        strlens[num_strings] = arg_len;
-        num_strings++;
+        //memcpy(tofind[num_strings], arg_str, arg_len);
+        //strlens[num_strings] = arg_len;
+        //num_strings++;
     }
     //step 2.2: args: max callers printed
     // n_callers = panda_parse_uint64_opt(args, "callers", 16, "depth of callstack for matches");
-    n_callers = CALLERS_PER_INS
+    n_callers = CALLERS_PER_INS;
     if (n_callers > MAX_CALLERS) n_callers = MAX_CALLERS;
 
     //step 2.3: args: log file name prefix
@@ -2516,8 +2516,8 @@ bool init_plugin(void *self) {
 
     //lele: init_deadspy: open log file handlers, print first lines
 
-    const char *prefix="trace_dw_test";
-    init_deadsspy(prefix)
+    const char *prefix="trace_deadwrite_test";
+    init_deadspy(prefix);
 
     //lele: step 4: sys int: set callstack plugins, enable precise pc, memcb, and set callback functions.
     if(!init_callstack_instr_api()) return false;
@@ -2559,7 +2559,7 @@ bool init_plugin(void *self) {
 				break;
 		}
         
-		ADDRINT *ip = (ADDRINT *) gTraceShadowMap[contextNode->address] ;
+		ADDRINT *ip = (ADDRINT *) gTraceShadowMap[traceNode->address] ;
 		return ip[slotNo];
 	}
     
@@ -2567,7 +2567,7 @@ bool init_plugin(void *self) {
 	inline string GetLineFromInfo(void * ptr){
 		ADDRINT ip = GetIPFromInfo(ptr);
         string file;
-        INT32 line;
+        int32_t line;
         getSourceLocation(ip, NULL, &line,&file);
 		std::ostringstream retVal;
 		retVal << line;
@@ -2589,7 +2589,7 @@ bool init_plugin(void *self) {
         fprintf(gTraceFile,"\n%s",di.pMergedDeadInfo->line1.c_str());                                    
 #else // no MERGE_SAME_LINES
         string file;
-        INT32 line;
+        int32_t line;
         getSourceLocation( di.pMergedDeadInfo->ip1, NULL, &line,&file);
         fprintf(gTraceFile,"\n%p:%s:%d",(void *)(di.pMergedDeadInfo->ip1),file.c_str(),line);                                    
 #endif //end MERGE_SAME_LINES        
@@ -2851,7 +2851,7 @@ bool init_plugin(void *self) {
     
     
 // On program termination output all gathered data and statistics
-// VOID Fini(INT32 code, VOID * v) {
+// VOID Fini(int32_t code, VOID * v) {
 VOID Fini() {
     // byte count
     uint64_t measurementBaseCount = GetMeasurementBaseCount();
