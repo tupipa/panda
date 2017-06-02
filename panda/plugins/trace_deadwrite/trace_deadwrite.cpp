@@ -2819,7 +2819,7 @@ inline uint64_t GetMeasurementBaseCount(){
 #else // no MERGE_SAME_LINES
         string file;
         int32_t line;
-        panda_GetSourceLocation( di.pMergedDeadInfo->ip1, NULL, &line,&file);
+        panda_GetSourceLocation( di.pMergedDeadInfo->ip1,  &line,&file);
         fprintf(gTraceFile,"\n%p:%s:%d",(void *)(di.pMergedDeadInfo->ip1),file.c_str(),line);                                    
 #endif //end MERGE_SAME_LINES        
         PrintFullCallingContext(di.pMergedDeadInfo->context1);
@@ -2827,7 +2827,7 @@ inline uint64_t GetMeasurementBaseCount(){
 #ifdef MERGE_SAME_LINES
         fprintf(gTraceFile,"\n%s",di.pMergedDeadInfo->line2.c_str());                                    
 #else //no MERGE_SAME_LINES        
-        panda_GetSourceLocation( di.pMergedDeadInfo->ip2, NULL, &line,&file);
+        panda_GetSourceLocation( di.pMergedDeadInfo->ip2,  &line,&file);
         fprintf(gTraceFile,"\n%p:%s:%d",(void *)(di.pMergedDeadInfo->ip2),file.c_str(),line);
 #endif //end MERGE_SAME_LINES        
         PrintFullCallingContext(di.pMergedDeadInfo->context2);
