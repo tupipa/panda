@@ -531,6 +531,7 @@ sparse_hash_map<ADDRINT, TraceNode *>::iterator gTraceIter;
 //Lele: we don't use StartAddr of a trace as key, instead, we use ContextNode's address as key, to store an array, doing the same thing: ---mapping the slots index of each write instruction in a function to its corresponding IP. In order to be compatible with the legacy TraceNode, we use one tracenode to store the array, with StartAddr equal to the ContextNodes' address.
 unordered_map<ADDRINT, void *> gTraceShadowMap;
 TraceNode * gCurrentTrace;
+uint32_t gCurrentSlot;
 
 bool gInitiatedCall = true;
 bool gInitiatedRet = true;
@@ -958,13 +959,21 @@ inline VOID ManageCallingContext(CallStack *fstack){
     
 
     // setp 3/3, update currentIp slots for curContextNode. necessary here? 
-    // lele: we adapt the name of "Trace" to store the slots. Might be improved by using a single TraceNode instead of a map with only one TraceNode.
+    // panda: we adapt the name of "Trace" to store the slots. Might be improved by using a single TraceNode instead of a map with only one TraceNode.
 
-    // Check if a trace node with currentIp already exists under this context node
+    // Check if a trace node with currentIp already exists under this context node    
     if( (gTraceIter = (gCurrentContext->childTraces).find(callerIp)) != gCurrentContext->childTraces.end()) {
+        // if tracenode is already exists
+        // set the current Trace to the new trace
+        // set the IpVector
         gCurrentTrace = gTraceIter->second;
         gCurrentIpVector = gCurrentTrace->childIPs;
-    } else {
+        //lele: set slot index
+        gCurrentSlot = gCurrentTrace->nSlots;
+
+     } else {
+        //panda: if not in the current context node, this means in a new function and a new context node is created.
+        
         // Create new trace node and insert under the context node.
         
         TraceNode * newChild = new TraceNode();
@@ -992,6 +1001,8 @@ inline VOID ManageCallingContext(CallStack *fstack){
         gCurrentContext->childTraces[callerIp] = newChild;
         gCurrentTrace = newChild;
         gCurrentIpVector = gCurrentTrace->childIPs;
+        //lele: set slot index
+        gCurrentSlot = gCurrentTrace->nSlots;
     }    
 
 //     if(INS_IsProcedureCall(ins) ) {
@@ -1995,6 +2006,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
                        std::map<prog_point,string_pos> &text_tracker) {
     prog_point p = {};
     get_prog_point(env, &p);
+    uint32_t slot = gCurrentSlot;
 
 //    string_pos &sp = text_tracker[p];
 
@@ -2147,6 +2159,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     // if(INS_IsMemoryWrite(ins)){
     if(is_write){
         // USIZE writeSize = INS_MemoryWriteSize(ins);
+        gCurrentSlot++;
         target_ulong writeSize = size;
         switch(writeSize){
             case 1:
