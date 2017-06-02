@@ -717,9 +717,11 @@ inline VOID UpdateDataOnFunctionEntry(ADDRINT currentIp){
     
     // if I enter here due to a tail-call, then we will make it a child under the parent context node
     if (!gInitiatedCall){
+        printf("a tailer call?\n");
         gCurrentContext = gCurrentContext->parent;
     } else {
         // normal function call, so unset gInitiatedCall
+        printf("get a new function call !\n");
         gInitiatedCall = false;
     }
     
@@ -753,6 +755,8 @@ inline VOID UpdateDataOnFunctionEntry(ADDRINT currentIp){
 // If the target IP is a child, make it gCurrentContext, else add one under gCurrentContext and point gCurrentContext to the newly added
 
 VOID GoDownCallChain(ADDRINT callee){
+    printf(__FUNCTION__);
+    printf("\n");
     if( ( gContextIter = (gCurrentContext->childContexts).find(callee)) != gCurrentContext->childContexts.end()) {
         gCurrentContext = gContextIter->second;
     } else {
