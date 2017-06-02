@@ -2606,6 +2606,166 @@ bool init_plugin(void *self) {
         //reset sig handler
         //sigaction(SIGSEGV,&old,0);
     }
+
+
+
+    // Returns true of the given ContextNode is in memset() function
+    int IsInMemset(ContextNode * curContext){
+        int retVal = 0;
+        
+        // set sig handler
+        struct sigaction old;
+        sigaction(SIGSEGV,&gSigAct,&old);
+        if(curContext){
+            if(IsValidIP(curContext->address)){
+                //lele: TODO: check func name, 'mem_set'
+                // string fun = PIN_UndecorateSymbolName(RTN_FindNameByAddress(curContext->address),UNDECORATION_COMPLETE);
+                // string sub = "memset";
+                // if(fun == ".plt"){
+                //     if(setjmp(env) == 0) {
+                        
+                //         if(IsValidPLTSignature(curContext) ) {
+                //             uint64_t nextByte = (uint64_t) curContext->address + 2;
+                //             int * offset = (int*) nextByte;
+                            
+                //             uint64_t nextInst = (uint64_t) curContext->address + 6;
+                //             ADDRINT loc = *((uint64_t *)(nextInst + *offset));
+                //             if(IsValidIP(loc)){
+                //                 string s = PIN_UndecorateSymbolName(RTN_FindNameByAddress(loc),UNDECORATION_COMPLETE);
+                //                 retVal = EndsWith(s, sub);
+                //             }
+                //         } 
+                        
+                //     }
+                // } else if (EndsWith(fun,sub)){
+                //     retVal = true;
+                // }
+            } 
+        }
+        //reset sig handler
+        sigaction(SIGSEGV,&old,0);
+        return retVal;
+    }
+    
+
+
+    // Given the DeadInfo data, prints the two Calling contexts
+    VOID PrintCallingContexts(const DeadInfo & di){
+        fprintf(gTraceFile,"\n-------------------------------------------------------\n");
+        PrintFullCallingContext((ContextNode *) di.firstIP);
+        fprintf(gTraceFile,"\n***********************\n");
+        PrintFullCallingContext((ContextNode *)di.secondIP);
+        fprintf(gTraceFile,"\n-------------------------------------------------------\n");
+    }
+    
+    
+#ifdef TESTING_BYTES
+    // Prints the collected statistics on writes along with their sizes and dead/killing writes and their sizes
+    inline VOID PrintInstructionBreakdown(){
+        fprintf(gTraceFile,"\n%lu,%lu,%lu,%lu ",g1ByteWriteInstrCount, gFullyKilling1, gPartiallyKilling1, gPartiallyDeadBytes1);
+        fprintf(gTraceFile,"\n%lu,%lu,%lu,%lu ",g2ByteWriteInstrCount, gFullyKilling2, gPartiallyKilling2, gPartiallyDeadBytes2);
+        fprintf(gTraceFile,"\n%lu,%lu,%lu,%lu ",g4ByteWriteInstrCount, gFullyKilling4, gPartiallyKilling4, gPartiallyDeadBytes4);
+        fprintf(gTraceFile,"\n%lu,%lu,%lu,%lu ",g8ByteWriteInstrCount, gFullyKilling8, gPartiallyKilling8, gPartiallyDeadBytes8);
+        fprintf(gTraceFile,"\n%lu,%lu,%lu,%lu ",g10ByteWriteInstrCount, gFullyKilling10, gPartiallyKilling10, gPartiallyDeadBytes10);
+        fprintf(gTraceFile,"\n%lu,%lu,%lu,%lu ",g16ByteWriteInstrCount, gFullyKilling16, gPartiallyKilling16, gPartiallyDeadBytes16);        
+        fprintf(gTraceFile,"\n%lu,%lu,%lu,%lu,%lu ",gLargeByteWriteInstrCount,  gFullyKillingLarge, gPartiallyKillingLarge, gLargeByteWriteByteCount, gPartiallyDeadBytesLarge);        
+    }
+#endif //end TESTING_BYTES
+        
+
+#ifdef GATHER_STATS
+    inline void PrintStats(
+#ifdef IP_AND_CCT
+                           list<DeadInfoForPresentation> & deadList,
+#else // no IP_AND_CCT
+                           list<DeadInfo> & deadList,
+#endif  // end IP_AND_CCT
+                           uint64_t deads){
+#ifdef IP_AND_CCT        
+        list<DeadInfoForPresentation>::iterator it = deadList.begin();
+#else //no IP_AND_CCT        
+        list<DeadInfo>::iterator it = deadList.begin();
+#endif //end IP_AND_CCT        
+        uint64_t bothMemsetContribution = 0;
+        uint64_t bothMemsetContexts = 0;
+        uint64_t singleMemsetContribution = 0;
+        uint64_t singleMemsetContexts = 0;
+        uint64_t runningSum = 0;
+        int curContributionIndex = 1;
+        
+        uint64_t deadCount = 0;
+        for (; it != deadList.end(); it++) {
+            deadCount++;
+#ifdef IP_AND_CCT        
+            int memsetVal = IsInMemset(it->pMergedDeadInfo->context1);
+            memsetVal += IsInMemset(it->pMergedDeadInfo->context2);
+#else //no IP_AND_CCT
+            int memsetVal = IsInMemset((ContextNode*) it->firstIP);
+            memsetVal += IsInMemset((ContextNode*) it->secondIP);
+#endif //end IP_AND_CCT            
+            if(memsetVal == 2){
+                bothMemsetContribution += it->count;	
+                bothMemsetContexts++;
+            } else if (memsetVal > 0){
+                singleMemsetContribution += it->count;	
+                singleMemsetContexts++;
+            }
+            
+            runningSum += it->count;
+            double contrib = runningSum * 100.0 / gTotalDead;
+            if(contrib >= curContributionIndex){
+                while(contrib >= curContributionIndex){
+                    fprintf(statsFile,",%lu:%e",deadCount, deadCount * 100.0 / deads);
+                    curContributionIndex++;
+                }	
+            }
+        }
+        static bool firstTime = true;
+        if(firstTime){
+            fprintf(statsFile,"\nbothMemsetContribution %lu = %e", bothMemsetContribution, bothMemsetContribution * 100.0 / gTotalDead);
+            fprintf(statsFile,"\nsingleMemsetContribution %lu = %e", singleMemsetContribution, singleMemsetContribution * 100.0 / gTotalDead);
+            fprintf(statsFile,"\nbothMemsetContext %lu = %e", bothMemsetContexts, bothMemsetContexts * 100.0 / deads);
+            fprintf(statsFile,"\nsingleMemsetContext %lu = %e", singleMemsetContexts, singleMemsetContexts * 100.0 / deads);
+            fprintf(statsFile,"\nTotalDeadContexts %lu", deads);
+            firstTime = false;
+        }        
+    }
+#endif //end GATHER_STATS    
+    
+    
+
+inline uint64_t GetMeasurementBaseCount(){
+        // byte count
+        
+#ifdef MULTI_THREADED        
+        uint64_t measurementBaseCount =  GetTotalNByteWrites(1) + 2 * GetTotalNByteWrites(2) + 4 * GetTotalNByteWrites(4) + 8 * GetTotalNByteWrites(8) + 10 * GetTotalNByteWrites(10)+ 16 * GetTotalNByteWrites(16) + GetTotalNByteWrites(-1);
+#else //no MULTI_THREADED        
+        uint64_t measurementBaseCount =  g1ByteWriteInstrCount + 2 * g2ByteWriteInstrCount + 4 * g4ByteWriteInstrCount + 8 * g8ByteWriteInstrCount + 10 * g10ByteWriteInstrCount + 16 * g16ByteWriteInstrCount + gLargeByteWriteInstrCount;
+#endif  //end MULTI_THREADED
+        return measurementBaseCount;        
+    }
+
+    // Prints the collected statistics on writes along with their sizes
+    inline void PrintEachSizeWrite(){
+#ifdef MULTI_THREADED
+        fprintf(gTraceFile,"\n1:%lu",GetTotalNByteWrites(1));
+        fprintf(gTraceFile,"\n2:%lu",GetTotalNByteWrites(2));
+        fprintf(gTraceFile,"\n4:%lu",GetTotalNByteWrites(4));
+        fprintf(gTraceFile,"\n8:%lu",GetTotalNByteWrites(8));
+        fprintf(gTraceFile,"\n10:%lu",GetTotalNByteWrites(10));
+        fprintf(gTraceFile,"\n16:%lu",GetTotalNByteWrites(16));
+        fprintf(gTraceFile,"\nother:%lu",GetTotalNByteWrites(-1));
+        
+#else  //no MULTI_THREADED        
+        fprintf(gTraceFile,"\n1:%lu",g1ByteWriteInstrCount);
+        fprintf(gTraceFile,"\n2:%lu",g2ByteWriteInstrCount);
+        fprintf(gTraceFile,"\n4:%lu",g4ByteWriteInstrCount);
+        fprintf(gTraceFile,"\n8:%lu",g8ByteWriteInstrCount);
+        fprintf(gTraceFile,"\n10:%lu",g10ByteWriteInstrCount);
+        fprintf(gTraceFile,"\n16:%lu",g16ByteWriteInstrCount);
+        fprintf(gTraceFile,"\nother:%lu",gLargeByteWriteInstrCount);
+#endif //end MULTI_THREADED
+    }
     
 #ifdef IP_AND_CCT  
     // Given a pointer (i.e. slot) within a trace node, returns the IP corresponding to that slot
@@ -2675,17 +2835,7 @@ bool init_plugin(void *self) {
     }
     
     
-    inline uint64_t GetMeasurementBaseCount(){
-        // byte count
-        
-#ifdef MULTI_THREADED        
-        uint64_t measurementBaseCount =  GetTotalNByteWrites(1) + 2 * GetTotalNByteWrites(2) + 4 * GetTotalNByteWrites(4) + 8 * GetTotalNByteWrites(8) + 10 * GetTotalNByteWrites(10)+ 16 * GetTotalNByteWrites(16) + GetTotalNByteWrites(-1);
-#else //no MULTI_THREADED        
-        uint64_t measurementBaseCount =  g1ByteWriteInstrCount + 2 * g2ByteWriteInstrCount + 4 * g4ByteWriteInstrCount + 8 * g8ByteWriteInstrCount + 10 * g10ByteWriteInstrCount + 16 * g16ByteWriteInstrCount + gLargeByteWriteInstrCount;
-#endif  //end MULTI_THREADED
-        return measurementBaseCount;        
-    }
-
+    
     // On each Unload of a loaded image, the accummulated deadness information is dumped
     VOID ImageUnload() {
         fprintf(gTraceFile, "\nUnloading");
