@@ -1241,28 +1241,13 @@ inline bool DeadInfoComparer(const DeadInfo &first, const DeadInfo &second) {
 
 // Returns true if the given address belongs to one of the loaded binaries
 inline bool IsValidIP(ADDRINT ip){
-    if (ip >=0 ){
-        return true;
-    }else{
-        return false;
-    }
+    return true;
 }
 
 // Returns true if the given deadinfo belongs to one of the loaded binaries
 inline bool IsValidIP(DeadInfo  di){
-    bool res = false;
-    if((ADDRINT)di.firstIP >= 0){
-        res = true;
-        break;	
-    }
-
-    if(!res)
-        return false;
-    
-    if((ADDRINT)di.secondIP >= 0){  
-            return true;
-    }
-    return false;
+   
+    return true;
 }
 
 
