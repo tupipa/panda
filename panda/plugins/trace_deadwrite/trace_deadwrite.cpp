@@ -107,7 +107,30 @@ PANDAENDCOMMENT */
 //#include <ext/hash_map>
 #include <tr1/unordered_map>
 #include <sys/types.h>
-
+#include <stdlib.h>
+#include <list>
+#include <stdint.h>
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <semaphore.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <iostream>
+#include <locale>
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <iostream>
+#include <assert.h>
+#include <sys/mman.h>
+#include <exception>
+#include <sys/time.h>
+#include <signal.h>
+#include <string.h>
+#include <setjmp.h>
+#include <sstream>
+// Need GOOGLE sparse hash tables
 #include <google/sparse_hash_map>
 #include <google/dense_hash_map>
 using google::sparse_hash_map;      // namespace where class lives by default
@@ -123,6 +146,8 @@ extern "C" {
 
 #include "callstack_instr/callstack_instr.h"
 #include "callstack_instr/callstack_instr_ext.h"
+
+using namespace __gnu_cxx;
 
 using namespace std;
 using namespace std::tr1;
@@ -2540,6 +2565,70 @@ bool init_plugin(void *self) {
 //#########################################################################
 //last STEP: printing
 //#########################################################################
+
+    // Given a context node (curContext), traverses up in the chain till the root and prints the entire calling context 
+    
+    VOID PrintFullCallingContext(ContextNode * curContext){
+        int depth = 0;
+#ifdef MULTI_THREADED        
+        int root;
+#endif         //end MULTI_THREADED
+        // set sig handler
+        struct sigaction old;
+        sigaction(SIGSEGV,&gSigAct,&old);
+        
+        // Dont print if the depth is more than MAX_CCT_PRINT_DEPTH since files become too large
+        while(curContext && (depth ++ < MAX_CCT_PRINT_DEPTH)){            
+            if(IsValidIP(curContext->address)){
+                if(PIN_UndecorateSymbolName(RTN_FindNameByAddress(curContext->address),UNDECORATION_COMPLETE) == ".plt"){
+                    if(setjmp(env) == 0) {
+                        
+                        if(IsValidPLTSignature(curContext) ) { 
+                            uint64_t nextByte = (uint64_t) curContext->address + 2;
+                            int * offset = (int*) nextByte;
+                            
+                            uint64_t nextInst = (uint64_t) curContext->address + 6;
+                            ADDRINT loc = *((uint64_t *)(nextInst + *offset));
+                            if(IsValidIP(loc)){
+                                fprintf(gTraceFile,"\n!%s",PIN_UndecorateSymbolName(RTN_FindNameByAddress(loc),UNDECORATION_COMPLETE).c_str() );
+                            }else{
+                                fprintf(gTraceFile,"\nIN PLT BUT NOT VALID GOT");	
+                            } 
+                        } else {
+                            fprintf(gTraceFile,"\nUNRECOGNIZED PLT SIGNATURE");	
+                            
+                            //fprintf(gTraceFile,"\n plt plt plt %x", * ((UINT32*)curContext->address));	
+                            //for(int i = 1; i < 4 ; i++)
+                            //	fprintf(gTraceFile," %x",  ((UINT32 *)curContext->address)[i]);	
+                            
+                        }
+                    }   
+                    else {
+                        fprintf(gTraceFile,"\nCRASHED !!");	
+                    }
+                } else {
+                    fprintf(gTraceFile,"\n%s",PIN_UndecorateSymbolName(RTN_FindNameByAddress(curContext->address),UNDECORATION_COMPLETE).c_str() );
+                }
+            } 
+#ifndef MULTI_THREADED 
+            else if (curContext == gRootContext){
+                fprintf(gTraceFile, "\nROOT_CTXT");	
+            }
+#else //MULTI_THREADED
+            else if ( (root=IsARootContextNode(curContext)) != -1){
+                fprintf(gTraceFile, "\nROOT_CTXT_THREAD %d", root);	
+            } 
+#endif //end  ifndef MULTI_THREADED            
+            else if (curContext->address == 0){
+                fprintf(gTraceFile, "\nIND CALL");	
+            } else{
+                fprintf(gTraceFile, "\nBAD IP ");	
+            }
+            curContext = curContext->parent;
+        }
+        //reset sig handler
+        sigaction(SIGSEGV,&old,0);
+    }
     
 #ifdef IP_AND_CCT  
     // Given a pointer (i.e. slot) within a trace node, returns the IP corresponding to that slot
@@ -2563,12 +2652,19 @@ bool init_plugin(void *self) {
 		return ip[slotNo];
 	}
     
+    void  panda_GetSourceLocation(ADDRINT ip,int32_t *line, string *file);{
+        //Lele: given IP, return the line number and file
+        *line = 0;
+        *file = "---file_info_not_implemented---";
+    }
+
     // Given a pointer (i.e. slot) within a trace node, returns the Line number corresponding to that slot
 	inline string GetLineFromInfo(void * ptr){
 		ADDRINT ip = GetIPFromInfo(ptr);
         string file;
         int32_t line;
-        getSourceLocation(ip, NULL, &line,&file);
+        //PIN_GetSourceLocation(ip, NULL, &line,&file);
+        panda_GetSourceLocation(ip, &line,&file);
 		std::ostringstream retVal;
 		retVal << line;
 		return file + ":" + retVal.str();
