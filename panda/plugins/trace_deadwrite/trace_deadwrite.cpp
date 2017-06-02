@@ -839,6 +839,7 @@ inline VOID ManageCallingContext(CallStack *fstack){
 
     // if an function call, continue with trace entry method from PIN deadspy, otherwise, return.
 
+    printf("step 1/3: detect whether in new func\n");
     // step 1/2, detect whether in 
     //  - current function, iff curContextNode is the same with last of caller stack, or 
     //                         caller stack size is zero and curContextNode is the same with root of ContextNode.
@@ -950,7 +951,7 @@ inline VOID ManageCallingContext(CallStack *fstack){
 
 
     // step 2/3, create Context Node when new func call; 
-
+    printf("step 2/3: create Context Node when new func call\n");
     //#############################################################################
     // InstrumentTrace(TRACE trace, void * f):
     //   BBL bbl = TRACE_BblHead(trace);
@@ -983,9 +984,10 @@ inline VOID ManageCallingContext(CallStack *fstack){
     }
     
 
+     
     // setp 3/3, update currentIp slots for curContextNode. necessary here? 
     // panda: we adapt the name of "Trace" to store the slots. Might be improved by using a single TraceNode instead of a map with only one TraceNode.
-
+    printf("step 3/3, update currentIp slots for curContextNode. necessary here?\n")
     // Check if a trace node with currentIp already exists under this context node    
     if( (gTraceIter = (gCurrentContext->childTraces).find(callerIp)) != gCurrentContext->childTraces.end()) {
         // if tracenode is already exists
@@ -1039,6 +1041,7 @@ inline VOID ManageCallingContext(CallStack *fstack){
 //     }else if(INS_IsRet(ins)){
 //         INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) GoUpCallChain, IARG_END);
 //     }
+    printf("done manage context for one memory operating instruction\n\n");
 }
 
 
