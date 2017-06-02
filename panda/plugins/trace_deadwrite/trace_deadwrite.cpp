@@ -3087,9 +3087,9 @@ VOID Fini() {
 void report_deadspy(void * self){
     //lele: ported from deadspy: ImageUnload and Fini
     // 
-    ImageUnload() //lele: necessary?
+    ImageUnload(); //lele: necessary?
     //
-    Fini()
+    Fini();
 }
 
 void uninit_plugin(void *self) {
