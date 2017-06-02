@@ -1241,20 +1241,32 @@ inline bool DeadInfoComparer(const DeadInfo &first, const DeadInfo &second) {
 
 // Returns true if the given address belongs to one of the loaded binaries
 inline bool IsValidIP(ADDRINT ip){
-    
-    return true;
+    if (ip >=0 ){
+        return true;
+    }else{
+        return false;
+    }
 }
 
 // Returns true if the given deadinfo belongs to one of the loaded binaries
 inline bool IsValidIP(DeadInfo  di){
-   
-    return true;
+    bool res = false;
+    if((ADDRINT)di.firstIP >= 0){
+        res = true;
+        break;	
+    }
+
+    if(!res)
+        return false;
+    
+    if((ADDRINT)di.secondIP >= 0){  
+            return true;
+    }
+    return false;
 }
 
 
 // Analysis routines to update the shadow memory for different size READs and WRITEs
-
-
 VOID Record1ByteMemRead( VOID * addr) {
     uint8_t * status = GetShadowBaseAddress(addr);
     // status == 0 if not created.
@@ -2575,49 +2587,21 @@ bool init_plugin(void *self) {
         // set sig handler
         //struct sigaction old;
         //sigaction(SIGSEGV,&gSigAct,&old);
-        
-    CallStack callstack = {0};
-    callstack.n = get_callers(callstack.callers, MAX_CCT_PRINT_DEPTH, env);
-    callstack.pc = p.pc;
-    callstack.asid = p.cr3;
+            
+        // CallStack callstack = {0};
+        // callstack.n = get_callers(callstack.callers, MAX_CCT_PRINT_DEPTH, env);
+        // callstack.pc = p.pc;
+        // callstack.asid = p.cr3;
 
-        int depth = callstack.n;
+        // int depth = callstack.n;
+
         // Dont print if the depth is more than MAX_CCT_PRINT_DEPTH since files become too large
-        while(curContext && (depth -- >= 0)){            
+        while(curContext && (depth ++ < MAX_CCT_PRINT_DEPTH )){            
             if(IsValidIP(curContext->address)){
-                //lele: TODO
-                 fprintf(gTraceFile, "\n! " TARGET_FMT_lx, callstack.callers[depth]);
+                fprintf(gTraceFile, "\n! " TARGET_FMT_lx, curContext->address);
                  // Also get the full stack here
-                // if(PIN_UndecorateSymbolName(RTN_FindNameByAddress(curContext->address),UNDECORATION_COMPLETE) == ".plt"){
-                //     if(setjmp(env) == 0) {
-                        
-                //         if(IsValidPLTSignature(curContext) ) { 
-                //             uint64_t nextByte = (uint64_t) curContext->address + 2;
-                //             int * offset = (int*) nextByte;
-                            
-                //             uint64_t nextInst = (uint64_t) curContext->address + 6;
-                //             ADDRINT loc = *((uint64_t *)(nextInst + *offset));
-                //             if(IsValidIP(loc)){
-                //                 fprintf(gTraceFile,"\n!%s",PIN_UndecorateSymbolName(RTN_FindNameByAddress(loc),UNDECORATION_COMPLETE).c_str() );
-                //             }else{
-                //                 fprintf(gTraceFile,"\nIN PLT BUT NOT VALID GOT");	
-                //             } 
-                //         } else {
-                //             fprintf(gTraceFile,"\nUNRECOGNIZED PLT SIGNATURE");	
-                            
-                //             //fprintf(gTraceFile,"\n plt plt plt %x", * ((UINT32*)curContext->address));	
-                //             //for(int i = 1; i < 4 ; i++)
-                //             //	fprintf(gTraceFile," %x",  ((UINT32 *)curContext->address)[i]);	
-                            
-                //         }
-                //     }   
-                //     else {
-                //         fprintf(gTraceFile,"\nCRASHED !!");	
-                //     }
-                // } else {
-                //     fprintf(gTraceFile,"\n%s",PIN_UndecorateSymbolName(RTN_FindNameByAddress(curContext->address),UNDECORATION_COMPLETE).c_str() );
-                // }
-            } 
+                //lele: TODO: get the function name from the curContext->address.
+            }
 #ifndef MULTI_THREADED 
             else if (curContext == gRootContext){
                 fprintf(gTraceFile, "\nROOT_CTXT");	
