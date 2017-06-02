@@ -2002,8 +2002,9 @@ inline VOID ReleaseLock(){
 // this creates the 
 
 int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
-                       target_ulong size, void *buf, bool is_write,
-                       std::map<prog_point,string_pos> &text_tracker) {
+                       target_ulong size, void *buf, bool is_write
+                       //,std::map<prog_point,string_pos> &text_tracker
+                       ){
     prog_point p = {};
     get_prog_point(env, &p);
     uint32_t slot = gCurrentSlot;
@@ -2411,13 +2412,15 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
 int mem_read_callback(CPUState *env, target_ulong pc, target_ulong addr,
                        target_ulong size, void *buf) {
-    return mem_callback(env, pc, addr, size, buf, false, read_text_tracker);
+     //return mem_callback(env, pc, addr, size, buf, false, read_text_tracker);
+    return mem_callback(env, pc, addr, size, buf, false);
 
 }
 
 int mem_write_callback(CPUState *env, target_ulong pc, target_ulong addr,
                        target_ulong size, void *buf) {
-    return mem_callback(env, pc, addr, size, buf, true, write_text_tracker);
+    //return mem_callback(env, pc, addr, size, buf, true, write_text_tracker);
+    return mem_callback(env, pc, addr, size, buf, true);
 }
 
 
