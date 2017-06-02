@@ -2578,7 +2578,7 @@ bool init_plugin(void *self) {
         // callstack.pc = p.pc;
         // callstack.asid = p.cr3;
 
-        // int depth = callstack.n;
+        int depth = 0;
 
         // Dont print if the depth is more than MAX_CCT_PRINT_DEPTH since files become too large
         while(curContext && (depth ++ < MAX_CCT_PRINT_DEPTH )){            
@@ -2604,7 +2604,7 @@ bool init_plugin(void *self) {
             curContext = curContext->parent;
         }
         //reset sig handler
-        sigaction(SIGSEGV,&old,0);
+        //sigaction(SIGSEGV,&old,0);
     }
     
 #ifdef IP_AND_CCT  
@@ -2629,7 +2629,7 @@ bool init_plugin(void *self) {
 		return ip[slotNo];
 	}
     
-    void  panda_GetSourceLocation(ADDRINT ip,int32_t *line, string *file);{
+    void  panda_GetSourceLocation(ADDRINT ip,int32_t *line, string *file){
         //Lele: given IP, return the line number and file
         *line = 0;
         *file = "---file_info_not_implemented---";
@@ -2648,10 +2648,6 @@ bool init_plugin(void *self) {
     }    
     
     
-    inline bool MergedDeadInfoComparer(const DeadInfoForPresentation & first, const DeadInfoForPresentation  &second) {
-        return first.count > second.count ? true : false;
-    }
-    
     
     // Prints the complete calling context including the line nunbers and the context's contribution, given a DeadInfo 
     inline VOID PrintIPAndCallingContexts(const DeadInfoForPresentation & di, uint64_t measurementBaseCount){
@@ -2663,7 +2659,7 @@ bool init_plugin(void *self) {
 #else // no MERGE_SAME_LINES
         string file;
         int32_t line;
-        getSourceLocation( di.pMergedDeadInfo->ip1, NULL, &line,&file);
+        panda_GetSourceLocation( di.pMergedDeadInfo->ip1, NULL, &line,&file);
         fprintf(gTraceFile,"\n%p:%s:%d",(void *)(di.pMergedDeadInfo->ip1),file.c_str(),line);                                    
 #endif //end MERGE_SAME_LINES        
         PrintFullCallingContext(di.pMergedDeadInfo->context1);
@@ -2671,7 +2667,7 @@ bool init_plugin(void *self) {
 #ifdef MERGE_SAME_LINES
         fprintf(gTraceFile,"\n%s",di.pMergedDeadInfo->line2.c_str());                                    
 #else //no MERGE_SAME_LINES        
-        getSourceLocation( di.pMergedDeadInfo->ip2, NULL, &line,&file);
+        panda_GetSourceLocation( di.pMergedDeadInfo->ip2, NULL, &line,&file);
         fprintf(gTraceFile,"\n%p:%s:%d",(void *)(di.pMergedDeadInfo->ip2),file.c_str(),line);
 #endif //end MERGE_SAME_LINES        
         PrintFullCallingContext(di.pMergedDeadInfo->context2);
@@ -2778,7 +2774,7 @@ bool init_plugin(void *self) {
 	    //present and delete all
         
         list<DeadInfoForPresentation>::iterator dipIter = deadList.begin();
-        PIN_LockClient();
+        //PIN_LockClient();
         uint64_t deads = 0;
         for (; dipIter != deadList.end(); dipIter++) {
 #ifdef MULTI_THREADED
@@ -2815,7 +2811,7 @@ bool init_plugin(void *self) {
         
         mergedDeadInfoMap.clear();
         deadList.clear();
-        PIN_UnlockClient();
+        //PIN_UnlockClient();
 	}
     
 #else //no IP_AND_CCT
