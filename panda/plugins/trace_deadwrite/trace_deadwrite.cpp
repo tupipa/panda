@@ -2258,7 +2258,17 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
         // put next slot in corresponding ins start location;
         ipShadow[gCurrentSlot] = p.pc;
+
         gCurrentSlot++;
+
+        printf("new slot created for gCurrentContext->address: " TARGET_FMT_lx " \n", gCurrentContext->address);
+
+    	uint64_t * currentTraceShadowIP = (uint64_t *) gTraceShadowMap[callerIp];
+        printf("set recordedSlots of currentTraceShadowIP[-1]"  TARGET_FMT_lx " to %d\n", currentTraceShadowIP, gCurrentSlot);
+        //uint64_t recordedSlots = currentTraceShadowIP[-1]; // 
+        currentTraceShadowIP[-1] = gCurrentSlot; // 
+
+
         target_ulong writeSize = size;
         switch(writeSize){
             case 1:
