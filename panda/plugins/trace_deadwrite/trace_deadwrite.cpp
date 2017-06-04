@@ -1012,6 +1012,8 @@ inline VOID ManageCallingContext(CallStack *fstack){
     // panda: we adapt the name of "Trace" to store the slots. Might be improved by using a single TraceNode instead of a map with only one TraceNode.
     printf("step 3/3, update currentIp slots for curContextNode. necessary here?\n");
     // Check if a trace node with currentIp already exists under this context node    
+          
+    printf("callerIp: " TARGET_FMT_lx "\n", callerIp);
     if( (gTraceIter = (gCurrentContext->childTraces).find(callerIp)) != gCurrentContext->childTraces.end()) {
         // if tracenode is already exists
         // set the current Trace to the new trace
@@ -1059,8 +1061,7 @@ inline VOID ManageCallingContext(CallStack *fstack){
             printf("No record slots read\n");
             newChild->nSlots = 0;
             newChild->childIPs = 0;            
-        }          
-        printf("callerIp: " TARGET_FMT_lx "\n", callerIp);
+        }    
         gCurrentContext->childTraces[callerIp] = newChild;
         gCurrentTrace = newChild;
         gCurrentIpVector = gCurrentTrace->childIPs;
