@@ -41,7 +41,7 @@ This plugin traces deadwrites, and print them to file
       Reason: Panda could get call stacks by intrumenting in the instruction level by plugin 'callstack_instr'
         - InstrumentTrace()
         - InstrumentTraceEntry() : get function info
-        - PopulateIPReverseMapAndAccountTraceInstructions(), 
+        - (), 
             - InstructionContributionOfBBL1Byte()
 
       ===================
@@ -975,8 +975,27 @@ inline VOID ManageCallingContext(CallStack *fstack){
     if(gInitiatedCall){
         // get a new function call
         // a new function call is on the top of call stack.
+        printf("gInitiatedCall=true\n");
 
         UpdateDataOnFunctionEntry(callerIp); // it will reset   gInitiatedCall  
+
+        printf("setup according to PopulateIPReverseMapAndAccountTraceInstructions() in deadspy\n");
+        //uint32_t traceSize = TRACE_Size(trace);    
+        uint32_t traceSize = 0x80;    //lele: TODO: determine the size of function
+     
+        ADDRINT * ipShadow = (ADDRINT * )malloc( (1 + traceSize) * sizeof(ADDRINT)); // +1 to hold the number of slots as a metadata
+        ADDRINT  traceAddr = callerIp;
+        uint32_t slot = 0;
+    
+        gCurrentSlot = slot;
+    
+        // give space to account for nSlots which we record later once we know nWrites
+        ADDRINT * pNumWrites = ipShadow;
+        ipShadow ++;
+        gTraceShadowMap[traceAddr] = ipShadow ;
+
+         // Record the number of child write IPs i.e., number of "slots"
+        *pNumWrites = slot;
 
     }else if(gInitiatedRet){
         
@@ -1007,18 +1026,27 @@ inline VOID ManageCallingContext(CallStack *fstack){
         //panda: if not in the current context node, this means in a new function and a new context node is created.
         
         // Create new trace node and insert under the context node.
-        printf("Need to Create new Trace node.\n");
+        printf(__FUNCTION__);
+        printf(": Need to Create new Trace node.\n");
 
         TraceNode * newChild = new TraceNode();
+        printf("TraceNode New Child Created\n");
+        printf("\tNew Child: set parent\n");
         newChild->parent = gCurrentContext;
+        printf("\tNew Child: set address\n");
         newChild->address = callerIp;
+        printf("get currentTraceShadowIp from gTraceShadowMap[callerIp]\n");
     	uint64_t * currentTraceShadowIP = (uint64_t *) gTraceShadowMap[callerIp];
+        printf("get recordedSlots from currentTraceShadowIP[-1]"  TARGET_FMT_lx "\n", currentTraceShadowIP);
         uint64_t recordedSlots = currentTraceShadowIP[-1]; // present one behind
         if(recordedSlots){
+            printf("Record Slots: %d\n", recordedSlots);
 #ifdef CONTINUOUS_DEADINFO
             // if CONTINUOUS_DEADINFO is set, then all ip vecs come from a fixed 4GB buffer
+            printf("Continuous Info: GetNextIPVecBuffer...\n");
             newChild->childIPs  = (TraceNode **)GetNextIPVecBuffer(recordedSlots);
 #else            //no CONTINUOUS_DEADINFO
+            printf("NON Continuous Info: malloc new TraceNode**\n");
             newChild->childIPs = (TraceNode **) malloc( (recordedSlots) * sizeof(TraceNode **) );
 #endif //end CONTINUOUS_DEADINFO
             newChild->nSlots = recordedSlots;
@@ -1027,10 +1055,11 @@ inline VOID ManageCallingContext(CallStack *fstack){
                 newChild->childIPs[i] = newChild;
             }
         } else {
+            printf("No record slots read\n");
             newChild->nSlots = 0;
             newChild->childIPs = 0;            
         }          
-        
+        printf("callerIp: " TARGET_FMT_lx "\n", callerIp);
         gCurrentContext->childTraces[callerIp] = newChild;
         gCurrentTrace = newChild;
         gCurrentIpVector = gCurrentTrace->childIPs;
@@ -1068,9 +1097,31 @@ VOID InitContextTree(){
         rootNode->parent = 0;        
         gContextTreeVector[i].rootContext = rootNode;
         gContextTreeVector[i].currentContext = rootNode;
+
+
     }
     gCurrentContext = gContextTreeVector[0].rootContext;
     gRootContext = gContextTreeVector[0].rootContext;
+
+    printf("init setup according to PopulateIPReverseMapAndAccountTraceInstructions() in deadspy\n");
+        //uint32_t traceSize = TRACE_Size(trace);    
+    uint32_t traceSize = 0x80;    //lele: TODO: determine the size of function
+    ADDRINT * ipShadow = (ADDRINT * )malloc( (1 + traceSize) * sizeof(ADDRINT)); // +1 to hold the number of slots as a metadata
+    ADDRINT  traceAddr = 0;
+    uint32_t slot = 0;
+    
+    gCurrentSlot = slot;
+    
+    // give space to account for nSlots which we record later once we know nWrites
+    ADDRINT * pNumWrites = ipShadow;
+    ipShadow ++;
+    gTraceShadowMap[traceAddr] = ipShadow ;
+
+    // Record the number of child write IPs i.e., number of "slots"
+    *pNumWrites = slot;
+
+    printf("done. init setup according to PopulateIPReverseMapAndAccountTraceInstructions() in deadspy\n");
+   
 #else // no IP_AND_CCT
     gCurrentContext = gRootContext = new ContextNode();
     gRootContext->parent = 0;
