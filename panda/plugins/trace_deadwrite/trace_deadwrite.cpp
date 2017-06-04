@@ -889,7 +889,7 @@ inline VOID ManageCallingContext(CallStack *fstack){
             printf("GOOD: init, no function yet!\n");
         }
         callerIp=gCurrentCallerIp;
-        
+
         //keep gInitatedCall to be false in this case;
     }else {
         // call stack has at least one element, could be three cases:
@@ -899,6 +899,7 @@ inline VOID ManageCallingContext(CallStack *fstack){
 
         // get last caller's ip
         callerIp = fstack->callers[CALLERS_LAST];
+        gCurrentCallerIp= callerIp;
         // callerIp = fstack->callers[0];
         if(fstack->n == 1){
             printf("first level function ever!!!\n");
