@@ -1021,6 +1021,7 @@ inline VOID ManageCallingContext(CallStack *fstack){
         gCurrentIpVector = gCurrentTrace->childIPs;
         //lele: set slot index
         gCurrentSlot = gCurrentTrace->nSlots;
+        printf("set/get current slots:%d\n", gCurrentSlots);
 
      } else {
         //panda: if not in the current context node, this means in a new function and a new context node is created.
@@ -2089,8 +2090,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
                        ){
     prog_point p = {};
     get_prog_point(env, &p);
-    uint32_t slot = gCurrentSlot;
-
+                
 //    string_pos &sp = text_tracker[p];
 
 //     if(p.cr3 == 0){
@@ -2236,12 +2236,28 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     // lele: no need to do this.
     // UINT32 memOperands = INS_MemoryOperandCount(ins);
     
+    // If it is a call/ret instruction, we need to adjust the CCT.
+    // ManageCallingContext(ins);
+
+    // Also get the full stack here
+    CallStack callstack = {0};
+    callstack.n = get_callers(callstack.callers, n_callers, env);
+    callstack.pc = p.pc;
+    callstack.asid = p.cr3;
+
+    ManageCallingContext(&callstack); //lele: ported from deadspy, May 6, 2017.
+    
+    
+    uint32_t slot = gCurrentSlot;
     // If it is a memory write then count the number of bytes written 
 #ifndef IP_AND_CCT  
     // IP_AND_CCT uses traces to detect instructions & their write size hence no instruction level counting is needed
     // if(INS_IsMemoryWrite(ins)){
     if(is_write){
         // USIZE writeSize = INS_MemoryWriteSize(ins);
+
+        // put next slot in corresponding ins start location;
+        ipShadow[gCurrentSlot] = p.pc;
         gCurrentSlot++;
         target_ulong writeSize = size;
         switch(writeSize){
@@ -2269,18 +2285,6 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
         }                
     }
 #endif //end  ifndef IP_AND_CCT         
-    
-    
-    // If it is a call/ret instruction, we need to adjust the CCT.
-    // ManageCallingContext(ins);
-
-    // Also get the full stack here
-    CallStack callstack = {0};
-    callstack.n = get_callers(callstack.callers, n_callers, env);
-    callstack.pc = p.pc;
-    callstack.asid = p.cr3;
-
-    ManageCallingContext(&callstack); //lele: ported from deadspy, May 6, 2017.
     
     
     // In Multi-threaded skip call, ret and JMP instructions
