@@ -561,6 +561,8 @@ uint32_t gCurrentSlot;
 bool gInitiatedCall = true;
 bool gInitiatedRet = true;
 TraceNode ** gCurrentIpVector;
+ADDRINT gCurrentCallerIp;
+ADDRINT gCurrentASID;
 
 uint32_t gContextTreeIndex;
 
@@ -916,6 +918,8 @@ inline VOID ManageCallingContext(CallStack *fstack){
                     // callerIp is first level's func; move currentContext to this func;
                     // create one child of RootContext
                     gInitiatedCall = true;
+                }else{
+                    printf("gCurrentContext is not root; instruction is in first level func; so not new func. Do nothing.\n");
                 }
             }else{
                 //in other level functions:
@@ -929,6 +933,7 @@ inline VOID ManageCallingContext(CallStack *fstack){
                     // first detect whether this func is already a children of currentContext. if not, create one.
                     // set cur context with callerIp.
                     gInitiatedCall=true;
+                    printf("curContext is equal to caller of the caller; so new call detected\n");
                 }else {
                     // current Context is neither the last nor the second last in the call stack.
                     // - a ret: current Context's parent is the last in call stack.
@@ -944,6 +949,7 @@ inline VOID ManageCallingContext(CallStack *fstack){
 
                     if(parContextIp == callerIp){
                         gInitiatedRet = true;
+                        printf("parent ContextIp is equal to the caller Ip, a ret detected. \n");
                     }else{
                         printf("Error: callers>=2: current Context is neither the last nor the second last in the call stack, and current Context's parent is not the last in call stack.\n");
                         exit(-1);
@@ -1000,12 +1006,14 @@ inline VOID ManageCallingContext(CallStack *fstack){
         *pNumWrites = slot;
 
     }else if(gInitiatedRet){
-        
+        printf("get a ret; call GoUpCallChain...\n");
         // Let GoDownCallChain do the work needed to setup pointers for child nodes.
         GoUpCallChain();
     }else if (gInitiatedCall && gInitiatedRet){
         printf("ERROR: cant ret and call at same time\n");
         exit(-1);
+    }else{
+        printf("no new call, no ret.\n")
     }
     
 
@@ -1092,6 +1100,8 @@ inline VOID ManageCallingContext(CallStack *fstack){
 
 // Initialized the fields of the root node of all context trees
 VOID InitContextTree(){
+    gCurrentASID = 0x0;
+
 #ifdef IP_AND_CCT
     // MAX 10 context trees
     gContextTreeVector.reserve(CONTEXT_TREE_VECTOR_SIZE);
@@ -2247,7 +2257,15 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     callstack.n = get_callers(callstack.callers, n_callers, env);
     callstack.pc = p.pc;
     callstack.asid = p.cr3;
-
+    
+    printf("curASID: " TARGET_FMT_lx "\n", callstack.asid);
+    if (p.cr3 != gCurrentASID){
+        printf("curASID is not the target, ignore\n")
+        return;
+    } else{
+        printf("get one mem op for ASID: " TARGET_FMT_lx "\n", gCurrentASID)
+    }
+    
     ManageCallingContext(&callstack); //lele: ported from deadspy, May 6, 2017.
     
     
