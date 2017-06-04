@@ -888,6 +888,8 @@ inline VOID ManageCallingContext(CallStack *fstack){
         }else{
             printf("GOOD: init, no function yet!\n");
         }
+        callerIp=gCurrentCallerIp;
+        
         //keep gInitatedCall to be false in this case;
     }else {
         // call stack has at least one element, could be three cases:
@@ -1101,7 +1103,7 @@ inline VOID ManageCallingContext(CallStack *fstack){
 // Initialized the fields of the root node of all context trees
 VOID InitContextTree(){
     gCurrentASID = 0x0;
-
+     
 #ifdef IP_AND_CCT
     // MAX 10 context trees
     gContextTreeVector.reserve(CONTEXT_TREE_VECTOR_SIZE);
@@ -1125,6 +1127,7 @@ VOID InitContextTree(){
     uint32_t slot = 0;
     
     gCurrentSlot = slot;
+    gCurrentCallerIp = 0x0;
     
     // give space to account for nSlots which we record later once we know nWrites
     ADDRINT * pNumWrites = ipShadow;
@@ -2277,6 +2280,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     if(is_write){
         // USIZE writeSize = INS_MemoryWriteSize(ins);
 
+        printf("write detected\n");
         // put next slot in corresponding ins start location;
         ipShadow[gCurrentSlot] = p.pc;
 
@@ -2352,7 +2356,12 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
         // UINT32 refSize = INS_MemoryOperandSize(ins, memOp);
 
         UINT32 refSize = size;
+        if (! is_write){
+            printf("record read (%d bytes)\n", size)
+        }else{
 
+            printf("record write (%d bytes)\n", size)
+        }
         switch(refSize){
             case 1:{
                 // if (INS_MemoryOperandIsRead(ins, memOp)) {
