@@ -867,6 +867,8 @@ inline VOID ManageCallingContext(CallStack *fstack){
     // ADDRINT currentIp = fstack->pc;
     ADDRINT callerIp, callerCallerIp;
 
+    
+    printf("curContextIp: " TARGET_FMT_lx "\n", curContextIp);
     if (fstack->n < 0){
             printf("ERROR: get neg callers.\n");
             exit(-1);
