@@ -2352,6 +2352,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
         printf("update ipShadow slot when write detected.\n");
         // put next slot in corresponding ins start location;
+        ADDRINT *ipShadow =  gTraceShadowMap[gCurrentContext->address];
         ipShadow[gCurrentSlot] = p.pc;
 
         gCurrentSlot++;
