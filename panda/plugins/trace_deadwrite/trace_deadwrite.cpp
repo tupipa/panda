@@ -2358,10 +2358,10 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
         UINT32 refSize = size;
         if (! is_write){
-            printf("record read (%d bytes)\n", size)
+            printf("record read (%d bytes)\n", size);
         }else{
 
-            printf("record write (%d bytes)\n", size)
+            printf("record write (%d bytes)\n", size);
         }
         switch(refSize){
             case 1:{
