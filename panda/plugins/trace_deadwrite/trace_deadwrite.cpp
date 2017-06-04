@@ -1021,7 +1021,7 @@ inline VOID ManageCallingContext(CallStack *fstack){
         gCurrentIpVector = gCurrentTrace->childIPs;
         //lele: set slot index
         gCurrentSlot = gCurrentTrace->nSlots;
-        printf("set/get current slots:%d\n", gCurrentSlots);
+        printf("set/get current slots:%d\n", gCurrentSlot);
 
      } else {
         //panda: if not in the current context node, this means in a new function and a new context node is created.
