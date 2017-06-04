@@ -1013,7 +1013,7 @@ inline VOID ManageCallingContext(CallStack *fstack){
         printf("ERROR: cant ret and call at same time\n");
         exit(-1);
     }else{
-        printf("no new call, no ret.\n")
+        printf("no new call, no ret.\n");
     }
     
 
@@ -2260,12 +2260,12 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     
     printf("curASID: " TARGET_FMT_lx "\n", callstack.asid);
     if (p.cr3 != gCurrentASID){
-        printf("curASID is not the target, ignore\n")
+        printf("curASID is not the target, ignore\n");
         return;
     } else{
-        printf("get one mem op for ASID: " TARGET_FMT_lx "\n", gCurrentASID)
+        printf("get one mem op for ASID: " TARGET_FMT_lx "\n", gCurrentASID);
     }
-    
+
     ManageCallingContext(&callstack); //lele: ported from deadspy, May 6, 2017.
     
     
