@@ -899,6 +899,7 @@ inline VOID ManageCallingContext(CallStack *fstack){
 
         // get last caller's ip
         callerIp = fstack->callers[CALLERS_LAST];
+        printf("get callerIp on stack: " TARGET_FMT_lx "\n", callerIp);
         gCurrentCallerIp= callerIp;
         // callerIp = fstack->callers[0];
         if(fstack->n == 1){
