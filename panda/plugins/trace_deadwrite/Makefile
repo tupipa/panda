@@ -11,7 +11,7 @@ CFLAGS += -c -Wno-deprecated -Wall -Wno-error -Wno-unknown-pragmas  -O3 -fomit-f
 
 MYINCLUDES = -isystem$(PLUGIN_SRC_DIR)/sparsehash-master/src
 #INCLUDES = -I./sparsehash-master/src
-CFLAGS += $(INCLUDES)
+CFLAGS += $(MYINCLUDES)
 
 # The main rule for your plugin. List all object-file dependencies.
 $(PLUGIN_TARGET_DIR)/panda_$(PLUGIN_NAME).so: \
