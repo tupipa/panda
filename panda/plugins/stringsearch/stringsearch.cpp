@@ -189,7 +189,7 @@ bool init_plugin(void *self) {
                 strlens[num_strings] = i;
             }
 
-            printf("stringsearch: added string of length %d to search set\n", strlens[num_strings]);
+            printf("stringsearch: added string of length %d (%s) to search set\n", strlens[num_strings],tofind[num_strings]);
 
             if(++num_strings >= MAX_STRINGS) {
                 printf("WARN: maximum number of strings (%d) reached, will not load any more.\n", MAX_STRINGS);
