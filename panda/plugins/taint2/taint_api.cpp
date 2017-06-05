@@ -89,7 +89,6 @@ std::set<uint32_t> labels_applied;
 
 // label -- associate label l with address a
 static void tp_label(Addr a, uint32_t l) {
-    assert (shad != NULL);
     if (debug_taint) start_debugging();
     LabelSetP ls = label_set_singleton(l);
     tp_labelset_put(a, ls);
@@ -98,6 +97,9 @@ static void tp_label(Addr a, uint32_t l) {
 
 // retrieve ls for this addr
 static void tp_ls_iter(LabelSetP ls, int (*app)(uint32_t, void *), void *opaque) {
+    if (ls == nullptr) {
+        return;
+    }
     for (uint32_t el : *ls) {
         if (app(el, opaque) != 0) break;
     }
@@ -114,7 +116,6 @@ void taint2_label_reg(int reg_num, int offset, uint32_t l) {
     tp_label(a, l);
 }
 
-uint32_t taint_pos_count = 0;
 
 void label_byte(CPUState *cpu, target_ulong virt_addr, uint32_t label_num) {
     hwaddr pa = panda_virt_to_phys(cpu, virt_addr);
@@ -131,8 +132,9 @@ void label_byte(CPUState *cpu, target_ulong virt_addr, uint32_t label_num) {
     taint2_label_ram(pa, label_num);
 }
 
+
 // Apply positional taint to a buffer of memory
-void taint2_add_taint_ram_pos(CPUState *cpu, uint64_t addr, uint32_t length){
+void taint2_add_taint_ram_pos(CPUState *cpu, uint64_t addr, uint32_t length, uint32_t start_label){
     for (unsigned i = 0; i < length; i++){
         hwaddr pa = panda_virt_to_phys(cpu, addr + i);
         if (pa == (hwaddr)(-1)) {
@@ -140,12 +142,11 @@ void taint2_add_taint_ram_pos(CPUState *cpu, uint64_t addr, uint32_t length){
                 "i.e., it isnt actually there.\n", addr +i);
             continue;
         }
-        //taint2_label_ram(pa, i + taint_pos_count);
-        printf("taint2: adding positional taint label %d\n", i+taint_pos_count);
-        label_byte(cpu, addr+i, i+taint_pos_count);
+        printf("taint2: adding positional taint label %d\n", i+start_label);
+        label_byte(cpu, addr+i, i+start_label);
     }
-    taint_pos_count += length;
 }
+
 
 // Apply single label taint to a buffer of memory
 void taint2_add_taint_ram_single_label(CPUState *cpu, uint64_t addr,

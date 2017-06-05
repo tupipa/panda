@@ -8,6 +8,9 @@
 // turns on taint
 void taint2_enable_taint(void);
 
+// turns on tainted pointer
+void taint2_enable_tainted_pointer(void);
+
 // returns 1 if taint is on
 int taint2_enabled(void);
 
@@ -41,7 +44,7 @@ void taint2_delete_reg(int reg_num, int offset);
 void taint2_labelset_spit(LabelSetP ls) ; 
 
 // addr is an opaque.  it should be &a if a is known to be an Addr
-void taint2_labelset_addr_iter(void *addr, int (*app)(uint32_t el, void *stuff1), void *stuff2);
+void taint2_labelset_addr_iter(Addr addr, int (*app)(uint32_t el, void *stuff1), void *stuff2);
 
 // apply this fn to each of the labels associated with this pa
 // fn should return 0 to continue iteration
