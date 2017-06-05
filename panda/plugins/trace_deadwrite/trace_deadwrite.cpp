@@ -877,7 +877,7 @@ inline VOID ManageCallingContext(CallStack *fstack){
 
     }else if (fstack->n == 0){
         // no callers, must be in current func
-
+        printf("%s: get 0 callers\n", __FUNCTION__);
         if (gCurrentContext != gRootContext  && gCurrentContext-> parent != gRootContext){
             //when no func, gCurrentContext or its parent must be equal with gRootContext
             printf("ERROR: when no func, gCurrentContext must point to gRootContext!!!\n");
@@ -2259,12 +2259,13 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     // Also get the full stack here
     CallStack callstack = {0};
     callstack.n = get_callers(callstack.callers, n_callers, env);
+    printf ("get %d callers\n", callstack.n);
     callstack.pc = p.pc;
     callstack.asid = p.cr3;
     
-    printf("curASID: " TARGET_FMT_lx "\n", callstack.asid);
+    //printf("curASID: " TARGET_FMT_lx "\n", callstack.asid);
     if (p.cr3 != gCurrentASID){
-        printf("curASID is not the target, ignore\n");
+        printf("curASID is not the target,; ignore ASID: " TARGET_FMT_lx "\n", p.cr3);
         return;
     } else{
         printf("get one mem op for ASID: " TARGET_FMT_lx "\n", gCurrentASID);
