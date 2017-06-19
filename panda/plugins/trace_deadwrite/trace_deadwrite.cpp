@@ -93,6 +93,9 @@ TODO:
 PANDAENDCOMMENT */
 // This needs to be defined before anything is included in order to get
 // the PRIx64 macro
+
+#if defined(TARGET_I386)
+
 #define __STDC_FORMAT_MACROS
 
 #include <cstdio>
@@ -300,10 +303,11 @@ hashVar = hashVar | ((int) key);\
 #define REPORT_DEAD(curCtxt, lastCtxt,hashVar, size) do { \
 CONTEXT_HASH_128BITS_TO_64BITS(curCtxt, lastCtxt,hashVar)  \
 if ( (gDeadMapIt = DeadMap.find(hashVar))  == DeadMap.end()) {    \
-DeadMap.insert(std::pair<target_ulong, target_ulong>(hashVar,size)); \
+DeadMap.insert(std::pair<uint64_t, target_ulong>(hashVar,size)); \
 } else {    \
 (gDeadMapIt->second) += size;    \
 }   \
+printf("report one dead %lu (" TARGET_FMT_lx ")", hashVar,size); \
 }while(0)
 
 #else // no defined(CONTINUOUS_DEADINFO)
@@ -313,7 +317,7 @@ DeadMap.insert(std::pair<target_ulong, target_ulong>(hashVar,size)); \
 CONTEXT_HASH_128BITS_TO_64BITS(curCtxt, lastCtxt,hashVar)  \
 if ( (gDeadMapIt = DeadMap.find(hashVar))  == DeadMap.end()) {    \
 DeadInfo deadInfo = { lastCtxt,  curCtxt, size };   \
-DeadMap.insert(std::pair<target_ulong, DeadInfo>(hashVar,deadInfo)); \
+DeadMap.insert(std::pair<uint64_t, DeadInfo>(hashVar,deadInfo)); \
 } else {    \
 (gDeadMapIt->second.count) += size;    \
 }   \
@@ -527,8 +531,8 @@ uint8_t ** gL1PageTable[LEVEL_1_PAGE_TABLE_SIZE];
 #if defined(CONTINUOUS_DEADINFO)
 //hash_map<target_ulong, target_ulong> DeadMap;
 //hash_map<target_ulong, target_ulong>::iterator gDeadMapIt;
-unordered_map<target_ulong, target_ulong> DeadMap;
-unordered_map<target_ulong, target_ulong>::iterator gDeadMapIt;
+unordered_map<uint64_t, target_ulong> DeadMap;
+unordered_map<uint64_t, target_ulong>::iterator gDeadMapIt;
 
 #endif // end defined(CONTINUOUS_DEADINFO)
 
@@ -926,8 +930,8 @@ inline VOID ManageCallingContext(CallStack *fstack){
         }else if (gCurrentContext-> parent == gRootContext){
             gInitiatedRet = true;
             printf("return to no func level!!\n");
-        }else{
-            printf("GOOD: init, no function yet!\n");
+        //}else{
+            //printf("GOOD: init, no function yet!\n");
         }
         callerIp=gCurrentCallerIp;
 
@@ -1070,8 +1074,8 @@ inline VOID ManageCallingContext(CallStack *fstack){
     }else if (gInitiatedCall && gInitiatedRet){
         printf("ERROR: cant ret and call at same time\n");
         exit(-1);
-    }else{
-        printf("no new call, no ret.\n");
+    // }else{
+    //     printf("no new call, no ret.\n");
     }
     
     //#######################################################
@@ -1670,7 +1674,7 @@ VOID Record8ByteMemWrite(
             DECLARE_HASHVAR(myhash);
             void * ipZero = lastIP[0];
             // fast path where all bytes are dead by same context
-        // TODO:lele only supports 64bit here.
+            // TODO:lele only supports 64bit here.
             if ( sizeof(state) == 8 && state == EIGHT_BYTE_WRITE_ACTION &&
                 ipZero  == lastIP[1] && ipZero  == lastIP[2] &&
                 ipZero  == lastIP[3] && ipZero  == lastIP[4] &&
@@ -3072,11 +3076,12 @@ inline target_ulong GetMeasurementBaseCount(){
 #endif //end defined(CONTINUOUS_DEADINFO)        
         map<MergedDeadInfo,target_ulong> mergedDeadInfoMap;
         
-        
+        printf("%s: get Header of the DeadMap: " TARGET_FMT_lx "\n", mapIt);
 #if defined(CONTINUOUS_DEADINFO)
+        printf("%s: continuous\n", __FUNCTION__);
         for (; mapIt != DeadMap.end(); mapIt++) {
             MergedDeadInfo tmpMergedDeadInfo;
-            target_ulong hash = mapIt->first;
+            uint64_t hash = mapIt->first;
             TraceNode ** ctxt1 = (TraceNode **)(gPreAllocatedContextBuffer + (hash >> 32));
             TraceNode ** ctxt2 = (TraceNode **)(gPreAllocatedContextBuffer + (hash & 0xffffffff));
             
@@ -3103,9 +3108,11 @@ inline target_ulong GetMeasurementBaseCount(){
         
         
 #else   // no defined(CONTINUOUS_DEADINFO)        
+
+        printf("%s: NOT continuous\n", __FUNCTION__);
         for (; mapIt != DeadMap.end(); mapIt++) {
             MergedDeadInfo tmpMergedDeadInfo;
-        printf("counting written bytes:  " TARGET_FMT_lx "\n", writeSize);
+            printf("counting written bytes:  " TARGET_FMT_lx "\n", writeSize);
             tmpMergedDeadInfo.context1 = (*((TraceNode **)((mapIt->second).firstIP)))->parent;
             tmpMergedDeadInfo.context2 = (*((TraceNode **)((mapIt->second).secondIP)))->parent;
 #ifdef MERGE_SAME_LINES
@@ -3215,9 +3222,9 @@ inline target_ulong GetMeasurementBaseCount(){
         
 #if defined(CONTINUOUS_DEADINFO)
         for (mapIt = DeadMap.begin(); mapIt != DeadMap.end(); mapIt++) {
-            target_ulong hash = mapIt->first;
-            target_ulong elt1 = (hash >> 32) * sizeof(void **) / sizeof(ContextNode);
-            target_ulong elt2 = (hash & 0xffffffff) * sizeof(void **) / sizeof(ContextNode);
+            uint64_t = mapIt->first;
+            uint64_t elt1 = (hash >> 32) * sizeof(void **) / sizeof(ContextNode);
+            uint64_t elt2 = (hash & 0xffffffff) * sizeof(void **) / sizeof(ContextNode);
             void ** ctxt1 = (void**) ((ContextNode*)gPreAllocatedContextBuffer + elt1);
             void ** ctxt2 = (void**)((ContextNode*)gPreAllocatedContextBuffer + elt2);
             DeadInfo tmpDeadInfo = {(void*)ctxt1, (void*)ctxt2,  mapIt->second};
@@ -3348,3 +3355,6 @@ void uninit_plugin(void *self) {
 // done last step: printing
 
 //#########################
+
+
+#endif //defined(TARGET_I386)
