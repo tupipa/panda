@@ -520,8 +520,8 @@ uint64_t gTotalMTDead = 0;
 // SEGVHANDLEING FOR BAD .plt
 // Lele: cmt this for panda
 jmp_buf env;
-struct sigaction gSigAct;
-void SegvHandler(int);
+//struct sigaction gSigAct;
+//void SegvHandler(int);
 
 ContextNode * gRootContext;
 ContextNode * gCurrentContext;
@@ -2777,8 +2777,8 @@ bool init_plugin(void *self) {
         int retVal = 0;
         
         // set sig handler
-        struct sigaction old;
-        sigaction(SIGSEGV,&gSigAct,&old);
+        //struct sigaction old;
+        //sigaction(SIGSEGV,&gSigAct,&old);
         if(curContext){
             if(IsValidIP(curContext->address)){
                 //lele: TODO: check func name, 'mem_set'
@@ -2806,7 +2806,7 @@ bool init_plugin(void *self) {
             } 
         }
         //reset sig handler
-        sigaction(SIGSEGV,&old,0);
+        //sigaction(SIGSEGV,&old,0);
         return retVal;
     }
     
