@@ -102,6 +102,7 @@ uint8_t rr_please_flush_tb = 0;
 
 // mz Flags set by monitor to indicate requested record/replay action
 volatile sig_atomic_t rr_record_requested = 0;
+volatile sig_atomic_t rr_replay_requested = 0;
 volatile sig_atomic_t rr_end_record_requested = 0;
 volatile sig_atomic_t rr_end_replay_requested = 0;
 char* rr_requested_name = NULL;
@@ -1246,6 +1247,12 @@ void qmp_end_record(Error** errp)
     rr_end_record_requested = 1;
 }
 
+void qmp_begin_replay(const char *file_name, Error **errp) {
+  rr_replay_requested = 1;
+  rr_requested_name = g_strdup(file_name);
+  gettimeofday(&replay_start_time, 0);
+}
+
 void qmp_end_replay(Error** errp)
 {
     qmp_stop(NULL);
@@ -1278,6 +1285,13 @@ void hmp_end_record(Monitor* mon, const QDict* qdict)
 {
     Error* err;
     qmp_end_record(&err);
+}
+
+void hmp_begin_replay(Monitor *mon, const QDict *qdict)
+{
+  Error *err;
+  const char *file_name = qdict_get_try_str(qdict, "file_name");
+  qmp_begin_replay(file_name, &err);
 }
 
 void hmp_end_replay(Monitor* mon, const QDict* qdict)
@@ -1546,7 +1560,11 @@ uint32_t rr_checksum_regs(void) {
     }
     CPUArchState *env = (CPUArchState *)first_cpu->env_ptr;
     uint32_t crc = crc32(0, Z_NULL, 0);
+#if defined(TARGET_PPC)
+    crc = crc32(crc, (unsigned char *)env->gpr, sizeof(env->gpr));
+#else
     crc = crc32(crc, (unsigned char *)env->regs, sizeof(env->regs));
+#endif
 #if defined(TARGET_I386)
     crc = crc32(crc, (unsigned char *)&env->eip, sizeof(env->eip));
 #elif defined(TARGET_ARM)

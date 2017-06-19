@@ -14,6 +14,10 @@ syscalls2
 win7x86intro
 wintrospection
 asid_instr_count
+replaymovie
+memsavep
+#
+# added by lele:
 trace_sample
 trace_mem
 trace_deadwrite
