@@ -206,8 +206,8 @@ using namespace std::tr1;
 #define LEVEL_2_PAGE_TABLE_ENTRIES  (1 << LEVEL_2_PAGE_TABLE_BITS )
 #define LEVEL_2_PAGE_TABLE_SIZE  (LEVEL_2_PAGE_TABLE_ENTRIES * PTR_SIZE )
 
-#define LEVEL_1_PAGE_TABLE_SLOT(addr) ((((target_ulong)addr) >> (LEVEL_2_PAGE_TABLE_BITS + PAGE_OFFSET_BITS)) & 0xfffff)
-#define LEVEL_2_PAGE_TABLE_SLOT(addr) ((((target_ulong)addr) >> (PAGE_OFFSET_BITS)) & 0xFFF)
+#define LEVEL_1_PAGE_TABLE_SLOT(addr) ((((uintptr_t)addr) >> (LEVEL_2_PAGE_TABLE_BITS + PAGE_OFFSET_BITS)) & 0xfffff)
+#define LEVEL_2_PAGE_TABLE_SLOT(addr) ((((uintptr_t)addr) >> (PAGE_OFFSET_BITS)) & 0xFFF)
 
 
 // have R, W representative macros
@@ -379,6 +379,33 @@ target_ulong g16ByteWriteInstrCount;
 target_ulong gLargeByteWriteInstrCount;
 target_ulong gLargeByteWriteByteCount;
 #endif
+
+#ifdef TESTING_BYTES 
+target_ulong gFullyKilling1;
+target_ulong gFullyKilling2;
+target_ulong gFullyKilling4;
+target_ulong gFullyKilling8;
+target_ulong gFullyKilling10;
+target_ulong gFullyKilling16;
+target_ulong gFullyKillingLarge;
+
+target_ulong gPartiallyKilling1;
+target_ulong gPartiallyKilling2;
+target_ulong gPartiallyKilling4;
+target_ulong gPartiallyKilling8;
+target_ulong gPartiallyKilling10;
+target_ulong gPartiallyKilling16;
+target_ulong gPartiallyKillingLarge;
+
+target_ulong gPartiallyDeadBytes1;
+target_ulong gPartiallyDeadBytes2;
+target_ulong gPartiallyDeadBytes4;
+target_ulong gPartiallyDeadBytes8;
+target_ulong gPartiallyDeadBytes10;
+target_ulong gPartiallyDeadBytes16;
+target_ulong gPartiallyDeadBytesLarge;
+#endif // end TESTING_BYTES
+
 
 struct ContextNode;
 struct DeadInfo;
@@ -2344,7 +2371,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     if(is_write){
         // USIZE writeSize = INS_MemoryWriteSize(ins);
         target_ulong writeSize = size;
-        printf("counting written bytes: %lu\n", writeSize);
+        printf("counting written bytes:  " TARGET_FMT_lx "\n", writeSize);
         switch(writeSize){
             case 1:
                 // INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR) Do1ByteCount, IARG_END);
@@ -2407,10 +2434,10 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
         target_ulong refSize = size;
         if (! is_write){
-            printf("record read (%lu bytes).\n", size);
+            printf("record read (" TARGET_FMT_lx " bytes).\n", size);
         }else{
 
-            printf("record write (%lu bytes).\n", size);
+            printf("record write (" TARGET_FMT_lx " bytes).\n", size);
 
         // uint32_t slot = gCurrentTrace->nSlots;
 
@@ -2836,13 +2863,13 @@ bool init_plugin(void *self) {
 #ifdef TESTING_BYTES
     // Prints the collected statistics on writes along with their sizes and dead/killing writes and their sizes
     inline VOID PrintInstructionBreakdown(){
-        fprintf(gTraceFile,"\n%lu,%lu,%lu,%lu ",g1ByteWriteInstrCount, gFullyKilling1, gPartiallyKilling1, gPartiallyDeadBytes1);
-        fprintf(gTraceFile,"\n%lu,%lu,%lu,%lu ",g2ByteWriteInstrCount, gFullyKilling2, gPartiallyKilling2, gPartiallyDeadBytes2);
-        fprintf(gTraceFile,"\n%lu,%lu,%lu,%lu ",g4ByteWriteInstrCount, gFullyKilling4, gPartiallyKilling4, gPartiallyDeadBytes4);
-        fprintf(gTraceFile,"\n%lu,%lu,%lu,%lu ",g8ByteWriteInstrCount, gFullyKilling8, gPartiallyKilling8, gPartiallyDeadBytes8);
-        fprintf(gTraceFile,"\n%lu,%lu,%lu,%lu ",g10ByteWriteInstrCount, gFullyKilling10, gPartiallyKilling10, gPartiallyDeadBytes10);
-        fprintf(gTraceFile,"\n%lu,%lu,%lu,%lu ",g16ByteWriteInstrCount, gFullyKilling16, gPartiallyKilling16, gPartiallyDeadBytes16);        
-        fprintf(gTraceFile,"\n%lu,%lu,%lu,%lu,%lu ",gLargeByteWriteInstrCount,  gFullyKillingLarge, gPartiallyKillingLarge, gLargeByteWriteByteCount, gPartiallyDeadBytesLarge);        
+        fprintf(gTraceFile,"\n " TARGET_FMT_lx ", " TARGET_FMT_lx ", " TARGET_FMT_lx ", " TARGET_FMT_lx " ",g1ByteWriteInstrCount, gFullyKilling1, gPartiallyKilling1, gPartiallyDeadBytes1);
+        fprintf(gTraceFile,"\n " TARGET_FMT_lx ", " TARGET_FMT_lx ", " TARGET_FMT_lx ", " TARGET_FMT_lx " ",g2ByteWriteInstrCount, gFullyKilling2, gPartiallyKilling2, gPartiallyDeadBytes2);
+        fprintf(gTraceFile,"\n " TARGET_FMT_lx ", " TARGET_FMT_lx ", " TARGET_FMT_lx ", " TARGET_FMT_lx " ",g4ByteWriteInstrCount, gFullyKilling4, gPartiallyKilling4, gPartiallyDeadBytes4);
+        fprintf(gTraceFile,"\n " TARGET_FMT_lx ", " TARGET_FMT_lx ", " TARGET_FMT_lx ", " TARGET_FMT_lx " ",g8ByteWriteInstrCount, gFullyKilling8, gPartiallyKilling8, gPartiallyDeadBytes8);
+        fprintf(gTraceFile,"\n " TARGET_FMT_lx ", " TARGET_FMT_lx ", " TARGET_FMT_lx ", " TARGET_FMT_lx " ",g10ByteWriteInstrCount, gFullyKilling10, gPartiallyKilling10, gPartiallyDeadBytes10);
+        fprintf(gTraceFile,"\n " TARGET_FMT_lx ", " TARGET_FMT_lx ", " TARGET_FMT_lx ", " TARGET_FMT_lx " ",g16ByteWriteInstrCount, gFullyKilling16, gPartiallyKilling16, gPartiallyDeadBytes16);        
+        fprintf(gTraceFile,"\n " TARGET_FMT_lx ", " TARGET_FMT_lx ", " TARGET_FMT_lx ", " TARGET_FMT_lx ", " TARGET_FMT_lx " ",gLargeByteWriteInstrCount,  gFullyKillingLarge, gPartiallyKillingLarge, gLargeByteWriteByteCount, gPartiallyDeadBytesLarge);        
     }
 #endif //end TESTING_BYTES
         
@@ -2889,18 +2916,18 @@ bool init_plugin(void *self) {
             double contrib = runningSum * 100.0 / gTotalDead;
             if(contrib >= curContributionIndex){
                 while(contrib >= curContributionIndex){
-                    fprintf(statsFile,",%lu:%e",deadCount, deadCount * 100.0 / deads);
+                    fprintf(statsFile,", " TARGET_FMT_lx ":%e",deadCount, deadCount * 100.0 / deads);
                     curContributionIndex++;
                 }	
             }
         }
         static bool firstTime = true;
         if(firstTime){
-            fprintf(statsFile,"\nbothMemsetContribution %lu = %e", bothMemsetContribution, bothMemsetContribution * 100.0 / gTotalDead);
-            fprintf(statsFile,"\nsingleMemsetContribution %lu = %e", singleMemsetContribution, singleMemsetContribution * 100.0 / gTotalDead);
-            fprintf(statsFile,"\nbothMemsetContext %lu = %e", bothMemsetContexts, bothMemsetContexts * 100.0 / deads);
-            fprintf(statsFile,"\nsingleMemsetContext %lu = %e", singleMemsetContexts, singleMemsetContexts * 100.0 / deads);
-            fprintf(statsFile,"\nTotalDeadContexts %lu", deads);
+            fprintf(statsFile,"\nbothMemsetContribution  " TARGET_FMT_lx " = %e", bothMemsetContribution, bothMemsetContribution * 100.0 / gTotalDead);
+            fprintf(statsFile,"\nsingleMemsetContribution  " TARGET_FMT_lx " = %e", singleMemsetContribution, singleMemsetContribution * 100.0 / gTotalDead);
+            fprintf(statsFile,"\nbothMemsetContext  " TARGET_FMT_lx " = %e", bothMemsetContexts, bothMemsetContexts * 100.0 / deads);
+            fprintf(statsFile,"\nsingleMemsetContext  " TARGET_FMT_lx " = %e", singleMemsetContexts, singleMemsetContexts * 100.0 / deads);
+            fprintf(statsFile,"\nTotalDeadContexts  " TARGET_FMT_lx "", deads);
             firstTime = false;
         }        
     }
@@ -2916,36 +2943,36 @@ inline target_ulong GetMeasurementBaseCount(){
         target_ulong measurementBaseCount =  GetTotalNByteWrites(1) + 2 * GetTotalNByteWrites(2) + 4 * GetTotalNByteWrites(4) + 8 * GetTotalNByteWrites(8) + 10 * GetTotalNByteWrites(10)+ 16 * GetTotalNByteWrites(16) + GetTotalNByteWrites(-1);
 #else //no MULTI_THREADED        
         printf("NO MULTI_THREADED: computing base count.\n");
-        printf("1:%lu;2:%lu;4%lu;8:%lu;10:%lu;16:%lu;large:%lu\n",
+        printf("1: " TARGET_FMT_lx ";2: " TARGET_FMT_lx ";4 " TARGET_FMT_lx ";8: " TARGET_FMT_lx ";10: " TARGET_FMT_lx ";16: " TARGET_FMT_lx ";large: " TARGET_FMT_lx "\n",
           g1ByteWriteInstrCount, g2ByteWriteInstrCount,
           g4ByteWriteInstrCount, g8ByteWriteInstrCount,
           g10ByteWriteInstrCount,g16ByteWriteInstrCount,
           gLargeByteWriteInstrCount);
         target_ulong measurementBaseCount =  g1ByteWriteInstrCount + 2 * g2ByteWriteInstrCount + 4 * g4ByteWriteInstrCount + 8 * g8ByteWriteInstrCount + 10 * g10ByteWriteInstrCount + 16 * g16ByteWriteInstrCount + gLargeByteWriteInstrCount;
 #endif  //end MULTI_THREADED
-        printf("%s, base count %lu\n",__FUNCTION__, measurementBaseCount);
+        printf("%s, base count  " TARGET_FMT_lx "\n",__FUNCTION__, measurementBaseCount);
         return measurementBaseCount;        
     }
 
     // Prints the collected statistics on writes along with their sizes
     inline void PrintEachSizeWrite(){
 #ifdef MULTI_THREADED
-        fprintf(gTraceFile,"\n1:%lu",GetTotalNByteWrites(1));
-        fprintf(gTraceFile,"\n2:%lu",GetTotalNByteWrites(2));
-        fprintf(gTraceFile,"\n4:%lu",GetTotalNByteWrites(4));
-        fprintf(gTraceFile,"\n8:%lu",GetTotalNByteWrites(8));
-        fprintf(gTraceFile,"\n10:%lu",GetTotalNByteWrites(10));
-        fprintf(gTraceFile,"\n16:%lu",GetTotalNByteWrites(16));
-        fprintf(gTraceFile,"\nother:%lu",GetTotalNByteWrites(-1));
+        fprintf(gTraceFile,"\n1: " TARGET_FMT_lx "",GetTotalNByteWrites(1));
+        fprintf(gTraceFile,"\n2: " TARGET_FMT_lx "",GetTotalNByteWrites(2));
+        fprintf(gTraceFile,"\n4: " TARGET_FMT_lx "",GetTotalNByteWrites(4));
+        fprintf(gTraceFile,"\n8: " TARGET_FMT_lx "",GetTotalNByteWrites(8));
+        fprintf(gTraceFile,"\n10: " TARGET_FMT_lx "",GetTotalNByteWrites(10));
+        fprintf(gTraceFile,"\n16: " TARGET_FMT_lx "",GetTotalNByteWrites(16));
+        fprintf(gTraceFile,"\nother: " TARGET_FMT_lx "",GetTotalNByteWrites(-1));
         
 #else  //no MULTI_THREADED        
-        fprintf(gTraceFile,"\n1:%lu",g1ByteWriteInstrCount);
-        fprintf(gTraceFile,"\n2:%lu",g2ByteWriteInstrCount);
-        fprintf(gTraceFile,"\n4:%lu",g4ByteWriteInstrCount);
-        fprintf(gTraceFile,"\n8:%lu",g8ByteWriteInstrCount);
-        fprintf(gTraceFile,"\n10:%lu",g10ByteWriteInstrCount);
-        fprintf(gTraceFile,"\n16:%lu",g16ByteWriteInstrCount);
-        fprintf(gTraceFile,"\nother:%lu",gLargeByteWriteInstrCount);
+        fprintf(gTraceFile,"\n1: " TARGET_FMT_lx "",g1ByteWriteInstrCount);
+        fprintf(gTraceFile,"\n2: " TARGET_FMT_lx "",g2ByteWriteInstrCount);
+        fprintf(gTraceFile,"\n4: " TARGET_FMT_lx "",g4ByteWriteInstrCount);
+        fprintf(gTraceFile,"\n8: " TARGET_FMT_lx "",g8ByteWriteInstrCount);
+        fprintf(gTraceFile,"\n10: " TARGET_FMT_lx "",g10ByteWriteInstrCount);
+        fprintf(gTraceFile,"\n16: " TARGET_FMT_lx "",g16ByteWriteInstrCount);
+        fprintf(gTraceFile,"\nother: " TARGET_FMT_lx "",gLargeByteWriteInstrCount);
 #endif //end MULTI_THREADED
     }
     
@@ -2994,7 +3021,7 @@ inline target_ulong GetMeasurementBaseCount(){
     // Prints the complete calling context including the line nunbers and the context's contribution, given a DeadInfo 
     inline VOID PrintIPAndCallingContexts(const DeadInfoForPresentation & di, target_ulong measurementBaseCount){
         
-        fprintf(gTraceFile,"\n%lu = %e",di.count, di.count * 100.0 / measurementBaseCount);
+        fprintf(gTraceFile,"\n " TARGET_FMT_lx " = %e",di.count, di.count * 100.0 / measurementBaseCount);
         fprintf(gTraceFile,"\n-------------------------------------------------------\n");
 #ifdef MERGE_SAME_LINES
         fprintf(gTraceFile,"\n%s",di.pMergedDeadInfo->line1.c_str());                                    
@@ -3024,8 +3051,8 @@ inline target_ulong GetMeasurementBaseCount(){
         // Update gTotalInstCount first 
         target_ulong measurementBaseCount =  GetMeasurementBaseCount(); 
         
-        fprintf(gTraceFile, "\nTotal Instr = %lu", measurementBaseCount);
-        printf("total instr: %lu\n", measurementBaseCount);
+        fprintf(gTraceFile, "\nTotal Instr =  " TARGET_FMT_lx "", measurementBaseCount);
+        printf("total instr:  " TARGET_FMT_lx "\n", measurementBaseCount);
         fflush(gTraceFile);
         
 #if defined(CONTINUOUS_DEADINFO)
@@ -3071,7 +3098,7 @@ inline target_ulong GetMeasurementBaseCount(){
 #else   // no defined(CONTINUOUS_DEADINFO)        
         for (; mapIt != DeadMap.end(); mapIt++) {
             MergedDeadInfo tmpMergedDeadInfo;
-        printf("counting written bytes: %lu\n", writeSize);
+        printf("counting written bytes:  " TARGET_FMT_lx "\n", writeSize);
             tmpMergedDeadInfo.context1 = (*((TraceNode **)((mapIt->second).firstIP)))->parent;
             tmpMergedDeadInfo.context2 = (*((TraceNode **)((mapIt->second).secondIP)))->parent;
 #ifdef MERGE_SAME_LINES
@@ -3123,7 +3150,7 @@ inline target_ulong GetMeasurementBaseCount(){
             } else {
                 // print only dead count
 #ifdef PRINT_ALL_CTXT
-                fprintf(gTraceFile,"\nCTXT_DEAD_CNT:%lu = %e",dipIter->count, dipIter->count * 100.0 / measurementBaseCount);
+                fprintf(gTraceFile,"\nCTXT_DEAD_CNT: " TARGET_FMT_lx " = %e",dipIter->count, dipIter->count * 100.0 / measurementBaseCount);
 #endif                //end PRINT_ALL_CTXT
             }
             
@@ -3164,8 +3191,8 @@ inline target_ulong GetMeasurementBaseCount(){
         
         // get  measurementBaseCount first 
         target_ulong measurementBaseCount =  GetMeasurementBaseCount();         
-        fprintf(gTraceFile, "\nTotal Instr = %lu", measurementBaseCount);
-        printf("get total Instr: %lu\n", measurementBaseCount);
+        fprintf(gTraceFile, "\nTotal Instr =  " TARGET_FMT_lx "", measurementBaseCount);
+        printf("get total Instr:  " TARGET_FMT_lx "\n", measurementBaseCount);
         fflush(gTraceFile);
         
 #if defined(CONTINUOUS_DEADINFO)
@@ -3214,7 +3241,7 @@ inline target_ulong GetMeasurementBaseCount(){
             // Print just first MAX_DEAD_CONTEXTS_TO_LOG contexts
             if(deads < MAX_DEAD_CONTEXTS_TO_LOG){
                 try{
-                    fprintf(gTraceFile,"\n%lu = %e",it->count, it->count * 100.0 / measurementBaseCount);
+                    fprintf(gTraceFile,"\n " TARGET_FMT_lx " = %e",it->count, it->count * 100.0 / measurementBaseCount);
                     PrintCallingContexts(*it);
                 } catch (...) {
                     fprintf(gTraceFile,"\nexcept");
@@ -3222,7 +3249,7 @@ inline target_ulong GetMeasurementBaseCount(){
             } else {
 #ifdef PRINT_ALL_CTXT
                 // print only dead count
-                fprintf(gTraceFile,"\nCTXT_DEAD_CNT:%lu = %e",it->count, it->count * 100.0 / measurementBaseCount);
+                fprintf(gTraceFile,"\nCTXT_DEAD_CNT: " TARGET_FMT_lx " = %e",it->count, it->count * 100.0 / measurementBaseCount);
 #endif //end PRINT_ALL_CTXT                
             }
             
@@ -3260,10 +3287,10 @@ VOID Fini() {
     // byte count
     target_ulong measurementBaseCount = GetMeasurementBaseCount();
     fprintf(gTraceFile, "\n#deads");
-    fprintf(gTraceFile, "\nGrandTotalWrites = %lu",measurementBaseCount);
-    fprintf(gTraceFile, "\nGrandTotalDead = %lu = %e%%",gTotalDead, gTotalDead * 100.0 / measurementBaseCount);
+    fprintf(gTraceFile, "\nGrandTotalWrites =  " TARGET_FMT_lx "",measurementBaseCount);
+    fprintf(gTraceFile, "\nGrandTotalDead =  " TARGET_FMT_lx " = %e%%",gTotalDead, gTotalDead * 100.0 / measurementBaseCount);
 #ifdef MULTI_THREADED        
-    fprintf(gTraceFile, "\nGrandTotalMTDead = %lu = %e%%",gTotalMTDead, gTotalMTDead * 100.0 / measurementBaseCount);
+    fprintf(gTraceFile, "\nGrandTotalMTDead =  " TARGET_FMT_lx " = %e%%",gTotalMTDead, gTotalMTDead * 100.0 / measurementBaseCount);
 #endif // end MULTI_THREADED        
     fprintf(gTraceFile, "\n#eof");
     fclose(gTraceFile);
