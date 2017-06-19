@@ -1654,7 +1654,7 @@ VOID Record8ByteMemRead( VOID * addr) {
 
 #ifdef TESTING_BYTES
 VOID Record8ByteMemWrite(VOID * addr) {
-    RecordNByteMemWrite(target_ulong, 8, EIGHT);
+    RecordNByteMemWrite(uint64_t, 8, EIGHT);
 }
 #else // no TESTING_BYTES
 
@@ -1667,7 +1667,7 @@ VOID Record8ByteMemWrite(
     // status == 0 if not created.
     if(PAGE_OFFSET((uintptr_t)addr) <  (PAGE_OFFSET_MASK - 6)){
         void **lastIP = (void **)(status + PAGE_SIZE +  PAGE_OFFSET((uintptr_t)addr) * sizeof(uint8_t*));
-        target_ulong state = *((target_ulong*)(status +  PAGE_OFFSET((uintptr_t)addr)));   
+        uint64_t state = *((uint64_t*)(status +  PAGE_OFFSET((uintptr_t)addr)));   
         
         // TODO:lele only supports 64bit here.
         if (sizeof(state) == 8 && state != EIGHT_BYTE_READ_ACTION) {
@@ -1701,11 +1701,11 @@ VOID Record8ByteMemWrite(
                 REPORT_IF_DEAD(0xff00000000000000,CUR_CTXT, lastIP[7], myhash);
                 
                 // update state for all
-                *((target_ulong * )(status +  PAGE_OFFSET((uintptr_t)addr))) = EIGHT_BYTE_WRITE_ACTION;
+                *((uint64_t * )(status +  PAGE_OFFSET((uintptr_t)addr))) = EIGHT_BYTE_WRITE_ACTION;
             }
         } else {
             // record as written
-        	*((target_ulong * )(status +  PAGE_OFFSET((uintptr_t)addr))) = EIGHT_BYTE_WRITE_ACTION;
+        	*((uint64_t * )(status +  PAGE_OFFSET((uintptr_t)addr))) = EIGHT_BYTE_WRITE_ACTION;
         }
         lastIP[0] = CUR_CTXT;
         lastIP[1] = CUR_CTXT;
@@ -1766,7 +1766,7 @@ VOID Record10ByteMemRead( VOID * addr) {
     int overflow = PAGE_OFFSET((uintptr_t)addr) -  (PAGE_OFFSET_MASK - 15);
     if(overflow <= 0 ){
         if(status){
-            *((target_ulong *)(status + PAGE_OFFSET((uintptr_t)addr)))  = EIGHT_BYTE_READ_ACTION;
+            *((uint64_t *)(status + PAGE_OFFSET((uintptr_t)addr)))  = EIGHT_BYTE_READ_ACTION;
             *((uint16_t *)(status + PAGE_OFFSET(((uintptr_t)addr + 8))))  = TWO_BYTE_READ_ACTION;
         }
     } else {
@@ -1785,14 +1785,14 @@ VOID Record10ByteMemWrite(VOID * addr) {
     
     uint8_t * status = GetOrCreateShadowBaseAddress(addr);
     if(PAGE_OFFSET((uintptr_t)addr) <  (PAGE_OFFSET_MASK - 14)){
-        target_ulong state1 = *((target_ulong*)(status +  PAGE_OFFSET((uintptr_t)addr)));
-        uint16_t state2 = *((target_ulong*)(status +  PAGE_OFFSET(((uintptr_t)addr) + 8 )));
+        uint64_t state1 = *((uint64_t*)(status +  PAGE_OFFSET((uintptr_t)addr)));
+        uint16_t state2 = *((uint64_t*)(status +  PAGE_OFFSET(((uintptr_t)addr) + 8 )));
         if ( (state1 != EIGHT_BYTE_READ_ACTION) || (state2 != TWO_BYTE_READ_ACTION)) {
             if ( (state1 == EIGHT_BYTE_WRITE_ACTION) && (state2 == TWO_BYTE_WRITE_ACTION)) {
                 gFullyKilling10 ++;
             } else {
                 gPartiallyKilling10 ++;
-                for(target_ulong s = state1; s != 0 ; s >>= 8)
+                for(uint64_t s = state1; s != 0 ; s >>= 8)
                     if(s & 0xff)
                         gPartiallyDeadBytes10++;
                 for(uint16_t s = state2; s != 0 ; s >>= 8)
@@ -1800,7 +1800,7 @@ VOID Record10ByteMemWrite(VOID * addr) {
                         gPartiallyDeadBytes10++;
             }
         }
-        *((target_ulong* )(status +  PAGE_OFFSET((uintptr_t)addr))) = EIGHT_BYTE_WRITE_ACTION;
+        *((uint64_t* )(status +  PAGE_OFFSET((uintptr_t)addr))) = EIGHT_BYTE_WRITE_ACTION;
         *((uint16_t* )(status +  PAGE_OFFSET(((uintptr_t)addr) + 8))) = TWO_BYTE_WRITE_ACTION;
     } else {
         uint8_t state = *((uint8_t*)(status +  PAGE_OFFSET((uintptr_t)addr)));
@@ -1833,13 +1833,13 @@ VOID Record10ByteMemWrite(
     // status == 0 if not created.
     if(PAGE_OFFSET((uintptr_t)addr) <  (PAGE_OFFSET_MASK - 8)){
         void **lastIP = (void **)(status + PAGE_SIZE +  PAGE_OFFSET((uintptr_t)addr) * sizeof(uint8_t*));
-        target_ulong state = *((target_ulong*)(status +  PAGE_OFFSET((uintptr_t)addr)));   
-        if (sizeof(state)==8 && state != EIGHT_BYTE_READ_ACTION) {
+        uint64_t state = *((uint64_t*)(status +  PAGE_OFFSET((uintptr_t)addr)));   
+        if ( sizeof(state) == 8 && state != EIGHT_BYTE_READ_ACTION) {
             
             DECLARE_HASHVAR(myhash);
             void * ipZero = lastIP[0];
             // fast path where all bytes are dead by same context
-            if ( state == EIGHT_BYTE_WRITE_ACTION && 
+            if (  sizeof(state) == 8 && state == EIGHT_BYTE_WRITE_ACTION && 
                 ipZero  == lastIP[1] && ipZero  == lastIP[2] && 
                 ipZero  == lastIP[3] && ipZero  == lastIP[4] && 
                 ipZero  == lastIP[5] && ipZero  == lastIP[6] && ipZero  == lastIP[7] ) {
@@ -1866,11 +1866,11 @@ VOID Record10ByteMemWrite(
                 REPORT_IF_DEAD(0xff00000000000000,CUR_CTXT, lastIP[7], myhash); 
                 
                 // update state of these 8 bytes could be some overwrites
-                *((target_ulong * )(status +  PAGE_OFFSET((uintptr_t)addr))) = EIGHT_BYTE_WRITE_ACTION;                
+                *((uint64_t * )(status +  PAGE_OFFSET((uintptr_t)addr))) = EIGHT_BYTE_WRITE_ACTION;                
             }
         } else {
             // update state of these 8 bytes
-            *((target_ulong * )(status +  PAGE_OFFSET((uintptr_t)addr))) = EIGHT_BYTE_WRITE_ACTION;
+            *((uint64_t * )(status +  PAGE_OFFSET((uintptr_t)addr))) = EIGHT_BYTE_WRITE_ACTION;
         }
         
         state = (*((uint16_t*) (status +  PAGE_OFFSET((uintptr_t)addr) + 8)) )| 0xffffffffffff0000;   
@@ -1879,7 +1879,7 @@ VOID Record10ByteMemWrite(
             DECLARE_HASHVAR(myhash);
             void * ipZero = lastIP[8];
             // fast path where all bytes are dead by same context
-            if ( state == EIGHT_BYTE_WRITE_ACTION && 
+            if ( sizeof(state) == 8 && state == EIGHT_BYTE_WRITE_ACTION && 
                 ipZero == lastIP[9]) {
             	REPORT_DEAD(CUR_CTXT, ipZero, myhash, 2);
                 // No state update needed
@@ -1927,8 +1927,8 @@ VOID Record16ByteMemRead( VOID * addr) {
     int overflow = PAGE_OFFSET((uintptr_t)addr) -  (PAGE_OFFSET_MASK - 15);
     if(overflow <= 0 ){
         if(status){
-            *((target_ulong *)(status + PAGE_OFFSET((uintptr_t)addr)))  = EIGHT_BYTE_READ_ACTION;
-            *((target_ulong *)(status + PAGE_OFFSET(((uintptr_t)addr + 8))))  = EIGHT_BYTE_READ_ACTION;
+            *((uint64_t *)(status + PAGE_OFFSET((uintptr_t)addr)))  = EIGHT_BYTE_READ_ACTION;
+            *((uint64_t *)(status + PAGE_OFFSET(((uintptr_t)addr + 8))))  = EIGHT_BYTE_READ_ACTION;
         }
     } else {
         // slow path
@@ -1943,23 +1943,23 @@ VOID Record16ByteMemWrite(VOID * addr) {
     
     uint8_t * status = GetOrCreateShadowBaseAddress(addr);
     if(PAGE_OFFSET((uintptr_t)addr) <  (PAGE_OFFSET_MASK - 14)){
-        target_ulong state1 = *((target_ulong*)(status +  PAGE_OFFSET((uintptr_t)addr)));
-        target_ulong state2 = *((target_ulong*)(status +  PAGE_OFFSET(((uintptr_t)addr) + 8 )));
+        uint64_t state1 = *((uint64_t*)(status +  PAGE_OFFSET((uintptr_t)addr)));
+        uint64_t state2 = *((uint64_t*)(status +  PAGE_OFFSET(((uintptr_t)addr) + 8 )));
         if ( (state1 != EIGHT_BYTE_READ_ACTION) || (state2 != EIGHT_BYTE_READ_ACTION)) {
             if ( (state1 == EIGHT_BYTE_WRITE_ACTION) && (state2 == EIGHT_BYTE_WRITE_ACTION)) {
                 gFullyKilling16 ++;
             } else {
                 gPartiallyKilling16 ++;
-                for(target_ulong s = state1; s != 0 ; s >>= 8)
+                for(uint64_t s = state1; s != 0 ; s >>= 8)
                     if(s & 0xff)
                         gPartiallyDeadBytes16++;
-                for(target_ulong s = state2; s != 0 ; s >>= 8)
+                for(uint64_t s = state2; s != 0 ; s >>= 8)
                     if(s & 0xff)
                         gPartiallyDeadBytes16++;
             }
         }
-        *((target_ulong* )(status +  PAGE_OFFSET((uintptr_t)addr))) = EIGHT_BYTE_WRITE_ACTION;
-        *((target_ulong* )(status +  PAGE_OFFSET(((uintptr_t)addr) + 8))) = EIGHT_BYTE_WRITE_ACTION;
+        *((uint64_t* )(status +  PAGE_OFFSET((uintptr_t)addr))) = EIGHT_BYTE_WRITE_ACTION;
+        *((uint64_t* )(status +  PAGE_OFFSET(((uintptr_t)addr) + 8))) = EIGHT_BYTE_WRITE_ACTION;
     } else {
         uint8_t state = *((uint8_t*)(status +  PAGE_OFFSET((uintptr_t)addr)));
         *((uint8_t*)(status +  PAGE_OFFSET((uintptr_t)addr))) = ONE_BYTE_WRITE_ACTION;
@@ -1991,13 +1991,13 @@ VOID Record16ByteMemWrite(
     // status == 0 if not created.
     if(PAGE_OFFSET((uintptr_t)addr) <  (PAGE_OFFSET_MASK - 14)){
         void **lastIP = (void **)(status + PAGE_SIZE +  PAGE_OFFSET((uintptr_t)addr) * sizeof(uint8_t*));
-        target_ulong state = *((target_ulong*)(status +  PAGE_OFFSET((uintptr_t)addr)));   
+        uint64_t state = *((uint64_t*)(status +  PAGE_OFFSET((uintptr_t)addr)));   
         if (sizeof(state)==8 && state != EIGHT_BYTE_READ_ACTION) {
             
             DECLARE_HASHVAR(myhash);
             void * ipZero = lastIP[0];
             // fast path where all bytes are dead by same context
-            if ( state == EIGHT_BYTE_WRITE_ACTION && 
+            if (sizeof(state)==8 && state == EIGHT_BYTE_WRITE_ACTION && 
                 ipZero  == lastIP[1] && ipZero  == lastIP[2] && 
                 ipZero  == lastIP[3] && ipZero  == lastIP[4] && 
                 ipZero  == lastIP[5] && ipZero  == lastIP[6] && ipZero  == lastIP[7] ) {
@@ -2024,14 +2024,14 @@ VOID Record16ByteMemWrite(
                 REPORT_IF_DEAD(0xff00000000000000,CUR_CTXT, lastIP[7], myhash); 
                 
                 // update state of these 8 bytes could be some overwrites
-                *((target_ulong * )(status +  PAGE_OFFSET((uintptr_t)addr))) = EIGHT_BYTE_WRITE_ACTION;                
+                *((uint64_t * )(status +  PAGE_OFFSET((uintptr_t)addr))) = EIGHT_BYTE_WRITE_ACTION;                
             }
         } else {
             // update state of these 8 bytes
-            *((target_ulong * )(status +  PAGE_OFFSET((uintptr_t)addr))) = EIGHT_BYTE_WRITE_ACTION;
+            *((uint64_t * )(status +  PAGE_OFFSET((uintptr_t)addr))) = EIGHT_BYTE_WRITE_ACTION;
         }
         
-        state = *((target_ulong*) (status +  PAGE_OFFSET((uintptr_t)addr) + 8));   
+        state = *((uint64_t*) (status +  PAGE_OFFSET((uintptr_t)addr) + 8));   
         if (sizeof(state)==8 && state != EIGHT_BYTE_READ_ACTION) {
             
             DECLARE_HASHVAR(myhash);
@@ -2062,11 +2062,11 @@ VOID Record16ByteMemWrite(
                 // byte 8 dead ?
                 REPORT_IF_DEAD(0xff00000000000000,CUR_CTXT, lastIP[15], myhash); 
                 // update state
-                *((target_ulong * )(status +  PAGE_OFFSET(((uintptr_t)addr + 8)))) = EIGHT_BYTE_WRITE_ACTION;                
+                *((uint64_t * )(status +  PAGE_OFFSET(((uintptr_t)addr + 8)))) = EIGHT_BYTE_WRITE_ACTION;                
             }
         } else {
             // Update state of these 8 bytes
-            *((target_ulong * )(status +  PAGE_OFFSET(((uintptr_t)addr + 8)))) = EIGHT_BYTE_WRITE_ACTION;
+            *((uint64_t * )(status +  PAGE_OFFSET(((uintptr_t)addr + 8)))) = EIGHT_BYTE_WRITE_ACTION;
         }
         
         lastIP[0] = CUR_CTXT;
@@ -2464,7 +2464,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             printf("new slot created for gCurrentContext->address: " TARGET_FMT_lx ", %u (%u)\n", gCurrentContext->address, gCurrentSlot,gCurrentTrace->nSlots);
 
         	target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[gCurrentContext->address];
-            printf("set recordedSlots of currentTraceShadowIP[-1]"  TARGET_FMT_lx " to %u\n", currentTraceShadowIP, gCurrentSlot);
+            printf("set recordedSlots of currentTraceShadowIP[-1] %p to %u\n", currentTraceShadowIP, gCurrentSlot);
             //target_ulong recordedSlots = currentTraceShadowIP[-1]; // 
             currentTraceShadowIP[-1] = gCurrentSlot; // 
 
@@ -2617,14 +2617,14 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 //                 }
 
                 if (! is_write) {
-                    RecordLargeMemRead(p.pc,size);                        
+                    RecordLargeMemRead((void *)p.pc,size);                        
                 }
                 else {
                     RecordLargeMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        p.pc, size);
+                       (VOID *)  p.pc, size);
                 }
             }
                 break;
@@ -3076,7 +3076,7 @@ inline target_ulong GetMeasurementBaseCount(){
 #endif //end defined(CONTINUOUS_DEADINFO)        
         map<MergedDeadInfo,uint64_t> mergedDeadInfoMap;
         
-        printf("%s: get Header of the DeadMap: " TARGET_FMT_lx "\n", mapIt);
+        printf("%s: get Header of the DeadMap: %lu \n",__FUNCTION__,mapIt->first);
 #if defined(CONTINUOUS_DEADINFO)
         printf("%s: continuous\n", __FUNCTION__);
         for (; mapIt != DeadMap.end(); mapIt++) {
