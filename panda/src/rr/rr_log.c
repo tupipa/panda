@@ -1501,15 +1501,19 @@ void rr_do_end_replay(int is_error)
     // mz print CPU state at end of replay
     // log_all_cpu_states();
     // close logs
+    printf("ll: destroy log\n");
     rr_destroy_log();
     // turn off replay
     rr_mode = RR_OFF;
 
     // mz XXX something more graceful?
     if (is_error) {
+        printf("ll: is_error=true\n");
         panda_cleanup();
         abort();
     } else {
+        printf("ll: is_error=false\n");
+        printf("ll: call qemu_system_shutdown_request()");
         qemu_system_shutdown_request();
     }
 #endif // CONFIG_SOFTMMU
