@@ -219,6 +219,11 @@ using namespace std::tr1;
 #define FOUR_BYTE_READ_ACTION (0)
 #define EIGHT_BYTE_READ_ACTION (0)
 
+// #define ONE_BYTE_WRITE_ACTION (0xff)
+// #define TWO_BYTE_WRITE_ACTION (0xffff)
+// #define FOUR_BYTE_WRITE_ACTION (0xffffffff)
+// #define EIGHT_BYTE_WRITE_ACTION (0xffffffffffffffff)
+
 #define ONE_BYTE_WRITE_ACTION (0xff)
 #define TWO_BYTE_WRITE_ACTION (0xffff)
 #define FOUR_BYTE_WRITE_ACTION (0xffffffff)
@@ -1660,11 +1665,13 @@ VOID Record8ByteMemWrite(
         void **lastIP = (void **)(status + PAGE_SIZE +  PAGE_OFFSET((uintptr_t)addr) * sizeof(uint8_t*));
         target_ulong state = *((target_ulong*)(status +  PAGE_OFFSET((uintptr_t)addr)));   
         
-        if (state != EIGHT_BYTE_READ_ACTION) {
+        // TODO:lele only supports 64bit here.
+        if (sizeof(state) == 8 && state != EIGHT_BYTE_READ_ACTION) {
             DECLARE_HASHVAR(myhash);
             void * ipZero = lastIP[0];
             // fast path where all bytes are dead by same context
-            if ( state == EIGHT_BYTE_WRITE_ACTION &&
+        // TODO:lele only supports 64bit here.
+            if ( sizeof(state) == 8 && state == EIGHT_BYTE_WRITE_ACTION &&
                 ipZero  == lastIP[1] && ipZero  == lastIP[2] &&
                 ipZero  == lastIP[3] && ipZero  == lastIP[4] &&
                 ipZero  == lastIP[5] && ipZero  == lastIP[6] && ipZero  == lastIP[7] ) {
@@ -1823,7 +1830,7 @@ VOID Record10ByteMemWrite(
     if(PAGE_OFFSET((uintptr_t)addr) <  (PAGE_OFFSET_MASK - 8)){
         void **lastIP = (void **)(status + PAGE_SIZE +  PAGE_OFFSET((uintptr_t)addr) * sizeof(uint8_t*));
         target_ulong state = *((target_ulong*)(status +  PAGE_OFFSET((uintptr_t)addr)));   
-        if (state != EIGHT_BYTE_READ_ACTION) {
+        if (sizeof(state)==8 && state != EIGHT_BYTE_READ_ACTION) {
             
             DECLARE_HASHVAR(myhash);
             void * ipZero = lastIP[0];
@@ -1863,7 +1870,7 @@ VOID Record10ByteMemWrite(
         }
         
         state = (*((uint16_t*) (status +  PAGE_OFFSET((uintptr_t)addr) + 8)) )| 0xffffffffffff0000;   
-        if (state != EIGHT_BYTE_READ_ACTION) {
+        if (sizeof(state)==8 && state != EIGHT_BYTE_READ_ACTION) {
             
             DECLARE_HASHVAR(myhash);
             void * ipZero = lastIP[8];
@@ -1981,7 +1988,7 @@ VOID Record16ByteMemWrite(
     if(PAGE_OFFSET((uintptr_t)addr) <  (PAGE_OFFSET_MASK - 14)){
         void **lastIP = (void **)(status + PAGE_SIZE +  PAGE_OFFSET((uintptr_t)addr) * sizeof(uint8_t*));
         target_ulong state = *((target_ulong*)(status +  PAGE_OFFSET((uintptr_t)addr)));   
-        if (state != EIGHT_BYTE_READ_ACTION) {
+        if (sizeof(state)==8 && state != EIGHT_BYTE_READ_ACTION) {
             
             DECLARE_HASHVAR(myhash);
             void * ipZero = lastIP[0];
@@ -2021,7 +2028,7 @@ VOID Record16ByteMemWrite(
         }
         
         state = *((target_ulong*) (status +  PAGE_OFFSET((uintptr_t)addr) + 8));   
-        if (state != EIGHT_BYTE_READ_ACTION) {
+        if (sizeof(state)==8 && state != EIGHT_BYTE_READ_ACTION) {
             
             DECLARE_HASHVAR(myhash);
             void * ipZero = lastIP[8];
@@ -2443,7 +2450,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
             printf("update ipShadow slot when write detected.\n");
             // put next slot in corresponding ins start location;
-            target_ulong *ipShadow =  gTraceShadowMap[gCurrentContext->address];
+            target_ulong *ipShadow =  (target_ulong *) gTraceShadowMap[gCurrentContext->address];
             ipShadow[gCurrentSlot] = p.pc;
 
             gCurrentSlot++;
