@@ -2161,11 +2161,11 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
             return;
         } else{
-            printf("\nApp mem op, ASID: " TARGET_FMT_lx "\n");
+            printf("\nApp mem op, ASID: " TARGET_FMT_lx "\n", p.cr3);
         }
     }else{
         // no filters
-        printf("\none mem op for ASID: " TARGET_FMT_lx "\n", p.cr3);
+        printf("\nAll: Mem op for ASID: " TARGET_FMT_lx "\n", p.cr3);
     }
 
 //    string_pos &sp = text_tracker[p];
