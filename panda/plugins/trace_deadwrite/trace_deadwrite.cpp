@@ -883,7 +883,7 @@ inline VOID ManageCallingContext(CallStack *fstack){
 
     }else if (fstack->n == 0){
         // no callers, must be in current func
-        printf("%s: get 0 callers\n", __FUNCTION__);
+        //printf("%s: get 0 callers\n", __FUNCTION__);
         if (gCurrentContext != gRootContext  && gCurrentContext-> parent != gRootContext){
             //when no func, gCurrentContext or its parent must be equal with gRootContext
             printf("ERROR: when no func, gCurrentContext must point to gRootContext!!!\n");
@@ -1043,10 +1043,10 @@ inline VOID ManageCallingContext(CallStack *fstack){
 
     // Check if a trace node with currentIp already exists under this context node
     
-    printf("step 3/3, update currentIp slots for curContextNode. necessary here!\n");
+    //printf("step 3/3, update currentIp slots for curContextNode. necessary here!\n");
     // Check if a trace node with currentIp already exists under this context node    
           
-    printf("callerIp: " TARGET_FMT_lx "\n", callerIp);
+    //printf("callerIp: " TARGET_FMT_lx "\n", callerIp);
     if( (gTraceIter = (gCurrentContext->childTraces).find(callerIp)) != gCurrentContext->childTraces.end()) {
         // if tracenode is already exists
         // set the current Trace to the new trace
@@ -1111,7 +1111,7 @@ inline VOID ManageCallingContext(CallStack *fstack){
 //     }else if(INS_IsRet(ins)){
 //         INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) GoUpCallChain, IARG_END);
 //     }
-    printf("done manage context for one memory operating instruction\n\n");
+    printf("%s: done manage context for one memory operating instruction\n\n", __FUNCTION__);
 }
 
 
@@ -2333,7 +2333,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     // if(INS_IsMemoryWrite(ins)){
     if(is_write){
         // USIZE writeSize = INS_MemoryWriteSize(ins);
-
+        printf("counting written bytes: %d\n", writeSize);
         target_ulong writeSize = size;
         switch(writeSize){
             case 1:
@@ -2410,14 +2410,15 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             ipShadow[gCurrentSlot] = p.pc;
 
             gCurrentSlot++;
+            gCurrentTrace->nSlots++;
 
-            printf("new slot created for gCurrentContext->address: " TARGET_FMT_lx " \n", gCurrentContext->address);
+
+            printf("new slot created for gCurrentContext->address: " TARGET_FMT_lx ", %d (%d)\n", gCurrentContext->address, gCurrentSlot,gCurrentTrace->nSlots);
 
         	uint64_t * currentTraceShadowIP = (uint64_t *) gTraceShadowMap[gCurrentContext->address];
             printf("set recordedSlots of currentTraceShadowIP[-1]"  TARGET_FMT_lx " to %d\n", currentTraceShadowIP, gCurrentSlot);
             //uint64_t recordedSlots = currentTraceShadowIP[-1]; // 
             currentTraceShadowIP[-1] = gCurrentSlot; // 
-
 
         }
         
@@ -2901,10 +2902,13 @@ inline uint64_t GetMeasurementBaseCount(){
         // byte count
         
 #ifdef MULTI_THREADED        
+        printf("MULTI_THREAD: computing base count\n");
         uint64_t measurementBaseCount =  GetTotalNByteWrites(1) + 2 * GetTotalNByteWrites(2) + 4 * GetTotalNByteWrites(4) + 8 * GetTotalNByteWrites(8) + 10 * GetTotalNByteWrites(10)+ 16 * GetTotalNByteWrites(16) + GetTotalNByteWrites(-1);
 #else //no MULTI_THREADED        
+        printf("NO MULTI_THREADED: computing base count.\n");
         uint64_t measurementBaseCount =  g1ByteWriteInstrCount + 2 * g2ByteWriteInstrCount + 4 * g4ByteWriteInstrCount + 8 * g8ByteWriteInstrCount + 10 * g10ByteWriteInstrCount + 16 * g16ByteWriteInstrCount + gLargeByteWriteInstrCount;
 #endif  //end MULTI_THREADED
+        printf("%s, base count %d\n",__FUNCTION__, measurementBaseCount);
         return measurementBaseCount;        
     }
 
@@ -3007,6 +3011,7 @@ inline uint64_t GetMeasurementBaseCount(){
         uint64_t measurementBaseCount =  GetMeasurementBaseCount(); 
         
         fprintf(gTraceFile, "\nTotal Instr = %lu", measurementBaseCount);
+        printf("total instr: %d\n", measurementBaseCount);
         fflush(gTraceFile);
         
 #if defined(CONTINUOUS_DEADINFO)
