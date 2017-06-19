@@ -232,9 +232,9 @@ using namespace std::tr1;
 
 #define CONTEXT_HASH_128BITS_TO_64BITS(curCtxt, oldCtxt, hashVar)  \
 {\
-target_ulong key = (target_ulong) (((void**)oldCtxt) - gPreAllocatedContextBuffer); \
+uint64_t key = (uint64_t) (((void**)oldCtxt) - gPreAllocatedContextBuffer); \
 hashVar = key << 32;\
-key = (target_ulong) (((void**)curCtxt) - gPreAllocatedContextBuffer); \
+key = (uint64_t) (((void**)curCtxt) - gPreAllocatedContextBuffer); \
 hashVar |= key;\
 }
 
@@ -242,15 +242,15 @@ hashVar |= key;\
 
 #define CONTEXT_HASH_128BITS_TO_64BITS(curCtxt, oldCtxt, hashVar)  \
 {\
-target_ulong key = (target_ulong) curCtxt; \
+uint64_t key = (uint64_t) curCtxt; \
 key = (~key) + (key << 18);\
 key = key ^ (key >> 31);\
 key = key * 21;\
 key = key ^ (key >> 11);\
 key = key + (key << 6);\
 key = key ^ (key >> 22);\
-hashVar = (target_ulong) (key << 32);\
-key = (target_ulong) (oldCtxt);\
+hashVar = (uint64_t) (key << 32);\
+key = (uint64_t) (oldCtxt);\
 key = (~key) + (key << 18);\
 key = key ^ (key >> 31);\
 key = key * 21; \
@@ -290,7 +290,7 @@ hashVar = hashVar | ((int) key);\
 
 #if defined(CONTINUOUS_DEADINFO)
 
-#define DECLARE_HASHVAR(name) target_ulong name
+#define DECLARE_HASHVAR(name) uint64_t name
 
 #define REPORT_DEAD(curCtxt, lastCtxt,hashVar, size) do { \
 CONTEXT_HASH_128BITS_TO_64BITS(curCtxt, lastCtxt,hashVar)  \
@@ -302,7 +302,7 @@ DeadMap.insert(std::pair<target_ulong, target_ulong>(hashVar,size)); \
 }while(0)
 
 #else // no defined(CONTINUOUS_DEADINFO)
-#define DECLARE_HASHVAR(name) target_ulong name
+#define DECLARE_HASHVAR(name) uint64_t name
 
 #define REPORT_DEAD(curCtxt, lastCtxt,hashVar, size) do { \
 CONTEXT_HASH_128BITS_TO_64BITS(curCtxt, lastCtxt,hashVar)  \
