@@ -72,6 +72,8 @@ This plugin traces deadwrites, and print them to file
             - print deadinfo:
                 - ImageUnload()
                 - Fini()
+        - Update gCurrentIpVector, the array store all IPs for mem WRITE under the current ContextNode
+            - on each new mem W detected, 
 }
 
     ==========================
@@ -923,7 +925,13 @@ inline VOID ManageCallingContext(CallStack *fstack){
     }
 
 
-    // step 2/3, create Context Node when new func call; 
+    // step 2/3, 
+    //  - create Context Node when new func call; 
+    //  - store IP to shadow pages
+    //  to simulate the PopulateIPReverseMapAndAccountTraceInstructions() on every new func call, which had store IPs for all 
+    //  Instructions
+    //  - reset slot to 0.
+    //  - add current pc as first instruction in ip
 
     //#############################################################################
     // InstrumentTrace(TRACE trace, void * f):
@@ -942,13 +950,15 @@ inline VOID ManageCallingContext(CallStack *fstack){
     // if landed due to function call, create a child context node
 
     if(gInitiatedCall){
-        // get a new function call
+        // gInitatedCall = true, means this mem R/W instruction is inside a new function call
+        // So, we need to:
+        //  - update the CCT with a new Context Node and 
+        //  - update corresponding array slot index to store the new IP with mem W (no read)
+        //
         // a new function call is on the top of call stack.
-
         UpdateDataOnFunctionEntry(callerIp); // it will reset   gInitiatedCall  
 
     }else if(gInitiatedRet){
-        
         // Let GoDownCallChain do the work needed to setup pointers for child nodes.
         GoUpCallChain();
     }else if (gInitiatedCall && gInitiatedRet){
@@ -957,7 +967,7 @@ inline VOID ManageCallingContext(CallStack *fstack){
     }
     
 
-    // setp 3/3, update currentIp slots for curContextNode. necessary here? 
+    // setp 3/3, update currentIp slots for curContextNode. necessary here!
     // lele: we adapt the name of "Trace" to store the slots. Might be improved by using a single TraceNode instead of a map with only one TraceNode.
 
     // Check if a trace node with currentIp already exists under this context node
@@ -1085,11 +1095,18 @@ inline uint8_t * GetOrCreateShadowBaseAddress(void * address) {
     uint8_t * shadowPage;
     uint8_t  *** l1Ptr = &gL1PageTable[LEVEL_1_PAGE_TABLE_SLOT(address)];
     if ( *l1Ptr == 0) {
+        //lele: L1 entry for that address is empty
+        //  - create a new L2 page table, write address to L1 page table entry *l1Ptr
+        //  - use mmap to get the shadow memory page for address
+        //
         *l1Ptr =  (uint8_t **) calloc(1,LEVEL_2_PAGE_TABLE_SIZE);
         shadowPage = (*l1Ptr)[LEVEL_2_PAGE_TABLE_SLOT(address)] =  (uint8_t *) mmap(0, PAGE_SIZE * (1 + sizeof(uint8_t*)), PROT_WRITE | PROT_READ, MAP_NORESERVE | MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
         
     } else if((shadowPage = (*l1Ptr)[LEVEL_2_PAGE_TABLE_SLOT(address)]) == 0 ){
-        
+        // get shadowPage using L2 entry 
+        // if the entry is empty, create a new shadow page using mmap
+        // otherwise, we have the shadowPage as the address of the shadow page.
+        //
         shadowPage = (*l1Ptr)[LEVEL_2_PAGE_TABLE_SLOT(address)] =  (uint8_t *) mmap(0, PAGE_SIZE * (1 + sizeof(uint8_t*)), PROT_WRITE | PROT_READ, MAP_NORESERVE | MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
     }
     
@@ -2221,6 +2238,8 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
         // UINT32 refSize = INS_MemoryOperandSize(ins, memOp);
 
         UINT32 refSize = size;
+
+        uint32_t slot = gCurrentTrace->nSlots;
 
         switch(refSize){
             case 1:{
