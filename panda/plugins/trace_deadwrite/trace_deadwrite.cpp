@@ -2154,21 +2154,21 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     if (gTraceOne){
         if (p.cr3 != gCurrentASID){
             //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
-            return;
+            return 1;
         } else{
             printf("\none mem op for ASID: " TARGET_FMT_lx "\n", gCurrentASID);
         }
     }else if (gTraceKernel){
         if (p.cr3 != 0x0 ){
             //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
-            return;
+            return 1;
         } else{
             printf("\nKernel mem op\n");
         }
     }else if (gTraceApp){
         if (p.cr3 == 0x0 ){
             //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
-            return;
+            return 1;
         } else{
             printf("\nApp mem op, ASID: " TARGET_FMT_lx "\n", p.cr3);
         }
@@ -2405,12 +2405,12 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
         // UINT32 refSize = INS_MemoryOperandSize(ins, memOp);
 
-        UINT32 refSize = size;
+        target_ulong refSize = size;
         if (! is_write){
-            printf("record read (%u bytes).\n", size);
+            printf("record read (%lu bytes).\n", size);
         }else{
 
-            printf("record write (%u bytes).\n", size);
+            printf("record write (%lu bytes).\n", size);
 
         // uint32_t slot = gCurrentTrace->nSlots;
 
