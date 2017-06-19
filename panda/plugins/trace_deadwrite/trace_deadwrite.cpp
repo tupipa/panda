@@ -668,6 +668,7 @@ inline VOID InstructionContributionOfBBL4Byte(uint32_t count){
 }
 inline VOID InstructionContributionOfBBL8Byte(uint32_t count){
     g8ByteWriteInstrCount += count;
+    printf("%s:g8ByteWriteInstrCount+=count\n",__FUNCTION__);
 }
 inline VOID InstructionContributionOfBBL10Byte(uint32_t count){
     g16ByteWriteInstrCount += count;
@@ -1274,6 +1275,7 @@ inline VOID Do4ByteCount() {
 }
 
 inline VOID Do8ByteCount() {
+    printf("%s\n",__FUNCTION__);
 	g8ByteWriteInstrCount ++;
 }
 
@@ -2906,6 +2908,11 @@ inline uint64_t GetMeasurementBaseCount(){
         uint64_t measurementBaseCount =  GetTotalNByteWrites(1) + 2 * GetTotalNByteWrites(2) + 4 * GetTotalNByteWrites(4) + 8 * GetTotalNByteWrites(8) + 10 * GetTotalNByteWrites(10)+ 16 * GetTotalNByteWrites(16) + GetTotalNByteWrites(-1);
 #else //no MULTI_THREADED        
         printf("NO MULTI_THREADED: computing base count.\n");
+        printf("1:%d;2:%d;4%d;8:%d;10:%d;16:%d;large:%d\n",
+          g1ByteWriteInstrCount, g2ByteWriteInstrCount,
+          g4ByteWriteInstrCount, g8ByteWriteInstrCount,
+          g10ByteWriteInstrCount,g16ByteWriteInstrCount,
+          gLargeByteWriteInstrCount);
         uint64_t measurementBaseCount =  g1ByteWriteInstrCount + 2 * g2ByteWriteInstrCount + 4 * g4ByteWriteInstrCount + 8 * g8ByteWriteInstrCount + 10 * g10ByteWriteInstrCount + 16 * g16ByteWriteInstrCount + gLargeByteWriteInstrCount;
 #endif  //end MULTI_THREADED
         printf("%s, base count %d\n",__FUNCTION__, measurementBaseCount);
@@ -3005,8 +3012,7 @@ inline uint64_t GetMeasurementBaseCount(){
     
     // On each Unload of a loaded image, the accummulated deadness information is dumped
     VOID ImageUnload() {
-        fprintf(gTraceFile, "\nUnloading");
-        
+        printf("\nUnloading");
         // Update gTotalInstCount first 
         uint64_t measurementBaseCount =  GetMeasurementBaseCount(); 
         
