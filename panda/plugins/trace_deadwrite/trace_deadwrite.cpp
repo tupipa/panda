@@ -3145,6 +3145,7 @@ inline uint64_t GetMeasurementBaseCount(){
         // get  measurementBaseCount first 
         uint64_t measurementBaseCount =  GetMeasurementBaseCount();         
         fprintf(gTraceFile, "\nTotal Instr = %lu", measurementBaseCount);
+        printf("get total Instr: %lu\n", measurementBaseCount);
         fflush(gTraceFile);
         
 #if defined(CONTINUOUS_DEADINFO)
@@ -3226,6 +3227,7 @@ inline uint64_t GetMeasurementBaseCount(){
         deadList.clear();
         // PIN_UnlockClient();
         done = true;
+        printf("%s: done.\n", __FUNCTION__);
     }
 
 #endif   //end IP_AND_CCT    
@@ -3250,13 +3252,16 @@ VOID Fini() {
 void report_deadspy(void * self){
     //lele: ported from deadspy: ImageUnload and Fini
     // 
+    printf("%s: ImageUnload()\n", __FUNCTION__);
     ImageUnload(); //lele: necessary?
     //
+    printf("%s: Fini()\n", __FUNCTION__);
     Fini();
 }
 
 void uninit_plugin(void *self) {
 
+    printf("%s: report deadspy\n", __FUNCTION__);
     report_deadspy(self);
 
     // std::map<prog_point,match_strings>::iterator it;
