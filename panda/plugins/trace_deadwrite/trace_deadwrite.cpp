@@ -2448,10 +2448,10 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
         target_ulong refSize = size;
         if (! is_write){
-            printf("record read (" TARGET_FMT_lx " bytes).\n", size);
+            printf("record read (%d bytes).\n", (int)size);
         }else{
 
-            printf("record write (" TARGET_FMT_lx " bytes).\n", size);
+            printf("record write (%d bytes).\n", (int)size);
 
         // uint32_t slot = gCurrentTrace->nSlots;
 
@@ -2478,14 +2478,14 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
                 // if (INS_MemoryOperandIsRead(ins, memOp)) {
                     
                 if (! is_write) {
-                    Record1ByteMemRead((VOID *)p.pc);                        
+                    Record1ByteMemRead((VOID *)(uintptr_t)p.pc);                        
                 }
                 else {
                     Record1ByteMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        (VOID *) p.pc);                    
+                        (VOID *)(uintptr_t)p.pc);                    
 //                     INS_InsertPredicatedCall(ins, IPOINT_BEFORE,
 //                                                 (AFUNPTR) Record1ByteMemWrite,
 // #ifdef IP_AND_CCT
@@ -2501,14 +2501,14 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             case 2:{
                        
                 if (! is_write) {
-                    Record2ByteMemRead((VOID *)p.pc);                        
+                    Record2ByteMemRead((VOID *)(uintptr_t)p.pc);                        
                 }
                 else {
                     Record2ByteMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        (VOID *) p.pc);                }
+                        (VOID *)(uintptr_t)p.pc);                }
             }
                     
 //                 if (INS_MemoryOperandIsRead(ins, memOp)) {
@@ -2533,41 +2533,41 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             case 4:{
                        
                 if (! is_write) {
-                    Record4ByteMemRead((VOID *)p.pc);                        
+                    Record4ByteMemRead((VOID *)(uintptr_t)p.pc);                        
                 }
                 else {
                     Record4ByteMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        (VOID *) p.pc);                }
+                        (VOID *)(uintptr_t)p.pc);                }
             }
                 break;
                 
             case 8:{
                        
                 if (! is_write) {
-                    Record8ByteMemRead((VOID *)p.pc);                        
+                    Record8ByteMemRead((VOID *)(uintptr_t)p.pc);                        
                 }
                 else {
                     Record8ByteMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        (VOID *) p.pc);                }
+                        (VOID *)(uintptr_t)p.pc);                }
             }
                 break;
                 
             case 10:{
                 if (! is_write) {
-                    Record10ByteMemRead((VOID *)p.pc);                        
+                    Record10ByteMemRead((VOID *)(uintptr_t)p.pc);                        
                 }
                 else {
                     Record10ByteMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        (VOID *) p.pc);                }
+                        (VOID *)(uintptr_t)p.pc);                }
                
             }
                 break;
@@ -2590,14 +2590,14 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 //                 }
 
                 if (! is_write) {
-                    Record16ByteMemRead((VOID *)p.pc);                        
+                    Record16ByteMemRead((VOID *)(uintptr_t)p.pc);                        
                 }
                 else {
                     Record16ByteMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        (VOID *) p.pc);                }
+                        (VOID *)(uintptr_t)p.pc);                }
             }
                 break;
                 
@@ -2620,14 +2620,14 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 //                 }
 
                 if (! is_write) {
-                    RecordLargeMemRead((void *)p.pc,size);                        
+                    RecordLargeMemRead((VOID *)(uintptr_t)p.pc,size);                        
                 }
                 else {
                     RecordLargeMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                       (VOID *)  p.pc, size);
+                       (VOID *)(uintptr_t)p.pc, size);
                 }
             }
                 break;
@@ -3043,7 +3043,7 @@ inline target_ulong GetMeasurementBaseCount(){
         string file;
         int32_t line;
         panda_GetSourceLocation( di.pMergedDeadInfo->ip1,  &line,&file);
-        fprintf(gTraceFile,"\n%p:%s:%u",(void *)(di.pMergedDeadInfo->ip1),file.c_str(),line);                                    
+        fprintf(gTraceFile,"\n%p:%s:%u",(void *)(uintptr_t)(di.pMergedDeadInfo->ip1),file.c_str(),line);                                    
 #endif //end MERGE_SAME_LINES        
         PrintFullCallingContext(di.pMergedDeadInfo->context1);
         fprintf(gTraceFile,"\n***********************\n");
@@ -3051,7 +3051,7 @@ inline target_ulong GetMeasurementBaseCount(){
         fprintf(gTraceFile,"\n%s",di.pMergedDeadInfo->line2.c_str());                                    
 #else //no MERGE_SAME_LINES        
         panda_GetSourceLocation( di.pMergedDeadInfo->ip2,  &line,&file);
-        fprintf(gTraceFile,"\n%p:%s:%u",(void *)(di.pMergedDeadInfo->ip2),file.c_str(),line);
+        fprintf(gTraceFile,"\n%p:%s:%u",(void *)(uintptr_t)(di.pMergedDeadInfo->ip2),file.c_str(),line);
 #endif //end MERGE_SAME_LINES        
         PrintFullCallingContext(di.pMergedDeadInfo->context2);
         fprintf(gTraceFile,"\n-------------------------------------------------------\n");
