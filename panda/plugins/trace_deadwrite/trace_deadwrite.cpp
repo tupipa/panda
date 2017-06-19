@@ -2448,14 +2448,14 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
         target_ulong refSize = size;
         if (! is_write){
-            printf("record read (%d bytes).\n", (int)size);
+            printf("record read addr: %p (%d bytes).\n", (void *)(uintptr_t)addr, (int)size);
         }else{
 
-            printf("record write (%d bytes).\n", (int)size);
+            printf("record write addr: %p (%d bytes).\n", (void *)(uintptr_t)addr, (int)size);
 
         // uint32_t slot = gCurrentTrace->nSlots;
 
-            printf("update ipShadow slot when write detected.\n");
+            //printf("update ipShadow slot when write detected.\n");
             // put next slot in corresponding ins start location;
             target_ulong *ipShadow =  (target_ulong *) gTraceShadowMap[gCurrentContext->address];
             ipShadow[gCurrentSlot] = p.pc;
@@ -2467,7 +2467,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             printf("new slot created for gCurrentContext->address: " TARGET_FMT_lx ", %u (%u)\n", gCurrentContext->address, gCurrentSlot,gCurrentTrace->nSlots);
 
         	target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[gCurrentContext->address];
-            printf("set recordedSlots of currentTraceShadowIP[-1] %p to %u\n", currentTraceShadowIP, gCurrentSlot);
+            //printf("set recordedSlots of currentTraceShadowIP[-1] %p to %u\n", currentTraceShadowIP, gCurrentSlot);
             //target_ulong recordedSlots = currentTraceShadowIP[-1]; // 
             currentTraceShadowIP[-1] = gCurrentSlot; // 
 
