@@ -94,7 +94,7 @@ PANDAENDCOMMENT */
 // This needs to be defined before anything is included in order to get
 // the PRIx64 macro
 
-#if defined(TARGET_X86_64)
+//#if defined(TARGET_X86_64)
 
 #define __STDC_FORMAT_MACROS
 
@@ -303,11 +303,11 @@ hashVar = hashVar | ((int) key);\
 #define REPORT_DEAD(curCtxt, lastCtxt,hashVar, size) do { \
 CONTEXT_HASH_128BITS_TO_64BITS(curCtxt, lastCtxt,hashVar)  \
 if ( (gDeadMapIt = DeadMap.find(hashVar))  == DeadMap.end()) {    \
-DeadMap.insert(std::pair<uint64_t, target_ulong>(hashVar,size)); \
+DeadMap.insert(std::pair<uint64_t, uint64_t>(hashVar,size)); \
 } else {    \
 (gDeadMapIt->second) += size;    \
 }   \
-printf("report one dead %lu (" TARGET_FMT_lx ")", hashVar,size); \
+printf("report one dead %lu (%d)", hashVar,size); \
 }while(0)
 
 #else // no defined(CONTINUOUS_DEADINFO)
@@ -317,7 +317,7 @@ printf("report one dead %lu (" TARGET_FMT_lx ")", hashVar,size); \
 CONTEXT_HASH_128BITS_TO_64BITS(curCtxt, lastCtxt,hashVar)  \
 if ( (gDeadMapIt = DeadMap.find(hashVar))  == DeadMap.end()) {    \
 DeadInfo deadInfo = { lastCtxt,  curCtxt, size };   \
-DeadMap.insert(std::pair<uint64_t, DeadInfo>(hashVar,deadInfo)); \
+DeadMap.insert(std::pair<uint64_t, uint64_t>(hashVar,deadInfo)); \
 } else {    \
 (gDeadMapIt->second.count) += size;    \
 }   \
@@ -529,10 +529,10 @@ uint8_t ** gL1PageTable[LEVEL_1_PAGE_TABLE_SIZE];
 
 //map < void *, Status > MemState;
 #if defined(CONTINUOUS_DEADINFO)
-//hash_map<target_ulong, target_ulong> DeadMap;
-//hash_map<target_ulong, target_ulong>::iterator gDeadMapIt;
-unordered_map<uint64_t, target_ulong> DeadMap;
-unordered_map<uint64_t, target_ulong>::iterator gDeadMapIt;
+//hash_map<uint64_t, uint64_t> DeadMap;
+//hash_map<uint64_t, uint64_t>::iterator gDeadMapIt;
+unordered_map<uint64_t, uint64_t> DeadMap;
+unordered_map<uint64_t, uint64_t>::iterator gDeadMapIt;
 
 #endif // end defined(CONTINUOUS_DEADINFO)
 
@@ -3067,14 +3067,14 @@ inline target_ulong GetMeasurementBaseCount(){
         fflush(gTraceFile);
         
 #if defined(CONTINUOUS_DEADINFO)
-        //sparse_hash_map<target_ulong, target_ulong>::iterator mapIt = DeadMap.begin();
-        unordered_map<target_ulong, target_ulong>::iterator mapIt = DeadMap.begin();
-        //dense_hash_map<target_ulong, target_ulong>::iterator mapIt = DeadMap.begin();
+        //sparse_hash_map<uint64_t, uint64_t>::iterator mapIt = DeadMap.begin();
+        unordered_map<uint64_t, uint64_t>::iterator mapIt = DeadMap.begin();
+        //dense_hash_map<uint64_t, uint64_t>::iterator mapIt = DeadMap.begin();
 #else //no defined(CONTINUOUS_DEADINFO)        
-        dense_hash_map<target_ulong, DeadInfo>::iterator mapIt = DeadMap.begin();
-        //unordered_map<target_ulong, DeadInfo>::iterator mapIt = DeadMap.begin();
+        dense_hash_map<uint64_t, DeadInfo>::iterator mapIt = DeadMap.begin();
+        //unordered_map<uint64_t, DeadInfo>::iterator mapIt = DeadMap.begin();
 #endif //end defined(CONTINUOUS_DEADINFO)        
-        map<MergedDeadInfo,target_ulong> mergedDeadInfoMap;
+        map<MergedDeadInfo,uint64_t> mergedDeadInfoMap;
         
         printf("%s: get Header of the DeadMap: " TARGET_FMT_lx "\n", mapIt);
 #if defined(CONTINUOUS_DEADINFO)
@@ -3094,7 +3094,7 @@ inline target_ulong GetMeasurementBaseCount(){
             tmpMergedDeadInfo.ip1 = GetIPFromInfo(ctxt1);
             tmpMergedDeadInfo.ip2 = GetIPFromInfo(ctxt2);
 #endif //end MERGE_SAME_LINES            
-            map<MergedDeadInfo,target_ulong>::iterator tmpIt;
+            map<MergedDeadInfo,uint64_t>::iterator tmpIt;
             if( (tmpIt = mergedDeadInfoMap.find(tmpMergedDeadInfo)) == mergedDeadInfoMap.end()) {
                 mergedDeadInfoMap[tmpMergedDeadInfo] = mapIt->second;
             } else {
@@ -3122,7 +3122,7 @@ inline target_ulong GetMeasurementBaseCount(){
             tmpMergedDeadInfo.ip1 = GetIPFromInfo(mapIt->second.firstIP);
             tmpMergedDeadInfo.ip2 = GetIPFromInfo(mapIt->second.secondIP);
 #endif //end MERGE_SAME_LINES            
-            map<MergedDeadInfo,target_ulong>::iterator tmpIt;
+            map<MergedDeadInfo,uint64_t>::iterator tmpIt;
             if( (tmpIt = mergedDeadInfoMap.find(tmpMergedDeadInfo)) == mergedDeadInfoMap.end()) {
                 mergedDeadInfoMap[tmpMergedDeadInfo] = mapIt->second.count;
             } else {
@@ -3135,7 +3135,7 @@ inline target_ulong GetMeasurementBaseCount(){
         DeadMap.clear();
 #endif  // end defined(CONTINUOUS_DEADINFO)        
         
-        map<MergedDeadInfo,target_ulong>::iterator it = mergedDeadInfoMap.begin();	
+        map<MergedDeadInfo,uint64_t>::iterator it = mergedDeadInfoMap.begin();	
         list<DeadInfoForPresentation> deadList;
         for (; it != mergedDeadInfoMap.end(); it ++) {
             DeadInfoForPresentation deadInfoForPresentation;
@@ -3210,12 +3210,12 @@ inline target_ulong GetMeasurementBaseCount(){
         fflush(gTraceFile);
         
 #if defined(CONTINUOUS_DEADINFO)
-        unordered_map<target_ulong, target_ulong>::iterator mapIt;
-        //dense_hash_map<target_ulong, target_ulong>::iterator mapIt;
-        //sparse_hash_map<target_ulong, target_ulong>::iterator mapIt;
+        unordered_map<uint64_t, uint64_t>::iterator mapIt;
+        //dense_hash_map<uint64_t, uint64_t>::iterator mapIt;
+        //sparse_hash_map<uint64_t, uint64_t>::iterator mapIt;
 #else // no defined(CONTINUOUS_DEADINFO)        
-        dense_hash_map<target_ulong, DeadInfo>::iterator mapIt;
-        //unordered_map<target_ulong, DeadInfo>::iterator mapIt;
+        dense_hash_map<uint64_t, DeadInfo>::iterator mapIt;
+        //unordered_map<uint64_t, DeadInfo>::iterator mapIt;
 #endif  //end defined(CONTINUOUS_DEADINFO)        
         list<DeadInfo> deadList;
         
@@ -3357,4 +3357,4 @@ void uninit_plugin(void *self) {
 //#########################
 
 
-#endif //defined(TARGET_I386)
+//#endif //defined(TARGET_I386)
