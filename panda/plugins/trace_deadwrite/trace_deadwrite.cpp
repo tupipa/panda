@@ -3085,17 +3085,23 @@ inline target_ulong GetMeasurementBaseCount(){
 #endif //end defined(CONTINUOUS_DEADINFO)        
         map<MergedDeadInfo,uint64_t> mergedDeadInfoMap;
         
-        printf("%s: get Header of the DeadMap: %lu \n",__FUNCTION__,mapIt->first);
+        printf("%s: get Header of the DeadMap: 0x%lx \n",__FUNCTION__,mapIt->first);
 #if defined(CONTINUOUS_DEADINFO)
         printf("%s: continuous\n", __FUNCTION__);
         for (; mapIt != DeadMap.end(); mapIt++) {
             MergedDeadInfo tmpMergedDeadInfo;
             uint64_t hash = mapIt->first;
+	    printf("%s: get one dead info: 0x%lx\n", __FUNCTION__, hash);
             TraceNode ** ctxt1 = (TraceNode **)(gPreAllocatedContextBuffer + (hash >> 32));
-            TraceNode ** ctxt2 = (TraceNode **)(gPreAllocatedContextBuffer + (hash & 0xffffffff));
+            printf("get ctxt1: %p\n", ctxt1);
+	    TraceNode ** ctxt2 = (TraceNode **)(gPreAllocatedContextBuffer + (hash & 0xffffffff));
+            printf("get ctxt2: %p\n", ctxt2);
             
             tmpMergedDeadInfo.context1 = (*ctxt1)->parent;
+	    printf("get context1: %p\n", tmpMergedDeadInfo.context1);
             tmpMergedDeadInfo.context2 = (*ctxt2)->parent;
+            printf("get context2: %p\n", tmpMergedDeadInfo.context2);
+
 #ifdef MERGE_SAME_LINES
             tmpMergedDeadInfo.line1 = GetLineFromInfo(ctxt1);
             tmpMergedDeadInfo.line2 = GetLineFromInfo(ctxt2);
