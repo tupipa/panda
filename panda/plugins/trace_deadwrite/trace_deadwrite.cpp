@@ -307,7 +307,8 @@ DeadMap.insert(std::pair<uint64_t, uint64_t>(hashVar,size)); \
 } else {    \
 (gDeadMapIt->second) += size;    \
 }   \
-printf("report one dead %lu (%d)", hashVar,size); \
+printf("%s:report one dead " TARGET_FMT_lx ", " TARGET_FMT_lx ", (%d)\n", \
+      __FUNCTION__, curCtxt,lastCtxt, size); \
 }while(0)
 
 #else // no defined(CONTINUOUS_DEADINFO)
@@ -321,6 +322,8 @@ DeadMap.insert(std::pair<uint64_t, uint64_t>(hashVar,deadInfo)); \
 } else {    \
 (gDeadMapIt->second.count) += size;    \
 }   \
+printf("%s:report one dead " TARGET_FMT_lx ", " TARGET_FMT_lx ", (%d)\n", \
+      __FUNCTION__, curCtxt,lastCtxt, size); \
 }while(0)
 
 #endif // end defined(CONTINUOUS_DEADINFO)
