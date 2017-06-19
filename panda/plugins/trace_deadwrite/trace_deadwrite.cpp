@@ -564,7 +564,11 @@ bool gInitiatedCall = true;
 bool gInitiatedRet = true;
 TraceNode ** gCurrentIpVector;
 ADDRINT gCurrentCallerIp;
-ADDRINT gCurrentASID;
+
+bool gTraceKernel=false; //trace all kernel processes; asid=0
+bool gTraceApp=false; // trace all other asids !=0;
+bool gTraceOne = false; //trace only one given ASID, kernel=0, or other asids. If this is true, the 'traceKernel' and 'traceApp' is invalide; If ASID not given, default is 0.
+ADDRINT gCurrentASID=0x0; //only valide if traceOne is true;
 
 uint32_t gContextTreeIndex;
 
@@ -1120,7 +1124,10 @@ inline VOID ManageCallingContext(CallStack *fstack){
 // Initialized the fields of the root node of all context trees
 VOID InitContextTree(){
     //gCurrentASID = 0x0; 
-    gCurrentASID = 0x000000001fb14000;
+    //gTraceKernel=true;
+    gTraceApp=true;
+    //gTraceOne=true;
+    //gCurrentASID = 0x000000001fb14000;
      
 #ifdef IP_AND_CCT
     // MAX 10 context trees
@@ -2131,7 +2138,36 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
                        ){
     prog_point p = {};
     get_prog_point(env, &p);
-                
+
+    //lele: filter out the processes(threads?) according to its ASID    
+    
+    //printf("curASID: " TARGET_FMT_lx "\n", callstack.asid);
+    if (gTraceOne){
+        if (p.cr3 != gCurrentASID){
+            //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
+            return;
+        } else{
+            printf("\none mem op for ASID: " TARGET_FMT_lx "\n", gCurrentASID);
+        }
+    }else if (gTraceKernel){
+        if (p.cr3 != 0x0 ){
+            //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
+            return;
+        } else{
+            printf("\nKernel mem op\n");
+        }
+    }else if (gTraceApp){
+        if (p.cr3 == 0x0 ){
+            //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
+            return;
+        } else{
+            printf("\nApp mem op, ASID: " TARGET_FMT_lx "\n");
+        }
+    }else{
+        // no filters
+        printf("\none mem op for ASID: " TARGET_FMT_lx "\n", p.cr3);
+    }
+
 //    string_pos &sp = text_tracker[p];
 
 //     if(p.cr3 == 0){
@@ -2277,9 +2313,6 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     // lele: no need to do this.
     // UINT32 memOperands = INS_MemoryOperandCount(ins);
     
-    // If it is a call/ret instruction, we need to adjust the CCT.
-    // ManageCallingContext(ins);
-
     // Also get the full stack here
     CallStack callstack = {0};
     callstack.n = get_callers(callstack.callers, n_callers, env);
@@ -2287,14 +2320,9 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     callstack.pc = p.pc;
     callstack.asid = p.cr3;
     
-    //printf("curASID: " TARGET_FMT_lx "\n", callstack.asid);
-    if (p.cr3 != gCurrentASID){
-        printf("curASID is not the target,; ignore ASID: " TARGET_FMT_lx "\n", p.cr3);
-        return;
-    } else{
-        printf("get one mem op for ASID: " TARGET_FMT_lx "\n", gCurrentASID);
-    }
 
+    // If it is a call/ret instruction, we need to adjust the CCT.
+    // ManageCallingContext(ins);
     ManageCallingContext(&callstack); //lele: ported from deadspy, May 6, 2017.
     
     
