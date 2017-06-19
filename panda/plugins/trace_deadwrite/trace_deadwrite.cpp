@@ -2970,6 +2970,7 @@ inline target_ulong GetMeasurementBaseCount(){
 
     // Prints the collected statistics on writes along with their sizes
     inline void PrintEachSizeWrite(){
+        printf("now in func: %s\n", __FUNCTION__);
 #ifdef MULTI_THREADED
         fprintf(gTraceFile,"\n1: " TARGET_FMT_lx "",GetTotalNByteWrites(1));
         fprintf(gTraceFile,"\n2: " TARGET_FMT_lx "",GetTotalNByteWrites(2));
@@ -2988,6 +2989,7 @@ inline target_ulong GetMeasurementBaseCount(){
         fprintf(gTraceFile,"\n16: " TARGET_FMT_lx "",g16ByteWriteInstrCount);
         fprintf(gTraceFile,"\nother: " TARGET_FMT_lx "",gLargeByteWriteInstrCount);
 #endif //end MULTI_THREADED
+        printf("func: %s: done\n", __FUNCTION__);
     }
     
 #ifdef IP_AND_CCT  
@@ -3014,6 +3016,7 @@ inline target_ulong GetMeasurementBaseCount(){
     
     void  panda_GetSourceLocation(ADDRINT ip,int32_t *line, string *file){
         //Lele: given IP, return the line number and file
+        printf("TODO: %s: not implemented yet\n", __FUNCTION__);
         *line = 0;
         *file = "---file_info_not_implemented---";
     }
@@ -3034,7 +3037,7 @@ inline target_ulong GetMeasurementBaseCount(){
     
     // Prints the complete calling context including the line nunbers and the context's contribution, given a DeadInfo 
     inline VOID PrintIPAndCallingContexts(const DeadInfoForPresentation & di, target_ulong measurementBaseCount){
-        
+        printf("now in func: %s\n", __FUNCTION__);
         fprintf(gTraceFile,"\n " TARGET_FMT_lx " = %e",di.count, di.count * 100.0 / measurementBaseCount);
         fprintf(gTraceFile,"\n-------------------------------------------------------\n");
 #ifdef MERGE_SAME_LINES
@@ -3042,6 +3045,7 @@ inline target_ulong GetMeasurementBaseCount(){
 #else // no MERGE_SAME_LINES
         string file;
         int32_t line;
+        printf("get source location\n");
         panda_GetSourceLocation( di.pMergedDeadInfo->ip1,  &line,&file);
         fprintf(gTraceFile,"\n%p:%s:%u",(void *)(uintptr_t)(di.pMergedDeadInfo->ip1),file.c_str(),line);                                    
 #endif //end MERGE_SAME_LINES        
@@ -3055,18 +3059,20 @@ inline target_ulong GetMeasurementBaseCount(){
 #endif //end MERGE_SAME_LINES        
         PrintFullCallingContext(di.pMergedDeadInfo->context2);
         fprintf(gTraceFile,"\n-------------------------------------------------------\n");
+
+        printf("func: %s: done.\n", __FUNCTION__);
     }
     
     
     
     // On each Unload of a loaded image, the accummulated deadness information is dumped
     VOID ImageUnload() {
-        printf("\nUnloading");
+        printf("now in func %s. \n", __FUNCTION__);
         // Update gTotalInstCount first 
         target_ulong measurementBaseCount =  GetMeasurementBaseCount(); 
         
-        fprintf(gTraceFile, "\nTotal Instr =  " TARGET_FMT_lx "", measurementBaseCount);
-        printf("total instr:  " TARGET_FMT_lx "\n", measurementBaseCount);
+        fprintf(gTraceFile, "\nTotal Instr =  " TARGET_FMT_lu "", measurementBaseCount);
+        printf("%s: total instr:  " TARGET_FMT_lu "\n", __FUNCTION__, measurementBaseCount);
         fflush(gTraceFile);
         
 #if defined(CONTINUOUS_DEADINFO)
@@ -3138,6 +3144,7 @@ inline target_ulong GetMeasurementBaseCount(){
         DeadMap.clear();
 #endif  // end defined(CONTINUOUS_DEADINFO)        
         
+        printf("%s, DeadMap cleared; get mergedDeadInfoMap. now compute DeadInfoForPresentation list\n", __FUNCTION__);
         map<MergedDeadInfo,uint64_t>::iterator it = mergedDeadInfoMap.begin();	
         list<DeadInfoForPresentation> deadList;
         for (; it != mergedDeadInfoMap.end(); it ++) {
@@ -3146,10 +3153,14 @@ inline target_ulong GetMeasurementBaseCount(){
             deadInfoForPresentation.count = it->second;
             deadList.push_back(deadInfoForPresentation);
         }
+
+        printf("%s, get deadList, now sort it\n", __FUNCTION__);
         deadList.sort(MergedDeadInfoComparer);
         
 	    //present and delete all
         
+        printf("%s, analysis and print deadlist to file\n", __FUNCTION__);
+
         list<DeadInfoForPresentation>::iterator dipIter = deadList.begin();
         //PIN_LockClient();
         target_ulong deads = 0;
@@ -3175,7 +3186,8 @@ inline target_ulong GetMeasurementBaseCount(){
             deads++;
         }
         
-        
+        printf("%s: done print deadList; then print each size write.\n", __FUNCTION__);
+
         PrintEachSizeWrite();
         
 #ifdef TESTING_BYTES
@@ -3188,7 +3200,10 @@ inline target_ulong GetMeasurementBaseCount(){
         
         mergedDeadInfoMap.clear();
         deadList.clear();
+        printf("%s: mergedDeadInfoMap and deadList cleared.\n", __FUNCTION__);
         //PIN_UnlockClient();
+
+        printf("%s: Done.\n", __FUNCTION__);
 	}
     
 #else //no IP_AND_CCT
