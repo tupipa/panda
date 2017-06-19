@@ -94,7 +94,7 @@ PANDAENDCOMMENT */
 // This needs to be defined before anything is included in order to get
 // the PRIx64 macro
 
-#if defined(TARGET_I386)
+#if defined(TARGET_X86_64)
 
 #define __STDC_FORMAT_MACROS
 
