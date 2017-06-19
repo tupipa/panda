@@ -381,7 +381,7 @@ inline VOID InstructionContributionOfBBL16Byte(uint32_t count){
 inline VOID InstructionContributionOfBBLLargeByte(uint32_t count){
     gLargeByteWriteInstrCount += count;
 }
-#else  // no MULTI_THREADED
+#else  // ifndef MULTI_THREADED
 
 // The following functions accummulates the number of bytes written in this basic block categorized by the write size. 
 
