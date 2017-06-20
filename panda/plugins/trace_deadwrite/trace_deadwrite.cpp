@@ -2240,8 +2240,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
         //printf("ERROR: panda_current_asid is not equal with p.cr3 (p.cr3: %p, cur_asid: %p)\n", (void *)(uintptr_t)p.cr3, (void *)(uintptr_t)asid_cur );
         //exit(-1);
     }else{
-         printf("panda_current_asid is equal with p.cr3 (p.cr3: %p, cur_asid: %p)\n", (void *)(uintptr_t)p.cr3, (void *)(uintptr_t)asid_cur );
-       
+         //printf("panda_current_asid is equal with p.cr3 (p.cr3: %p, cur_asid: %p)\n", (void *)(uintptr_t)p.cr3, (void *)(uintptr_t)asid_cur );
     }
     //lele: filter out the processes(threads?) according to its ASID    
     
