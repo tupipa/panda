@@ -3388,6 +3388,41 @@ instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
     cs_insn *insn;
     cs_insn *end;
     size_t count = cs_disasm(handle, buf, size, pc, 0, &insn);
+    cs_err err_= cs_errno(handle);
+    if (err_ != CS_ERR_OK){
+        printf("ERROR in cs_disasm: ");
+        switch(err_):{
+            case CS_ERR_MEM:
+                printf("Out-Of-Memory error: cs_disasm\n");
+                break;
+            case CS_ERR_CSH:
+                printf("Invalid csh argument: cs_close(), cs_errno(), cs_option()\n");
+                break;
+            case CS_ERR_DETAIL:
+                printf("Information is unavailable because detail option is OFF\n") ;  // Information is unavailable because detail option is OFF
+                break;
+            case CS_ERR_MEMSETUP:
+                printf("Dynamic memory management uninitialized \n"); // Dynamic memory management uninitialized (see CS_OPT_MEM)
+                break;
+            case CS_ERR_VERSION:
+                printf(" Unsupported version (bindings)\n");
+                break;
+            case CS_ERR_DIET:
+                printf("Access irrelevant data in diet engine\n");  
+                break;
+            case CS_ERR_SKIPDATA: 
+                printf("Access irrelevant data for data instruction in SKIPDATA mode\n");
+                break;
+            case CS_ERR_X86_ATT:
+                printf("X86 AT&T syntax is unsupported (opt-out at compile time)\n");
+                break;
+            case CS_ERR_X86_INTEL:
+                printf("X86 Intel syntax is unsupported (opt-out at compile time)\n");
+                break;
+            default: 
+                printf("error no: %d\n", err_);
+        }
+    }
     if (count <= 0) {
         printf("%s: no disasm result for TB %p\n", __FUNCTION__, (void*)(uintptr_t)pc);
         goto done2;
