@@ -141,9 +141,17 @@ PANDAENDCOMMENT */
 using google::sparse_hash_map;      // namespace where class lives by default
 using google::dense_hash_map;      // namespace where class lives by default
 
-#include "panda/plugin.h"
+#include <capstone/capstone.h>
+#if defined(TARGET_I386)
+#include <capstone/x86.h>
+#elif defined(TARGET_ARM)
+#include <capstone/arm.h>
+#elif defined(TARGET_PPC)
+#include <capstone/ppc.h>
+#endif
 
-#include <capstone/capstone.h>  //lele: add to count mem R/W PCs before execution: after translate.
+
+#include "panda/plugin.h"
 
 
 extern "C" {
@@ -2191,8 +2199,9 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     prog_point p = {};
     get_prog_point(env, &p);
 
-    if (p.cr3 != panda_current_asid(env)){
-        printf("ERROR: panda_current_asid is not equal with p.cr3\n");
+    target_ulong asid_cur = panda_current_asid(env);
+    if (p.cr3 != asid_cur){
+        printf("ERROR: panda_current_asid is not equal with p.cr3 (p.cr3: %p, cur_asid: %p)\n", (uintptr_t)p.cr3, (uintptr_t)asid_cur );
         exit(-1);
     }
     //lele: filter out the processes(threads?) according to its ASID    
@@ -2664,229 +2673,6 @@ int mem_write_callback(CPUState *env, target_ulong pc, target_ulong addr,
                        target_ulong size, void *buf) {
     //return mem_callback(env, pc, addr, size, buf, true, write_text_tracker);
     return mem_callback(env, pc, addr, size, buf, true);
-}
-
-//###########################
-// Lele: use capstone to disasemble instructions after transalte the block
-// Borrowed from trace_insthist
-//
-csh handle;
-cs_insn *insn;
-bool init_capstone_done = false;
-target_ulong asid;
-// PC => number of instructions in the TB
-std::map<target_ulong,int> tb_insns;
-
-void init_capstone(CPUState *cpu) {
-    cs_arch arch;
-    cs_mode mode;
-    CPUArchState* env = (CPUArchState *) cpu->env_ptr;
-#ifdef TARGET_I386
-    arch = CS_ARCH_X86;
-    mode = env->hflags & HF_LMA_MASK ? CS_MODE_64 : CS_MODE_32;
-#elif defined(TARGET_ARM)
-    arch = CS_ARCH_ARM;
-    mode = env->thumb ? CS_MODE_THUMB : CS_MODE_ARM;
-#endif
-
-    if (cs_open(arch, mode, &handle) != CS_ERR_OK) {
-        printf("Error initializing capstone\n");
-    }
-    init_capstone_done = true;
-}
-
-
-// after block translate, get instructions in each basic block, then store in gTraceShadowMap
-//
-// Lele: borrow from trace_insthist
-int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
-    // size_t count;
-    // uint8_t mem[1024] = {};
-
-    // if (asid && panda_current_asid(cpu) != asid) return 0;
-
-    // if (!init_capstone_done) init_capstone(cpu);
-
-    // if (code_hists.find(tb->pc) != code_hists.end()) {
-    //     clear_hist(tb->pc);
-    //     return 0;
-    // }
-
-    // panda_virtual_memory_rw(cpu, tb->pc, mem, tb->size, false);
-    // count = cs_disasm(handle, mem, tb->size, tb->pc, 0, &insn);
-    // for (unsigned i = 0; i < count; i++)
-    //     code_hists[tb->pc][insn[i].mnemonic]++;
-    // tb_insns[tb->pc] = count;
-    size_t count;
-    uint8_t mem[1024] = {};
-    target_ulong asid = panda_current_asid(cpu);
-
-    // apply filter according to ASID.
-    if (gTraceKernel){
-        if(asid != 0x0) return 0;
-        printf("%s:ignore non-kernel asid: " TARGET_FMT_lx "\n", __FUNCTION__, asid);
-    }else if (gTraceApp){
-        if (asid == 0x0) return 0;
-        printf("%s:ignore kernel asid: " TARGET_FMT_lx "\n", __FUNCTION__, asid);
-    }else if (gTraceOne){
-        if (asid != gCurrentASID ) return 0;
-        printf("%s:not target asid, ignore: " TARGET_FMT_lx "\n", __FUNCTION__, asid);
-    }
-
-    if (!init_capstone_done) init_capstone(cpu);
-
-    panda_virtual_memory_rw(cpu, tb->pc, mem, tb->size, false);
-    count = cs_disasm(handle, mem, tb->size, tb->pc, 0, &insn);
-    for (unsigned i = 0; i < count; i++)
-        //code_hists[tb->pc][insn[i].mnemonic]++;
-        printf("%s: get one instruction: <pc,mem> = <0x" TARGET_FMT_lx ",%s>\n",__FUNCTION__,(tb->pc+i),insn[i].mnemonic);
-    tb_insns[tb->pc] = count;
-    return 1;
-}
-
-
-static int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
-    // if (asid && panda_current_asid(cpu) != asid) return 0;
-
-    // if (window[bbcount % WINDOW_SIZE] != 0) {
-    //     target_ulong old_pc = window[bbcount % WINDOW_SIZE];
-    //     window_insns -= tb_insns[old_pc];
-    //     sub_hist(window_hist, code_hists[old_pc]);
-    // }
-
-    // window[bbcount % WINDOW_SIZE] = tb->pc;
-    // window_insns += tb_insns[tb->pc];
-    // add_hist(window_hist, code_hists[tb->pc]);
-
-    // bbcount++;
-
-    // if (bbcount % sample_rate == 0) {
-    //     // write out to the histlog
-    //     print_hist(window_hist, window_insns);
-    // }
-    return 1;
-}
-
-// Initialized the needed data structures before launching the target program
-// void InitDeadSpy(int argc, char *argv[]){
-void init_deadspy(const char * prefix){
- //Lele: from deadspy continuous deadinfo
-    
-#if defined(CONTINUOUS_DEADINFO)
-    // prealloc 4GB (or 32GB) ip vec
-    // IMPROVEME ... actually this can be as high as 24 GB since lower 3 bits are always zero for pointers
-    gPreAllocatedContextBuffer = (void **) mmap(0, PRE_ALLOCATED_BUFFER_SIZE, PROT_WRITE
-                                                | PROT_READ, MAP_NORESERVE | MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
-    // start from index 1 so that we can use 0 as empty key for the google hash table
-    gCurPreAllocatedContextBufferIndex = 1;
-    //DeadMap.set_empty_key(0);
-#else //no defined(CONTINUOUS_DEADINFO)        
-    // FIX ME FIX ME ... '3092462950186394283' may not be the right one to use, but dont know what to use :(.
-    // 3092462950186394283 is derived as the hash of two '0' contexts which is impossible.
-    DeadMap.set_empty_key(3092462950186394283);
-#endif //end defined(CONTINUOUS_DEADINFO)        
-    // 0 can never be a ADDRINT key of a trace        
-#ifdef IP_AND_CCT
-    //gTraceShadowMap.set_empty_key(0);
-#endif //end   IP_AND_CCT   
-    
-    // Create output file 
-    
-    //lele: step3: open log file handler, and print first line
-    sprintf(trace_file_kernel, "%s_deadwrite_kernel.txt", prefix);
-    sprintf(trace_file_user, "%s_deadwrite_user.txt", prefix);
-    gTraceFile = fopen(trace_file_kernel, "w");
-    gTraceFile_user = fopen(trace_file_user, "w");
-    if(!gTraceFile) {
-        printf("Couldn't write report for kernel:\n");
-        perror("fopen");
-        return false;
-    }
-    if(!gTraceFile_user) {
-        printf("Couldn't write report for user:\n");
-        perror("fopen");
-        return false;
-    }
-    // Print rw/ addr callers, pc , asid
-    fprintf(gTraceFile, "R/W\taddr\t\t[callers]\tpc\tasid\n");
-    fprintf(gTraceFile_user, "R/W\taddr\t\t[callers]\tpc\tasid\n");
-
-    
-#ifdef GATHER_STATS
-    string statFileName(trace_file_kernel);
-    statFileName += ".stats";
-    statsFile = fopen(statFileName.c_str() , "w");
-    fprintf(statsFile,"\n");
-    // for(int i = 0 ; i < argc; i++){
-    //     fprintf(statsFile,"%s ",argv[i]);
-    // }
-    fprintf(statsFile,"\n");
-#endif //end   GATHER_STATS      
-    
-    // Initialize the context tree
-    InitContextTree();        
-}
-
-
-bool init_plugin(void *self) {
-
-    //lele: step 1. Sys init
-
-    panda_cb pcb;
-
-    panda_require("callstack_instr");
-
-    //lele: step 2, parse args
-
-    panda_arg_list *args = panda_get_args("trace_deadwrite");
-
-    //step 2.1: args: asid
-    const char *arg_str = panda_parse_string_opt(args, "asid", "", "a single asid to search for");
-    size_t arg_len = strlen(arg_str);
-    if (arg_len > 0) {
-        //memcpy(tofind[num_strings], arg_str, arg_len);
-        //strlens[num_strings] = arg_len;
-        //num_strings++;
-    }
-    //step 2.2: args: max callers printed
-    // n_callers = panda_parse_uint64_opt(args, "callers", 16, "depth of callstack for matches");
-    n_callers = CALLERS_PER_INS;
-    if (n_callers > MAX_CALLERS) n_callers = MAX_CALLERS;
-
-    //step 2.3: args: log file name prefix
-    // deleted, simple hardcoded the prefix
-
-
-    //lele: init_deadspy: open log file handlers, print first lines
-
-    const char *prefix="trace_deadwrite_test";
-    init_deadspy(prefix);
-
-    //lele: step 4: sys int: set callstack plugins, enable precise pc, memcb, and set callback functions.
-    if(!init_callstack_instr_api()) return false;
-
-
-    //panda_do_flush_tb();
-    //printf("do_flush_tb enabled\n");
-
-    // Need this to get EIP with our callbacks
-    panda_enable_precise_pc();
-    // Enable memory logging
-    panda_enable_memcb();
-
-
-    pcb.virt_mem_before_write = mem_write_callback;
-    panda_register_callback(self, PANDA_CB_VIRT_MEM_BEFORE_WRITE, pcb);
-    pcb.virt_mem_after_read = mem_read_callback;
-    panda_register_callback(self, PANDA_CB_VIRT_MEM_AFTER_READ, pcb);
-
-    pcb.after_block_translate = after_block_translate;
-    panda_register_callback(self, PANDA_CB_AFTER_BLOCK_TRANSLATE, pcb);
-    pcb.before_block_exec = before_block_exec;
-    panda_register_callback(self, PANDA_CB_BEFORE_BLOCK_EXEC, pcb);
-
-
-    return true;
 }
 
 
@@ -3495,6 +3281,492 @@ void uninit_plugin(void *self) {
 // done last step: printing
 
 //#########################
+
+
+//###########################
+// Lele: use capstone to disasemble instructions after transalte the block
+// Refer: callstack_instr
+// - based on callstack_instr to detect call and ret
+// - and also store each instr IP for each basic block., as an alternative of Traces in PIN
+// - TODO: ? also tracking function stacks.
+
+csh cs_handle_32;
+csh cs_handle_64;
+
+bool init_capstone_done = false;
+// Track the different stacks we have seen to handle multiple threads
+// within a single process.
+// std::map<target_ulong,std::set<target_ulong>> stacks_seen;
+
+// Borrowed from trace_insthist
+//
+// csh handle;
+// cs_insn *insn;
+
+// target_ulong asid;
+// PC => number of instructions in the TB
+// std::map<target_ulong,int> tb_insns;
+
+std::map<target_ulong, instr_type> call_cache;  //
+
+
+void init_capstone(CPUState *cpu) {
+//     cs_arch arch;
+//     cs_mode mode;
+//     CPUArchState* env = (CPUArchState *) cpu->env_ptr;
+// #ifdef TARGET_I386
+//     arch = CS_ARCH_X86;
+//     mode = env->hflags & HF_LMA_MASK ? CS_MODE_64 : CS_MODE_32;
+// #elif defined(TARGET_ARM)
+//     arch = CS_ARCH_ARM;
+//     mode = env->thumb ? CS_MODE_THUMB : CS_MODE_ARM;
+// #endif
+
+//     if (cs_open(arch, mode, &handle) != CS_ERR_OK) {
+//         printf("Error initializing capstone\n");
+//     }
+
+    #if defined(TARGET_I386)
+        if (cs_open(CS_ARCH_X86, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
+    #if defined(TARGET_X86_64)
+        if (cs_open(CS_ARCH_X86, CS_MODE_64, &cs_handle_64) != CS_ERR_OK)
+    #endif
+    #elif defined(TARGET_ARM)
+        if (cs_open(CS_ARCH_ARM, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
+    #elif defined(TARGET_PPC)
+        if (cs_open(CS_ARCH_PPC, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
+    #endif
+         {
+            printf("Error initializing capstone\n");
+            return false;
+         }   
+
+        // Need details in capstone to have instruction groupings
+        cs_option(cs_handle_32, CS_OPT_DETAIL, CS_OPT_ON);
+    #if defined(TARGET_X86_64)
+        cs_option(cs_handle_64, CS_OPT_DETAIL, CS_OPT_ON);
+    #endif
+
+    init_capstone_done = true;
+}
+
+//
+//
+
+instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
+    unsigned char *buf = (unsigned char *) malloc(size);
+    int err = panda_virtual_memory_rw(ENV_GET_CPU(env), pc, buf, size, 0);
+    if (err == -1) printf("Couldn't read TB memory!\n");
+    instr_type res = INSTR_UNKNOWN;
+
+#if defined(TARGET_I386)
+    csh handle = (env->hflags & HF_LMA_MASK) ? cs_handle_64 : cs_handle_32;
+#elif defined(TARGET_ARM) || defined(TARGET_PPC)
+    csh handle = cs_handle_32;
+#endif
+
+    cs_insn *insn;
+    cs_insn *end;
+    size_t count = cs_disasm(handle, buf, size, pc, 0, &insn);
+    if (count <= 0) goto done2;
+
+    for (end = insn + count - 1; end >= insn; end--) {
+        if (!cs_insn_group(handle, end, CS_GRP_INVALID)) {
+            break;
+        }
+    }
+    if (end < insn) goto done;
+
+    //iterate all instructions inside this block, store it in gTraceShadowMap.
+    cs_insn *tmp;
+    printf("%s: a block disasembled:\n");
+    for (tmp=insn; tmp <= end; tmp ++){
+        printf("%s: insn: <addr,size,mnemonic,op_str> = <0x %p, %d, %s, %s>\n",__FUNCTION__,tmp->addr,tmp->size,tmp->mnemonic, tmp->op_str);
+    }
+
+    if (pc != insn->addr){
+        printf("block address is not equal to its first intruction's address!!!\n");
+        exit(-1);
+    }
+    // //########################################################
+    // //BEGAIN Refer: Deadspy
+    // // PopulateIPReverseMapAndAccountTraceInstructions(tb);
+    // //uint32_t traceSize = TRACE_Size(trace);    
+    // uint32_t traceSize = count;    
+    // ADDRINT * ipShadow = (ADDRINT * )malloc( (1 + traceSize) * sizeof(ADDRINT)); // +1 to hold the number of slots as a metadata
+    // //ADDRINT  traceAddr = TRACE_Address(trace);
+    // ADDRINT  traceAddr = pc;
+    // uint32_t slot = 0;
+    
+    // // give space to account for nSlots which we record later once we know nWrites
+    // ADDRINT * pNumWrites = ipShadow;
+    // ipShadow ++;
+    
+    // gTraceShadowMap[traceAddr] = ipShadow ;
+    // for( BBL bbl = TRACE_BblHead(trace); BBL_Valid(bbl); bbl = BBL_Next(bbl) ){
+    // 	uint32_t inst1ByteSize = 0;
+    //     uint32_t inst2ByteSize = 0;
+    // 	uint32_t inst4ByteSize = 0;
+    // 	uint32_t inst8ByteSize = 0;
+    // 	uint32_t inst10ByteSize = 0;
+    // 	uint32_t inst16ByteSize = 0;
+    // 	uint32_t instLargeByteSize  = 0;
+        
+    //     for(INS ins = BBL_InsHead(bbl); INS_Valid(ins); ins = INS_Next(ins)){
+    //         // instrument instruction
+    //         Instruction(ins,slot);		
+    //         if(INS_IsMemoryWrite(ins)){
+    //             // put next slot in corresponding ins start location;
+    //             ipShadow[slot] = INS_Address(ins);
+    //             slot++;
+                
+    //             // get instruction info in trace                
+    //             USIZE writeSize = INS_MemoryWriteSize(ins);
+    //             switch(writeSize){
+    //                 case 1: inst1ByteSize++;
+    //                     break;
+    //                 case 2:inst2ByteSize++;
+    //                     break;
+    //                 case 4:inst4ByteSize++;
+    //                     break;
+    //                 case 8:inst8ByteSize++;
+    //                     break;
+    //                 case 10:inst10ByteSize++;
+    //                     break;
+    //                 case 16:inst16ByteSize++;
+    //                     break;
+    //                 default:
+    //                     instLargeByteSize += writeSize;
+    //                     //assert(0 && "NOT IMPLEMENTED ... SHOULD NOT SEE large writes in trace");
+    //             }
+    //         }
+    //     }
+        
+        
+    //     // Insert a call to corresponding count routines before every bbl, passing the number of instructions
+        
+    //     // Increment Inst count by trace
+    //     if (inst1ByteSize)
+    //         BBL_InsertCall(bbl,IPOINT_BEFORE, (AFUNPTR) InstructionContributionOfBBL1Byte, IARG_UINT32, inst1ByteSize, IARG_END);     
+    //     if (inst2ByteSize)
+    //         BBL_InsertCall(bbl,IPOINT_BEFORE, (AFUNPTR) InstructionContributionOfBBL2Byte, IARG_UINT32, inst2ByteSize, IARG_END);     
+    //     if (inst4ByteSize)
+    //         BBL_InsertCall(bbl,IPOINT_BEFORE, (AFUNPTR) InstructionContributionOfBBL4Byte, IARG_UINT32, inst4ByteSize, IARG_END);     
+    //     if (inst8ByteSize)
+    //         BBL_InsertCall(bbl,IPOINT_BEFORE, (AFUNPTR) InstructionContributionOfBBL8Byte, IARG_UINT32, inst8ByteSize, IARG_END);     
+    //     if (inst10ByteSize)
+    //         BBL_InsertCall(bbl,IPOINT_BEFORE, (AFUNPTR) InstructionContributionOfBBL10Byte, IARG_UINT32, inst10ByteSize, IARG_END);     
+    //     if (inst16ByteSize)
+    //         BBL_InsertCall(bbl,IPOINT_BEFORE, (AFUNPTR) InstructionContributionOfBBL16Byte, IARG_UINT32, inst16ByteSize, IARG_END);     
+    //     if (instLargeByteSize)
+    //         BBL_InsertCall(bbl,IPOINT_BEFORE, (AFUNPTR) InstructionContributionOfBBLLargeByte, IARG_UINT32, instLargeByteSize, IARG_END);     
+        
+    // }
+    
+    // // Record the number of child write IPs i.e., number of "slots"
+    // *pNumWrites = slot;
+    // // END Refer: Deadspy
+    //########################################################
+  
+    if (cs_insn_group(handle, end, CS_GRP_CALL)) {
+        res = INSTR_CALL;
+        printf("%s: detect a call\n", __FUNCTION__);
+    } else if (cs_insn_group(handle, end, CS_GRP_RET)) {
+        res = INSTR_RET;
+        printf("%s: detect a ret\n", __FUNCTION__);
+    } else if (cs_insn_group(handle, end, CS_GRP_INT)){
+        res = INSTR_INT;
+        printf("%s: detect a interrupt\n", __FUNCTION__);
+    } else if (cs_insn_group(handle, end, CS_GRP_IRET)){
+        res = INSTR_IRET;
+        printf("%s: detect a interrupt return\n", __FUNCTION__);
+    } else {
+        res = INSTR_UNKNOWN;
+    }
+
+done:
+    //printf("don't free insn, store it in gTraceShadowMap");
+    //printf("");
+    cs_free(insn, count);
+done2:
+    free(buf);
+    return res;
+}
+
+    
+/**
+//NOTE from PANDA:
+after_block_translate: called after the translation of each basic block
+    Callback ID: PANDA_CB_AFTER_BLOCK_TRANSLATE
+    Arguments:
+        CPUState *env: the current CPU state
+        TranslationBlock *tb: the TB we just translated
+    Return value:
+        unused
+    Signature:
+        int (*after_block_translate)(CPUState *env, TranslationBlock *tb);
+
+// after block translate, get instructions in each basic block, then store in gTraceShadowMap
+//
+//
+// Lele: borrow from trace_insthist
+*/
+int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
+
+    // Refer: trace_insthist: after_block_translate
+
+    // size_t count;
+    // uint8_t mem[1024] = {};
+    // target_ulong asid = panda_current_asid(cpu);
+
+    // // apply filter according to ASID.
+    // if (gTraceKernel){
+    //     if(asid != 0x0) return 0;
+    //     printf("%s:ignore non-kernel asid: " TARGET_FMT_lx "\n", __FUNCTION__, asid);
+    // }else if (gTraceApp && asid == 0x0){
+    //    printf("%s:ignore kernel asid: " TARGET_FMT_lx "\n", __FUNCTION__, asid);
+    //    return 0;
+    // }else if (gTraceOne){
+    //     if (asid != gCurrentASID ) return 0;
+    //     printf("%s:not target asid, ignore: " TARGET_FMT_lx "\n", __FUNCTION__, asid);
+    // }
+
+    // if (!init_capstone_done) init_capstone(cpu);
+
+    // panda_virtual_memory_rw(cpu, tb->pc, mem, tb->size, false);
+    // count = cs_disasm(handle, mem, tb->size, tb->pc, 0, &insn);
+    // for (unsigned i = 0; i < count; i++)
+    //     //code_hists[tb->pc][insn[i].mnemonic]++;
+    //     printf("%s: get one instruction: <pc,mem> = <0x" TARGET_FMT_lx ",%s>\n",__FUNCTION__,(tb->pc+i),insn[i].mnemonic);
+    // tb_insns[tb->pc] = count;
+
+      
+    // Refer: callstack_instr: after_block_translate(CPUState *cpu, TranslationBlock *tb)
+    
+    if (!init_capstone_done) init_capstone(cpu);
+
+    CPUArchState* env = (CPUArchState*)cpu->env_ptr;
+    call_cache[tb->pc] = disas_block(env, tb->pc, tb->size);
+
+    // to detect call:
+        // int after_block_exec(CPUState* cpu, TranslationBlock *tb) {
+        //  CPUArchState* env = (CPUArchState*)cpu->env_ptr;
+        //  instr_type tb_type = call_cache[tb->pc];
+        //  if (tb_type == INSTR_CALL) {
+        //     stack_entry se = {tb->pc+tb->size,tb_type};
+        //     callstacks[get_stackid(env)].push_back(se);
+
+        //     // Also track the function that gets called
+        //     target_ulong pc, cs_base;
+        //     uint32_t flags;
+        //     // This retrieves the pc in an architecture-neutral way
+        //     cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
+        //     function_stacks[get_stackid(env)].push_back(pc);
+
+        //     PPP_RUN_CB(on_call, cpu, pc);
+        // }
+
+        instr_type tb_type = call_cache[tb->pc];
+        if (tb_type == INSTR_CALL) {
+            // track the function that gets called
+            target_ulong pc, cs_base;
+            uint32_t flags;
+            // This retrieves the pc in an architecture-neutral way
+            cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
+            printf("%s: get a function call: %p\n", pc);
+        }
+
+    // to detect ret:
+        // int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
+        //     CPUArchState* env = (CPUArchState*)cpu->env_ptr;
+        //     std::vector<stack_entry> &v = callstacks[get_stackid(env)];
+        //     std::vector<target_ulong> &w = function_stacks[get_stackid(env)];
+        //     if (v.empty()) return 1;
+
+        //     // Search up to 10 down
+        //     for (int i = v.size()-1; i > ((int)(v.size()-10)) && i >= 0; i--) {
+        //         if (tb->pc == v[i].pc) {
+        //             //printf("Matched at depth %d\n", v.size()-i);
+        //             //v.erase(v.begin()+i, v.end());
+
+        //             PPP_RUN_CB(on_ret, cpu, w[i]);
+        //             v.erase(v.begin()+i, v.end());
+        //             w.erase(w.begin()+i, w.end());
+
+        //             break;
+        //         }
+        //     }
+
+        //     return 0;
+        // }
+
+
+    return 1;
+}
+
+/**
+//PANDA NOTE:
+before_block_exec: called before execution of every basic block
+    Callback ID: PANDA_CB_BEFORE_BLOCK_EXEC
+    Arguments:
+        CPUState *env: the current CPU state
+        TranslationBlock *tb: the TB we are about to execute
+    Return value:
+        unused
+    Signature:
+        int (*before_block_exec)(CPUState *env, TranslationBlock *tb);
+
+//
+
+**/
+
+static int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
+    // if (asid && panda_current_asid(cpu) != asid) return 0;
+
+    // if (window[bbcount % WINDOW_SIZE] != 0) {
+    //     target_ulong old_pc = window[bbcount % WINDOW_SIZE];
+    //     window_insns -= tb_insns[old_pc];
+    //     sub_hist(window_hist, code_hists[old_pc]);
+    // }
+
+    // window[bbcount % WINDOW_SIZE] = tb->pc;
+    // window_insns += tb_insns[tb->pc];
+    // add_hist(window_hist, code_hists[tb->pc]);
+
+    // bbcount++;
+
+    // if (bbcount % sample_rate == 0) {
+    //     // write out to the histlog
+    //     print_hist(window_hist, window_insns);
+    // }
+    return 1;
+}
+
+
+
+
+// Initialized the needed data structures before launching the target program
+// void InitDeadSpy(int argc, char *argv[]){
+void init_deadspy(const char * prefix){
+ //Lele: from deadspy continuous deadinfo
+    
+#if defined(CONTINUOUS_DEADINFO)
+    // prealloc 4GB (or 32GB) ip vec
+    // IMPROVEME ... actually this can be as high as 24 GB since lower 3 bits are always zero for pointers
+    gPreAllocatedContextBuffer = (void **) mmap(0, PRE_ALLOCATED_BUFFER_SIZE, PROT_WRITE
+                                                | PROT_READ, MAP_NORESERVE | MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+    // start from index 1 so that we can use 0 as empty key for the google hash table
+    gCurPreAllocatedContextBufferIndex = 1;
+    //DeadMap.set_empty_key(0);
+#else //no defined(CONTINUOUS_DEADINFO)        
+    // FIX ME FIX ME ... '3092462950186394283' may not be the right one to use, but dont know what to use :(.
+    // 3092462950186394283 is derived as the hash of two '0' contexts which is impossible.
+    DeadMap.set_empty_key(3092462950186394283);
+#endif //end defined(CONTINUOUS_DEADINFO)        
+    // 0 can never be a ADDRINT key of a trace        
+#ifdef IP_AND_CCT
+    //gTraceShadowMap.set_empty_key(0);
+#endif //end   IP_AND_CCT   
+    
+    // Create output file 
+    
+    //lele: step3: open log file handler, and print first line
+    sprintf(trace_file_kernel, "%s_deadwrite_kernel.txt", prefix);
+    sprintf(trace_file_user, "%s_deadwrite_user.txt", prefix);
+    gTraceFile = fopen(trace_file_kernel, "w");
+    gTraceFile_user = fopen(trace_file_user, "w");
+    if(!gTraceFile) {
+        printf("Couldn't write report for kernel:\n");
+        perror("fopen");
+        return false;
+    }
+    if(!gTraceFile_user) {
+        printf("Couldn't write report for user:\n");
+        perror("fopen");
+        return false;
+    }
+    // Print rw/ addr callers, pc , asid
+    fprintf(gTraceFile, "R/W\taddr\t\t[callers]\tpc\tasid\n");
+    fprintf(gTraceFile_user, "R/W\taddr\t\t[callers]\tpc\tasid\n");
+
+    
+#ifdef GATHER_STATS
+    string statFileName(trace_file_kernel);
+    statFileName += ".stats";
+    statsFile = fopen(statFileName.c_str() , "w");
+    fprintf(statsFile,"\n");
+    // for(int i = 0 ; i < argc; i++){
+    //     fprintf(statsFile,"%s ",argv[i]);
+    // }
+    fprintf(statsFile,"\n");
+#endif //end   GATHER_STATS      
+    
+    // Initialize the context tree
+    InitContextTree();        
+}
+
+
+bool init_plugin(void *self) {
+
+    //lele: step 1. Sys init
+
+    panda_cb pcb;
+
+    panda_require("callstack_instr");
+
+    //lele: step 2, parse args
+
+    panda_arg_list *args = panda_get_args("trace_deadwrite");
+
+    //step 2.1: args: asid
+    const char *arg_str = panda_parse_string_opt(args, "asid", "", "a single asid to search for");
+    size_t arg_len = strlen(arg_str);
+    if (arg_len > 0) {
+        //memcpy(tofind[num_strings], arg_str, arg_len);
+        //strlens[num_strings] = arg_len;
+        //num_strings++;
+    }
+    //step 2.2: args: max callers printed
+    // n_callers = panda_parse_uint64_opt(args, "callers", 16, "depth of callstack for matches");
+    n_callers = CALLERS_PER_INS;
+    if (n_callers > MAX_CALLERS) n_callers = MAX_CALLERS;
+
+    //step 2.3: args: log file name prefix
+    // deleted, simple hardcoded the prefix
+
+
+    //lele: init_deadspy: open log file handlers, print first lines
+
+    const char *prefix="trace_deadwrite_test";
+    init_deadspy(prefix);
+
+    //lele: step 4: sys int: set callstack plugins, enable precise pc, memcb, and set callback functions.
+    if(!init_callstack_instr_api()) return false;
+
+
+    //panda_do_flush_tb();
+    //printf("do_flush_tb enabled\n");
+
+    // Need this to get EIP with our callbacks
+    panda_enable_precise_pc();
+    // Enable memory logging
+    panda_enable_memcb();
+
+
+    pcb.virt_mem_before_write = mem_write_callback;
+    panda_register_callback(self, PANDA_CB_VIRT_MEM_BEFORE_WRITE, pcb);
+    pcb.virt_mem_after_read = mem_read_callback;
+    panda_register_callback(self, PANDA_CB_VIRT_MEM_AFTER_READ, pcb);
+
+    pcb.after_block_translate = after_block_translate;
+    panda_register_callback(self, PANDA_CB_AFTER_BLOCK_TRANSLATE, pcb);
+    pcb.before_block_exec = before_block_exec;
+    panda_register_callback(self, PANDA_CB_BEFORE_BLOCK_EXEC, pcb);
+
+
+    return true;
+}
+
 
 
 //#endif //defined(TARGET_I386)
