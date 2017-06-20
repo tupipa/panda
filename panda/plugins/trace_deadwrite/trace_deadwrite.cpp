@@ -3376,7 +3376,7 @@ void init_capstone(CPUState *cpu) {
 instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
     unsigned char *buf = (unsigned char *) malloc(size);
     int err = panda_virtual_memory_rw(ENV_GET_CPU(env), pc, buf, size, 0);
-    if (err == -1) printf("Couldn't read TB memory!\n");
+    if (err != 0) printf("Couldn't read TB memory!\n");
     instr_type res = INSTR_UNKNOWN;
 
 #if defined(TARGET_I386)
