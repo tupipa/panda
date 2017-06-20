@@ -390,6 +390,42 @@ gPartiallyDeadBytes##size += deadBytes;\
 // ######################################################
 // ######################################################
 
+//###########################
+// BEGAIN: capstone related BB disas
+
+enum instr_type {
+  INSTR_UNKNOWN = 0,
+  INSTR_CALL,
+  INSTR_RET,
+  INSTR_SYSCALL,
+  INSTR_SYSRET,
+  INSTR_SYSENTER,
+  INSTR_SYSEXIT,
+  INSTR_INT,
+  INSTR_IRET,
+};
+
+csh cs_handle_32;
+csh cs_handle_64;
+
+bool init_capstone_done = false;
+// Track the different stacks we have seen to handle multiple threads
+// within a single process.
+// std::map<target_ulong,std::set<target_ulong>> stacks_seen;
+
+// Borrowed from trace_insthist
+//
+// csh handle;
+// cs_insn *insn;
+
+// target_ulong asid;
+// PC => number of instructions in the TB
+// std::map<target_ulong,int> tb_insns;
+
+std::map<target_ulong, instr_type> call_cache;  //
+
+// END: done capstone related BB disas.
+//##################################################
 
 #ifndef MULTI_THREADED
 target_ulong g1ByteWriteInstrCount;
@@ -2201,7 +2237,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
     target_ulong asid_cur = panda_current_asid(env);
     if (p.cr3 != asid_cur){
-        printf("ERROR: panda_current_asid is not equal with p.cr3 (p.cr3: %p, cur_asid: %p)\n", (uintptr_t)p.cr3, (uintptr_t)asid_cur );
+        printf("ERROR: panda_current_asid is not equal with p.cr3 (p.cr3: %p, cur_asid: %p)\n", (void *)(uintptr_t)p.cr3, (void *)(uintptr_t)asid_cur );
         exit(-1);
     }
     //lele: filter out the processes(threads?) according to its ASID    
@@ -3290,25 +3326,6 @@ void uninit_plugin(void *self) {
 // - and also store each instr IP for each basic block., as an alternative of Traces in PIN
 // - TODO: ? also tracking function stacks.
 
-csh cs_handle_32;
-csh cs_handle_64;
-
-bool init_capstone_done = false;
-// Track the different stacks we have seen to handle multiple threads
-// within a single process.
-// std::map<target_ulong,std::set<target_ulong>> stacks_seen;
-
-// Borrowed from trace_insthist
-//
-// csh handle;
-// cs_insn *insn;
-
-// target_ulong asid;
-// PC => number of instructions in the TB
-// std::map<target_ulong,int> tb_insns;
-
-std::map<target_ulong, instr_type> call_cache;  //
-
 
 void init_capstone(CPUState *cpu) {
 //     cs_arch arch;
@@ -3379,12 +3396,12 @@ instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
 
     //iterate all instructions inside this block, store it in gTraceShadowMap.
     cs_insn *tmp;
-    printf("%s: a block disasembled:\n");
+    printf("%s: a block disasembled:\n",__FUNCTION__);
     for (tmp=insn; tmp <= end; tmp ++){
-        printf("%s: insn: <addr,size,mnemonic,op_str> = <0x %p, %d, %s, %s>\n",__FUNCTION__,tmp->addr,tmp->size,tmp->mnemonic, tmp->op_str);
+        printf("%s: insn: <addr,size,mnemonic,op_str> = <%p, %d, %s, %s>\n",__FUNCTION__,(void *)(uintptr_t)tmp->address,tmp->size,tmp->mnemonic, tmp->op_str);
     }
 
-    if (pc != insn->addr){
+    if (pc != insn->address){
         printf("block address is not equal to its first intruction's address!!!\n");
         exit(-1);
     }
@@ -3573,7 +3590,7 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
             uint32_t flags;
             // This retrieves the pc in an architecture-neutral way
             cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
-            printf("%s: get a function call: %p\n", pc);
+            printf("%s: get a function call: %p\n", __FUNCTION__, (void *)(uintptr_t) pc);
         }
 
     // to detect ret:
