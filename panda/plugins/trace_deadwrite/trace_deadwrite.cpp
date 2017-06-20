@@ -141,9 +141,10 @@ PANDAENDCOMMENT */
 using google::sparse_hash_map;      // namespace where class lives by default
 using google::dense_hash_map;      // namespace where class lives by default
 
+#include "panda/plugin.h"
+
 #include <capstone/capstone.h>  //lele: add to count mem R/W PCs before execution: after translate.
 
-#include "panda/plugin.h"
 
 extern "C" {
 // #include "trace_mem.h"
