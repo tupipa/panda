@@ -3391,7 +3391,7 @@ instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
     cs_err err_= cs_errno(handle);
     if (err_ != CS_ERR_OK){
         printf("ERROR in cs_disasm: ");
-        switch(err_):{
+        switch(err_){
             case CS_ERR_MEM:
                 printf("Out-Of-Memory error: cs_disasm\n");
                 break;
