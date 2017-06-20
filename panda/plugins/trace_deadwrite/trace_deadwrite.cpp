@@ -3395,7 +3395,10 @@ instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
             break;
         }
     }
-    if (end < insn) goto done;
+    if (end < insn) {
+        printf("%s:No available instruction disasembled\n", __FUNCTION__);
+        goto done;
+    }
 
     //iterate all instructions inside this block, store it in gTraceShadowMap.
     cs_insn *tmp;
@@ -3595,6 +3598,8 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
             // This retrieves the pc in an architecture-neutral way
             cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
             printf("%s: get a function call: %p\n", __FUNCTION__, (void *)(uintptr_t) pc);
+        }else {
+            printf("UNKNOWN instruction.\n");
         }
 
     // to detect ret:
