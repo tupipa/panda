@@ -3347,24 +3347,34 @@ void init_capstone(CPUState *cpu) {
 //     }
 
     #if defined(TARGET_I386)
+        printf("%s: i386 arch.\n", __FUNCTION__);
         if (cs_open(CS_ARCH_X86, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
     #if defined(TARGET_X86_64)
+        printf("%s: x86_64 arch.\n", __FUNCTION__);
         if (cs_open(CS_ARCH_X86, CS_MODE_64, &cs_handle_64) != CS_ERR_OK)
     #endif
     #elif defined(TARGET_ARM)
+        printf("%s: ARM arch.\n", __FUNCTION__);
         if (cs_open(CS_ARCH_ARM, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
     #elif defined(TARGET_PPC)
+        printf("%s: PPC arch.\n", __FUNCTION__);
         if (cs_open(CS_ARCH_PPC, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
     #endif
          {
             printf("Error initializing capstone\n");
-            return false;
+            return ;
          }   
 
         // Need details in capstone to have instruction groupings
-        cs_option(cs_handle_32, CS_OPT_DETAIL, CS_OPT_ON);
+        if (cs_option(cs_handle_32, CS_OPT_DETAIL, CS_OPT_ON) != CS_ERR_OK){
+            printf("ERROR cs_option 32 bit\n");
+            return ;
+        }
     #if defined(TARGET_X86_64)
-        cs_option(cs_handle_64, CS_OPT_DETAIL, CS_OPT_ON);
+        if (cs_option(cs_handle_64, CS_OPT_DETAIL, CS_OPT_ON) != CS_ERR_OK){
+            printf("ERROR cs_optin for x86_64\n");
+            return ;
+        }
     #endif
 
     init_capstone_done = true;
