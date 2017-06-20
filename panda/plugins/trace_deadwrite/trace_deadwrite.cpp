@@ -3598,6 +3598,27 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
             // This retrieves the pc in an architecture-neutral way
             cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
             printf("%s: get a function call: %p\n", __FUNCTION__, (void *)(uintptr_t) pc);
+        }else if (tb_type == INSTR_RET) {
+            // track the function that gets called
+            target_ulong pc, cs_base;
+            uint32_t flags;
+            // This retrieves the pc in an architecture-neutral way
+            cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
+            printf("%s: get a function ret: %p\n", __FUNCTION__, (void *)(uintptr_t) pc);
+        }else if (tb_type == INSTR_INT) {
+            // track the function that gets called
+            target_ulong pc, cs_base;
+            uint32_t flags;
+            // This retrieves the pc in an architecture-neutral way
+            cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
+            printf("%s: get a interrupt call: %p\n", __FUNCTION__, (void *)(uintptr_t) pc);
+        }else if (tb_type == INSTR_IRET) {
+            // track the function that gets called
+            target_ulong pc, cs_base;
+            uint32_t flags;
+            // This retrieves the pc in an architecture-neutral way
+            cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
+            printf("%s: get a interrupt ret: %p\n", __FUNCTION__, (void *)(uintptr_t) pc);
         }else {
             printf("UNKNOWN instruction.\n");
         }
