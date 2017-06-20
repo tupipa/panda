@@ -2237,7 +2237,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
     target_ulong asid_cur = panda_current_asid(env);
     if (p.cr3 != asid_cur){
-        printf("ERROR: panda_current_asid is not equal with p.cr3 (p.cr3: %p, cur_asid: %p)\n", (void *)(uintptr_t)p.cr3, (void *)(uintptr_t)asid_cur );
+        //printf("ERROR: panda_current_asid is not equal with p.cr3 (p.cr3: %p, cur_asid: %p)\n", (void *)(uintptr_t)p.cr3, (void *)(uintptr_t)asid_cur );
         //exit(-1);
     }else{
          printf("panda_current_asid is equal with p.cr3 (p.cr3: %p, cur_asid: %p)\n", (void *)(uintptr_t)p.cr3, (void *)(uintptr_t)asid_cur );
@@ -3533,6 +3533,7 @@ after_block_translate: called after the translation of each basic block
 */
 int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
 
+    printf("Now in %s\n",__FUNCTION__ );
     // Refer: trace_insthist: after_block_translate
 
     // size_t count;
