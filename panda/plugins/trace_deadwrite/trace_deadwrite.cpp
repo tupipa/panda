@@ -3388,7 +3388,10 @@ instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
     cs_insn *insn;
     cs_insn *end;
     size_t count = cs_disasm(handle, buf, size, pc, 0, &insn);
-    if (count <= 0) goto done2;
+    if (count <= 0) {
+        printf("%s: no disasm result for TB %p\n", __FUNCTION__, (void*)(uintptr_t)pc);
+        goto done2;
+    }
 
     for (end = insn + count - 1; end >= insn; end--) {
         if (!cs_insn_group(handle, end, CS_GRP_INVALID)) {
