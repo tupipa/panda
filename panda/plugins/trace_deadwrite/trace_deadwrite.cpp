@@ -1098,23 +1098,24 @@ inline VOID ManageCallingContext(CallStack *fstack){
 
         UpdateDataOnFunctionEntry(callerIp); // it will reset   gInitiatedCall  
 
-        printf("setup according to PopulateIPReverseMapAndAccountTraceInstructions() in deadspy\n");
-        //uint32_t traceSize = TRACE_Size(trace);    
-        uint32_t traceSize = 0x80;    //lele: TODO: determine the size of function
+        // MOVED to block assemb.
+        // printf("setup according to PopulateIPReverseMapAndAccountTraceInstructions() in deadspy\n");
+        // //uint32_t traceSize = TRACE_Size(trace);    
+        // uint32_t traceSize = 0x80;    //lele: TODO: determine the size of function
      
-        ADDRINT * ipShadow = (ADDRINT * )malloc( (1 + traceSize) * sizeof(ADDRINT)); // +1 to hold the number of slots as a metadata
-        ADDRINT  traceAddr = callerIp;
-        uint32_t slot = 0;
+        // ADDRINT * ipShadow = (ADDRINT * )malloc( (1 + traceSize) * sizeof(ADDRINT)); // +1 to hold the number of slots as a metadata
+        // ADDRINT  traceAddr = callerIp;
+        // uint32_t slot = 0;
     
-        gCurrentSlot = slot;
+        // gCurrentSlot = slot;
     
-        // give space to account for nSlots which we record later once we know nWrites
-        ADDRINT * pNumWrites = ipShadow;
-        ipShadow ++;
-        gTraceShadowMap[traceAddr] = ipShadow ;
+        // // give space to account for nSlots which we record later once we know nWrites
+        // ADDRINT * pNumWrites = ipShadow;
+        // ipShadow ++;
+        // gTraceShadowMap[traceAddr] = ipShadow ;
 
-         // Record the number of child write IPs i.e., number of "slots"
-        *pNumWrites = slot;
+        //  // Record the number of child write IPs i.e., number of "slots"
+        // *pNumWrites = slot;
 
     }else if(gInitiatedRet){
         printf("get a ret; call GoUpCallChain...\n");
@@ -3778,10 +3779,10 @@ bool init_plugin(void *self) {
     panda_enable_memcb();
 
 
-    pcb.virt_mem_before_write = mem_write_callback;
-    panda_register_callback(self, PANDA_CB_VIRT_MEM_BEFORE_WRITE, pcb);
-    pcb.virt_mem_after_read = mem_read_callback;
-    panda_register_callback(self, PANDA_CB_VIRT_MEM_AFTER_READ, pcb);
+    // pcb.virt_mem_before_write = mem_write_callback;
+    // panda_register_callback(self, PANDA_CB_VIRT_MEM_BEFORE_WRITE, pcb);
+    // pcb.virt_mem_after_read = mem_read_callback;
+    // panda_register_callback(self, PANDA_CB_VIRT_MEM_AFTER_READ, pcb);
 
     pcb.after_block_translate = after_block_translate;
     panda_register_callback(self, PANDA_CB_AFTER_BLOCK_TRANSLATE, pcb);
