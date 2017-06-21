@@ -420,9 +420,10 @@ bool init_capstone_done = false;
 
 // target_ulong asid;
 // PC => number of instructions in the TB
-// std::map<target_ulong,int> tb_insns;
+std::unordered_map<target_ulong,int> tb_insns_count;
+std::unordered_map<target_ulong,cs_insn *> tb_insns;
 
-std::map<target_ulong, instr_type> call_cache;  //
+std::unordered_map<target_ulong, instr_type> call_cache;  //
 
 // END: done capstone related BB disas.
 //##################################################
@@ -3285,11 +3286,19 @@ void report_deadspy(void * self){
     Fini();
 }
 
+void clear_insn(){
+    unordered_map<target_ulong, cs_insn *>::iterator insnIt;
+    for (insnIt = tb_insns.begin(); insnIt != tb_insns.end(); insnIt ++ ){
+        int count = tb_insns_count[insnIt -> first];
+        cs_insn * insn = insnIt->second;
+        cs_free(insn, count);
+    }
+}
 void uninit_plugin(void *self) {
 
     printf("%s: report deadspy\n", __FUNCTION__);
     report_deadspy(self);
-
+    clear_insn();
     // std::map<prog_point,match_strings>::iterator it;
 
     // for(it = matches.begin(); it != matches.end(); it++) {
@@ -3349,10 +3358,10 @@ void init_capstone(CPUState *cpu) {
     #if defined(TARGET_I386)
         printf("%s: i386 arch.\n", __FUNCTION__);
         if (cs_open(CS_ARCH_X86, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
-    #if defined(TARGET_X86_64)
-        printf("%s: x86_64 arch.\n", __FUNCTION__);
-        if (cs_open(CS_ARCH_X86, CS_MODE_64, &cs_handle_64) != CS_ERR_OK)
-    #endif
+        #if defined(TARGET_X86_64)
+            printf("%s: x86_64 arch.\n", __FUNCTION__);
+            if (cs_open(CS_ARCH_X86, CS_MODE_64, &cs_handle_64) != CS_ERR_OK)
+        #endif
     #elif defined(TARGET_ARM)
         printf("%s: ARM arch.\n", __FUNCTION__);
         if (cs_open(CS_ARCH_ARM, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
@@ -3398,6 +3407,10 @@ instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
     cs_insn *insn;
     cs_insn *end;
     size_t count = cs_disasm(handle, buf, size, pc, 0, &insn);
+
+    tb_insns_count[pc] = count;
+    tb_insns[pc]=insn;
+
     cs_err err_= cs_errno(handle);
     if (err_ != CS_ERR_OK){
         printf("ERROR in cs_disasm: ");
@@ -3450,7 +3463,7 @@ instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
 
     //iterate all instructions inside this block, store it in gTraceShadowMap.
     cs_insn *tmp;
-    printf("%s: a block disasembled:\n",__FUNCTION__);
+    printf("%s: a block disasembled: pc=%p\n",__FUNCTION__, (void *)(uintptr_t)pc);
     for (tmp=insn; tmp <= end; tmp ++){
         printf("%s: insn: <addr,size,mnemonic,op_str> = <%p, %d, %s, %s>\n",__FUNCTION__,(void *)(uintptr_t)tmp->address,tmp->size,tmp->mnemonic, tmp->op_str);
     }
@@ -3558,7 +3571,7 @@ instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
 done:
     //printf("don't free insn, store it in gTraceShadowMap");
     //printf("");
-    cs_free(insn, count);
+    //cs_free(insn, count);
 done2:
     free(buf);
     return res;
@@ -3610,7 +3623,7 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     // for (unsigned i = 0; i < count; i++)
     //     //code_hists[tb->pc][insn[i].mnemonic]++;
     //     printf("%s: get one instruction: <pc,mem> = <0x" TARGET_FMT_lx ",%s>\n",__FUNCTION__,(tb->pc+i),insn[i].mnemonic);
-    // tb_insns[tb->pc] = count;
+    // tb_insns_count[tb->pc] = count;
 
       
     // Refer: callstack_instr: after_block_translate(CPUState *cpu, TranslationBlock *tb)
@@ -3715,7 +3728,7 @@ before_block_exec: called before execution of every basic block
 
 **/
 
-static int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
+int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     // if (asid && panda_current_asid(cpu) != asid) return 0;
 
     // if (window[bbcount % WINDOW_SIZE] != 0) {
@@ -3734,6 +3747,14 @@ static int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     //     // write out to the histlog
     //     print_hist(window_hist, window_insns);
     // }
+    return 1;
+}
+
+
+int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
+    // Lele: after block executed. PC would point to the new function if tb has a call instruction at last.
+    //
+
     return 1;
 }
 
@@ -3857,6 +3878,8 @@ bool init_plugin(void *self) {
     panda_register_callback(self, PANDA_CB_AFTER_BLOCK_TRANSLATE, pcb);
     pcb.before_block_exec = before_block_exec;
     panda_register_callback(self, PANDA_CB_BEFORE_BLOCK_EXEC, pcb);
+    pcb.after_block_exec = after_block_exec;
+    panda_register_callback(self, PANDA_CB_AFTER_BLOCK_EXEC, pcb);
 
 
     return true;
