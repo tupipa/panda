@@ -420,10 +420,10 @@ bool init_capstone_done = false;
 
 // target_ulong asid;
 // PC => number of instructions in the TB
-std::unordered_map<target_ulong,int> tb_insns_count;
-std::unordered_map<target_ulong,cs_insn *> tb_insns;
+unordered_map<target_ulong,int> tb_insns_count;
+unordered_map<target_ulong,cs_insn *> tb_insns;
 
-std::unordered_map<target_ulong, instr_type> call_cache;  //
+unordered_map<target_ulong, instr_type> call_cache;  //
 
 // END: done capstone related BB disas.
 //##################################################
@@ -3754,7 +3754,11 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
 int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     // Lele: after block executed. PC would point to the new function if tb has a call instruction at last.
     //
-
+    instr_type tb_type = call_cache[tb->pc];
+    if (tb_type == INSTR_CALL) {
+        //how to get current pc here?
+        printf("%s: call detected, how to get current pc here?\n", __FUNCTION__);
+    }
     return 1;
 }
 
