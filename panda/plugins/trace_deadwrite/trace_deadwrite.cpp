@@ -339,6 +339,7 @@ printf("%s:report one dead (%p, %p, %d)\n", \
 #endif // end defined(CONTINUOUS_DEADINFO)
 
 #define REPORT_IF_DEAD(mask, curCtxt, lastCtxt, hashVar) do {if (state & (mask)){ \
+printf("\t dead mask: %p\n", (void*)(uintptr_t)mask); \
 REPORT_DEAD(curCtxt, lastCtxt,hashVar, 1);\
 }}while(0)
 
@@ -585,11 +586,6 @@ unordered_map<uint64_t, uint64_t> DeadMap;
 unordered_map<uint64_t, uint64_t>::iterator gDeadMapIt;
 
 #endif // end defined(CONTINUOUS_DEADINFO)
-
-
-#define REPORT_IF_DEAD(mask, curCtxt, lastCtxt, hashVar) do {if (state & (mask)){ \
-REPORT_DEAD(curCtxt, lastCtxt,hashVar, 1);\
-}}while(0)
 
 
 
@@ -853,8 +849,10 @@ VOID GoDownCallChain(CPUState *cpu, TranslationBlock *tb){
     printf("%s: go down chain, tb->pc = 0x" TARGET_FMT_lx "\n",__FUNCTION__, tb->pc);
     target_ulong callee=tb->pc;
     if( ( gContextIter = (gCurrentContext->childContexts).find(callee)) != gCurrentContext->childContexts.end()) {
+        printf("%s: down to existed context node; bb addr: 0x" TARGET_FMT_lx "\n", __FUNCTION__, callee);
         gCurrentContext = gContextIter->second;
     } else {
+        printf("%s: new context node; bb addr: 0x" TARGET_FMT_lx "\n",__FUNCTION__, callee);
         ContextNode * newChild =  new ContextNode();
         newChild->parent = gCurrentContext;
         newChild->address = callee;
@@ -1744,6 +1742,8 @@ VOID Record8ByteMemWrite(
         void **lastIP = (void **)(status + PAGE_SIZE +  PAGE_OFFSET((uintptr_t)addr) * sizeof(uint8_t*));
         uint64_t state = *((uint64_t*)(status +  PAGE_OFFSET((uintptr_t)addr)));   
         
+        printf("%s: current state of addr (%p): 0x%lx\n", 
+            __FUNCTION__, addr, state);
         // TODO:lele only supports 64bit here.
         if (sizeof(state) == 8 && state != EIGHT_BYTE_READ_ACTION) {
             DECLARE_HASHVAR(myhash);
@@ -1755,6 +1755,7 @@ VOID Record8ByteMemWrite(
                 ipZero  == lastIP[3] && ipZero  == lastIP[4] &&
                 ipZero  == lastIP[5] && ipZero  == lastIP[6] && ipZero  == lastIP[7] ) {
                 REPORT_DEAD(CUR_CTXT, ipZero, myhash, 8);
+                printf("%s, dead all 8\n", __FUNCTION__);
                 // State is already written, so no need to dead write in a tool that detects dead writes
             } else {
                 // slow path 
@@ -2276,25 +2277,25 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
             return 1;
         } else{
-            printf("\none mem op for ASID: 0x" TARGET_FMT_lx "\n", gCurrentASID);
+            printf("\n one mem op for ASID: 0x" TARGET_FMT_lx "\n", gCurrentASID);
         }
     }else if (gTraceKernel){
         if (asid_cur != 0x0 ){
             //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
             return 1;
         } else{
-            printf("\nKernel mem op\n");
+            printf("\n Kernel mem op\n");
         }
     }else if (gTraceApp){
         if (asid_cur == 0x0 ){
             //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
             return 1;
         } else{
-            printf("\nApp mem op, ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
+            printf("\n App mem op, ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
         }
     }else{
         // no filters
-        printf("\nAll: Mem op for ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
+        printf("\n All: Mem op for ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
     }
 
 //    string_pos &sp = text_tracker[p];
@@ -2465,7 +2466,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     if(is_write){
         // USIZE writeSize = INS_MemoryWriteSize(ins);
         target_ulong writeSize = size;
-        printf("counting written bytes:  " TARGET_FMT_lx "\n", writeSize);
+        printf("counting written bytes:  " TARGET_FMT_lu "\n", writeSize);
         switch(writeSize){
             case 1:
                 // INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR) Do1ByteCount, IARG_END);
@@ -2528,19 +2529,22 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
         target_ulong refSize = size;
         if (! is_write){
-            printf("record read addr: %p (%d bytes).\n", (void *)(uintptr_t)addr, (int)size);
+            printf("%s: record read pc: %p, addr: %p (%d bytes).\n",
+                __FUNCTION__, (void*)(uintptr_t)pc , (void *)(uintptr_t)addr, (int)size);
         }else{
 
-            printf("record write addr: %p (%d bytes).\n", (void *)(uintptr_t)addr, (int)size);
+            printf("%s: record write pc: %p, addr: %p (%d bytes).\n",
+                __FUNCTION__, (void*)(uintptr_t)pc, (void *)(uintptr_t)addr, (int)size);
 
             // uint32_t slot = gCurrentTrace->nSlots;
 
             //printf("update ipShadow slot when write detected.\n");
             // put next slot in corresponding ins start location;
             // first, get the shadowMap and its slot numbers;
-            printf("get currentTraceShadowIp from gTraceShadowMap[currentIp]\n");
+            printf("%s: get currentTraceShadowIp from gTraceShadowMap[gCurrentTrace->address]=0x" TARGET_FMT_lx "\n", 
+                __FUNCTION__, gCurrentTrace->address);
             target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[gCurrentTrace->address];
-            printf("get recordedSlots from currentTraceShadowIP[-1] %p\n", currentTraceShadowIP);
+            printf("%s: get recordedSlots from currentTraceShadowIP[-1] %p\n", __FUNCTION__,currentTraceShadowIP);
             target_ulong recordedSlots = currentTraceShadowIP[-1]; // present one behind
 
             // second, update slot.
@@ -3633,6 +3637,7 @@ after_block_translate: called after the translation of each basic block
 */
 int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
 
+    printf("\n---------------- a new block --------------------\n");
     printf("Now in %s: pc=0x" TARGET_FMT_lx "\n",__FUNCTION__ , tb->pc);
     // Refer: trace_insthist: after_block_translate
 
@@ -3782,16 +3787,23 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
 
         TraceNode * newChild = new TraceNode();
         printf("TraceNode New Child Created\n");
-        printf("\tNew Child: set parent\n");
+
         newChild->parent = gCurrentContext;
-        printf("\tNew Child: set address\n");
+        printf("\tNew Child: set parent as %p\n", gCurrentContext);
+
         newChild->address = currentIp;
-        printf("get currentTraceShadowIp from gTraceShadowMap[currentIp]\n");
+        printf("\tNew Child: set address as 0x" TARGET_FMT_lx " \n", currentIp);
+
     	target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[currentIp];
-        printf("get recordedSlots from currentTraceShadowIP[-1] %p\n", currentTraceShadowIP);
-        target_ulong recordedSlots = currentTraceShadowIP[-1]; // present one behind
-        if(recordedSlots){
-            printf("Record Slots: " TARGET_FMT_lx "\n", recordedSlots);
+        printf("get currentTraceShadowIp  %p, from gTraceShadowMap[currentIp]\n", currentTraceShadowIP);
+
+        target_ulong recordedSlots = 0; // present one behind
+        if (currentTraceShadowIP){
+            recordedSlots = currentTraceShadowIP[-1]; // present one behind
+            printf("get recordedSlots=" TARGET_FMT_lu ", from currentTraceShadowIP[-1]\n", recordedSlots);
+        }
+        if(recordedSlots >0 ){
+            printf("Record Slots: " TARGET_FMT_lu "\n", recordedSlots);
 #ifdef CONTINUOUS_DEADINFO
             // if CONTINUOUS_DEADINFO is set, then all ip vecs come from a fixed 4GB buffer
             printf("Continuous Info: GetNextIPVecBuffer...\n");
@@ -3871,28 +3883,12 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
             - get write size and insert statement InstructionContributionOfBBL2Byte to count total write size.(mem_callback, have size and R/W)
 */
 int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
+
+
     //Lele: if last block initiated a call, then set gInitiatedCall as true. 
     //  Then next block would be inside a new function call.
     printf("Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
 
-    // Refer: ManageCallingContext() -> GoUpCallChain().
-    // if(INS_IsProcedureCall(ins) ) {
-    // if(gInitiatedCall || gInitiatedINT) {    
-    //     GoDownCallChain(cpu, tb); 
-    // }else 
-    if(gInitiatedRet || gInitiatedIRET){
-        GoUpCallChain();
-
-        //TODO: check if tb->pc is equal with currentIp
-        printf("%s: go up to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
-        printf("%s: go up to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
-    }
-
-
-    // Refer: InstrumentTrace() TODO
-        //InstrumentTraceEntry() -> UpdateDataOnFunctionEntry() -> GoDownCallChain(cpu,tb);
-
-    InstrumentTraceEntry(cpu, tb);
 
 
     //Refer: PopulateIPReverseMapAndAccountTraceInstructions()
@@ -3925,6 +3921,26 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     
     // Record the number of child write IPs i.e., number of "slots"
     *pNumWrites = slot;
+
+
+    // Refer: ManageCallingContext() -> GoUpCallChain().
+    // if(INS_IsProcedureCall(ins) ) {
+    // if(gInitiatedCall || gInitiatedINT) {    
+    //     GoDownCallChain(cpu, tb); 
+    // }else 
+    if(gInitiatedRet || gInitiatedIRET){
+        GoUpCallChain();
+
+        //TODO: check if tb->pc is equal with currentIp
+        printf("%s: go up to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
+        printf("%s: go up to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
+    }
+
+
+    // Refer: InstrumentTrace() TODO
+        //InstrumentTraceEntry() -> UpdateDataOnFunctionEntry() -> GoDownCallChain(cpu,tb);
+
+    InstrumentTraceEntry(cpu, tb);
 
     return 1;
 }
