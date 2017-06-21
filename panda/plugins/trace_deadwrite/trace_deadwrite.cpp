@@ -83,7 +83,7 @@ TODO:
         - no multi thread, with IP and CCT enabled
         - multi thread enable.
     debug stages:
-        - mem_call_back() one call iteration.
+        - mem_callback() one call iteration.
         - report dead
         - print dead
 
@@ -646,8 +646,10 @@ unordered_map<ADDRINT, void *> gTraceShadowMap;
 TraceNode * gCurrentTrace;
 uint32_t gCurrentSlot;
 
-bool gInitiatedCall = true;
-bool gInitiatedRet = true;
+bool gInitiatedCall = false;
+bool gInitiatedRet = false;
+bool gInitiatedINT = false;
+bool gInitiatedIRET = false;
 TraceNode ** gCurrentIpVector;
 ADDRINT gCurrentCallerIp;
 
@@ -664,8 +666,10 @@ struct ContextTree{
 };
 vector<ContextTree> gContextTreeVector;
 
-VOID GoDownCallChain(ADDRINT);
-VOID UpdateDataOnFunctionEntry(ADDRINT currentIp);
+VOID GoDownCallChain(ADDRINT){}
+VOID GoDownCallChain(CPUState *cpu, TranslationBlock *tb);
+VOID UpdateDataOnFunctionEntry(ADDRINT currentIp){}
+VOID UpdateDataOnFunctionEntry(CPUState *cpu, TranslationBlock *tb);
 // VOID Instruction(INS ins, uint32_t slot);
 
 #endif //IP_AND_CCT
@@ -808,39 +812,34 @@ inline void ** GetNextIPVecBuffer(uint32_t size){
 #ifdef IP_AND_CCT
 
 // Analysis routine called on entering a function (found in symbol table only)
-inline VOID UpdateDataOnFunctionEntry(ADDRINT currentIp){
+//inline VOID UpdateDataOnFunctionEntry(ADDRINT currentIp){
+inline VOID UpdateDataOnFunctionEntry(CPUState *cpu, TranslationBlock *tb){
     
     // if I enter here due to a tail-call, then we will make it a child under the parent context node
-    if (!gInitiatedCall){
-        printf("a tailer call?\n");
-        gCurrentContext = gCurrentContext->parent;
-    } else {
+    // if (!gInitiatedCall){
+    //     printf("a tailer call?\n");
+    //     gCurrentContext = gCurrentContext->parent;
+    // } else {
+
+    if (gInitiatedCall){
         // normal function call, so unset gInitiatedCall
-        printf("get a new function call !\n");
+        printf("%s:get a new function call !\n", __FUNCTION__);
         gInitiatedCall = false;
+        // Let GoDownCallChain do the work needed to setup pointers for child nodes.
+        GoDownCallChain(cpu,tb);
+
+        //TODO: check if tb->pc is equal with currentIp
+        printf("%s: go down to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
+        printf("%s: go down to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
+        
+    }else{
+        printf("ERROR: call function entry, but call flag is not true\n");
+        exit(-1);
     }
     
-    // Let GoDownCallChain do the work needed to setup pointers for child nodes.
-    GoDownCallChain(currentIp);
     
 }
 
-
-// // Analysis routine called on making a function call
-// inline VOID SetCallInitFlag(){
-//     gInitiatedCall = true;
-// }
-
-
-// // Instrumentation for the function entry (found in symbol table only).
-// // Get the first instruction of the first BBL and insert call to the analysis routine before it.
-
-// inline VOID InstrumentFunctionEntry(RTN rtn, void *f){
-//     RTN_Open(rtn);
-//     INS ins = RTN_InsHeadOnly(rtn);
-//     INS_InsertCall (ins, IPOINT_BEFORE, (AFUNPTR)UpdateDataOnFunctionEntry, IARG_INST_PTR,IARG_END);
-//     RTN_Close(rtn);    
-// }
 #endif //end IP_AND_CCT
 
 // MT
@@ -849,9 +848,10 @@ inline VOID UpdateDataOnFunctionEntry(ADDRINT currentIp){
 // Analysis routine called on function entry. 
 // If the target IP is a child, make it gCurrentContext, else add one under gCurrentContext and point gCurrentContext to the newly added
 
-VOID GoDownCallChain(ADDRINT callee){
-    printf(__FUNCTION__);
-    printf("\n");
+//VOID GoDownCallChain(ADDRINT callee){
+VOID GoDownCallChain(CPUState *cpu, TranslationBlock *tb){
+    printf("%s: go down chain, tb->pc = 0x" TARGET_FMT_lx "\n",__FUNCTION__, tb->pc);
+    target_ulong callee=tb->pc;
     if( ( gContextIter = (gCurrentContext->childContexts).find(callee)) != gCurrentContext->childContexts.end()) {
         gCurrentContext = gContextIter->second;
     } else {
@@ -888,8 +888,12 @@ inline VOID GoUpCallChain(){
 // Analysis routine called on function entry. 
 // If the target IP is a child, make it gContextTreeVector[pinTID].currentContext, else add one under gContextTreeVector[pinTID].currentContext and point gContextTreeVector[pinTID].currentContext to the newly added
 
-VOID GoDownCallChain(ADDRINT callee){
-    
+// VOID GoDownCallChain(ADDRINT callee){
+VOID GoDownCallChain(CPUState *cpu, TranslationBlock *tb){
+
+    printf("%s: multithread: tb->pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+    target_ulong callee= tb->pc;
+
     // sparse_hash_map<ADDRINT, ContextNode *>::iterator contextIter;
     // uint32_t pinTID = (uint32_t)PIN_ThreadId();
     
@@ -917,6 +921,26 @@ inline VOID GoUpCallChain(){
 
 // Instrumentation added at function call/ret sites
 
+
+//   inline VOID ManageCallingContext2(CPUState *cpu, TranslationBlock *tb){
+// #ifdef TESTING_BYTES
+//     return; // no CCT
+// #endif // end TESTING_BYTES
+    
+//     // manage context
+//     // Refer: ManageCallingContext(ADDRINT)
+
+//     // if(INS_IsProcedureCall(ins) ) {
+//     if(gInitiatedCall || gInitiatedINT) {    
+//         GoDownCallChain(cpu, tb); 
+//     }else if(gInitiatedRet || gInitiatedIRET){
+//         GoUpCallChain();
+//     }
+
+//     printf("%s: done manage context for one memory operating instruction\n\n", __FUNCTION__);
+//     // return ;
+//   }
+  
 inline VOID ManageCallingContext(CallStack *fstack){
 #ifdef TESTING_BYTES
 	return; // no CCT
@@ -2234,43 +2258,43 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
                        target_ulong size, void *buf, bool is_write
                        //,std::map<prog_point,string_pos> &text_tracker
                        ){
-    prog_point p = {};
-    get_prog_point(env, &p);
+    //prog_point p = {};
+    //get_prog_point(env, &p);
 
     target_ulong asid_cur = panda_current_asid(env);
-    if (p.cr3 != asid_cur){
-        //printf("ERROR: panda_current_asid is not equal with p.cr3 (p.cr3: %p, cur_asid: %p)\n", (void *)(uintptr_t)p.cr3, (void *)(uintptr_t)asid_cur );
-        //exit(-1);
-    }else{
-         //printf("panda_current_asid is equal with p.cr3 (p.cr3: %p, cur_asid: %p)\n", (void *)(uintptr_t)p.cr3, (void *)(uintptr_t)asid_cur );
-    }
-    //lele: filter out the processes(threads?) according to its ASID    
+    // if (p.cr3 != asid_cur){
+    //     //printf("ERROR: panda_current_asid is not equal with p.cr3 (p.cr3: %p, cur_asid: %p)\n", (void *)(uintptr_t)p.cr3, (void *)(uintptr_t)asid_cur );
+    //     //exit(-1);
+    // }else{
+    //      //printf("panda_current_asid is equal with p.cr3 (p.cr3: %p, cur_asid: %p)\n", (void *)(uintptr_t)p.cr3, (void *)(uintptr_t)asid_cur );
+    // }
     
+    //lele: filter out the processes(threads?) according to its ASID    
     //printf("curASID: " TARGET_FMT_lx "\n", callstack.asid);
     if (gTraceOne){
-        if (p.cr3 != gCurrentASID){
+        if (asid_cur != gCurrentASID){
             //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
             return 1;
         } else{
-            printf("\none mem op for ASID: " TARGET_FMT_lx "\n", gCurrentASID);
+            printf("\none mem op for ASID: 0x" TARGET_FMT_lx "\n", gCurrentASID);
         }
     }else if (gTraceKernel){
-        if (p.cr3 != 0x0 ){
+        if (asid_cur != 0x0 ){
             //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
             return 1;
         } else{
             printf("\nKernel mem op\n");
         }
     }else if (gTraceApp){
-        if (p.cr3 == 0x0 ){
+        if (asid_cur == 0x0 ){
             //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
             return 1;
         } else{
-            printf("\nApp mem op, ASID: " TARGET_FMT_lx "\n", p.cr3);
+            printf("\nApp mem op, ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
         }
     }else{
         // no filters
-        printf("\nAll: Mem op for ASID: " TARGET_FMT_lx "\n", p.cr3);
+        printf("\nAll: Mem op for ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
     }
 
 //    string_pos &sp = text_tracker[p];
@@ -2419,19 +2443,20 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     // UINT32 memOperands = INS_MemoryOperandCount(ins);
     
     // Also get the full stack here
-    CallStack callstack = {0};
-    callstack.n = get_callers(callstack.callers, n_callers, env);
-    printf ("get %d callers\n", callstack.n);
-    callstack.pc = p.pc;
-    callstack.asid = p.cr3;
+    // CallStack callstack = {0};
+    // callstack.n = get_callers(callstack.callers, n_callers, env);
+    // printf ("get %d callers\n", callstack.n);
+    // callstack.pc = p.pc;
+    // callstack.asid = p.cr3;
     
 
     // If it is a call/ret instruction, we need to adjust the CCT.
     // ManageCallingContext(ins);
-    ManageCallingContext(&callstack); //lele: ported from deadspy, May 6, 2017.
+    //ManageCallingContext(&callstack); //lele: ported from deadspy, May 6, 2017
     
     
-    uint32_t slot = gCurrentSlot;
+    // uint32_t slot = gCurrentSlot;
+    uint32_t slot=gCurrentTrace->nSlots;
     // If it is a memory write then count the number of bytes written 
 //#ifndef IP_AND_CCT  
     // //xxx-> IP_AND_CCT uses traces to detect instructions & their write size hence no instruction level counting is needed
@@ -2508,23 +2533,34 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
             printf("record write addr: %p (%d bytes).\n", (void *)(uintptr_t)addr, (int)size);
 
-        // uint32_t slot = gCurrentTrace->nSlots;
+            // uint32_t slot = gCurrentTrace->nSlots;
 
             //printf("update ipShadow slot when write detected.\n");
             // put next slot in corresponding ins start location;
-            target_ulong *ipShadow =  (target_ulong *) gTraceShadowMap[gCurrentContext->address];
-            ipShadow[gCurrentSlot] = p.pc;
+            // first, get the shadowMap and its slot numbers;
+            printf("get currentTraceShadowIp from gTraceShadowMap[currentIp]\n");
+            target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[gCurrentTrace->address];
+            printf("get recordedSlots from currentTraceShadowIP[-1] %p\n", currentTraceShadowIP);
+            target_ulong recordedSlots = currentTraceShadowIP[-1]; // present one behind
 
-            gCurrentSlot++;
-            gCurrentTrace->nSlots++;
+            // second, update slot.
+            currentTraceShadowIP[recordedSlots] = pc;
+            currentTraceShadowIP[-1] ++;
+            gCurrentTrace->nSlots++; 
+
+            printf("%s: new slot created for gCurrentTrace->address: 0x" TARGET_FMT_lx "," TARGET_FMT_lu " (%d)\n", 
+             __FUNCTION__, gCurrentTrace->address, recordedSlots, gCurrentTrace->nSlots);
+
+            // gCurrentSlot++;
+            // gCurrentTrace->nSlots++;
+            // printf("new slot created for gCurrentContext->address: " TARGET_FMT_lx ", %u (%u)\n", gCurrentContext->address, gCurrentSlot,gCurrentTrace->nSlots);
 
 
-            printf("new slot created for gCurrentContext->address: " TARGET_FMT_lx ", %u (%u)\n", gCurrentContext->address, gCurrentSlot,gCurrentTrace->nSlots);
 
-        	target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[gCurrentContext->address];
+        	//target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[gCurrentContext->address];
             //printf("set recordedSlots of currentTraceShadowIP[-1] %p to %u\n", currentTraceShadowIP, gCurrentSlot);
             //target_ulong recordedSlots = currentTraceShadowIP[-1]; // 
-            currentTraceShadowIP[-1] = gCurrentSlot; // 
+            //currentTraceShadowIP[-1] = gCurrentSlot; // 
 
         }
         
@@ -2533,14 +2569,14 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
                 // if (INS_MemoryOperandIsRead(ins, memOp)) {
                     
                 if (! is_write) {
-                    Record1ByteMemRead((VOID *)(uintptr_t)p.pc);                        
+                    Record1ByteMemRead((VOID *)(uintptr_t)pc);                        
                 }
                 else {
                     Record1ByteMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        (VOID *)(uintptr_t)p.pc);                    
+                        (VOID *)(uintptr_t)pc);                    
 //                     INS_InsertPredicatedCall(ins, IPOINT_BEFORE,
 //                                                 (AFUNPTR) Record1ByteMemWrite,
 // #ifdef IP_AND_CCT
@@ -2556,14 +2592,14 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             case 2:{
                        
                 if (! is_write) {
-                    Record2ByteMemRead((VOID *)(uintptr_t)p.pc);                        
+                    Record2ByteMemRead((VOID *)(uintptr_t)pc);                        
                 }
                 else {
                     Record2ByteMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        (VOID *)(uintptr_t)p.pc);                }
+                        (VOID *)(uintptr_t)pc);                }
             }
                     
 //                 if (INS_MemoryOperandIsRead(ins, memOp)) {
@@ -2588,41 +2624,41 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             case 4:{
                        
                 if (! is_write) {
-                    Record4ByteMemRead((VOID *)(uintptr_t)p.pc);                        
+                    Record4ByteMemRead((VOID *)(uintptr_t)pc);                        
                 }
                 else {
                     Record4ByteMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        (VOID *)(uintptr_t)p.pc);                }
+                        (VOID *)(uintptr_t)pc);                }
             }
                 break;
                 
             case 8:{
                        
                 if (! is_write) {
-                    Record8ByteMemRead((VOID *)(uintptr_t)p.pc);                        
+                    Record8ByteMemRead((VOID *)(uintptr_t)pc);                        
                 }
                 else {
                     Record8ByteMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        (VOID *)(uintptr_t)p.pc);                }
+                        (VOID *)(uintptr_t)pc);                }
             }
                 break;
                 
             case 10:{
                 if (! is_write) {
-                    Record10ByteMemRead((VOID *)(uintptr_t)p.pc);                        
+                    Record10ByteMemRead((VOID *)(uintptr_t)pc);                        
                 }
                 else {
                     Record10ByteMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        (VOID *)(uintptr_t)p.pc);                }
+                        (VOID *)(uintptr_t)pc);                }
                
             }
                 break;
@@ -2645,14 +2681,14 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 //                 }
 
                 if (! is_write) {
-                    Record16ByteMemRead((VOID *)(uintptr_t)p.pc);                        
+                    Record16ByteMemRead((VOID *)(uintptr_t)pc);                        
                 }
                 else {
                     Record16ByteMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        (VOID *)(uintptr_t)p.pc);                }
+                        (VOID *)(uintptr_t)pc);                }
             }
                 break;
                 
@@ -2675,14 +2711,14 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 //                 }
 
                 if (! is_write) {
-                    RecordLargeMemRead((VOID *)(uintptr_t)p.pc,size);                        
+                    RecordLargeMemRead((VOID *)(uintptr_t)pc,size);                        
                 }
                 else {
                     RecordLargeMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                       (VOID *)(uintptr_t)p.pc, size);
+                       (VOID *)(uintptr_t)pc, size);
                 }
             }
                 break;
@@ -3597,7 +3633,7 @@ after_block_translate: called after the translation of each basic block
 */
 int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
 
-    printf("Now in %s\n",__FUNCTION__ );
+    printf("Now in %s: pc=0x" TARGET_FMT_lx "\n",__FUNCTION__ , tb->pc);
     // Refer: trace_insthist: after_block_translate
 
     // size_t count;
@@ -3658,56 +3694,34 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
             uint32_t flags;
             // This retrieves the pc in an architecture-neutral way
             cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
-            printf("%s: get a function call: %p\n", __FUNCTION__, (void *)(uintptr_t) pc);
+            printf("%s: get a function call: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
+            //gInitiatedCall=true;
         }else if (tb_type == INSTR_RET) {
             // track the function that gets called
             target_ulong pc, cs_base;
             uint32_t flags;
             // This retrieves the pc in an architecture-neutral way
             cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
-            printf("%s: get a function ret: %p\n", __FUNCTION__, (void *)(uintptr_t) pc);
+            printf("%s: get a function ret: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
         }else if (tb_type == INSTR_INT) {
             // track the function that gets called
             target_ulong pc, cs_base;
             uint32_t flags;
             // This retrieves the pc in an architecture-neutral way
             cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
-            printf("%s: get a interrupt call: %p\n", __FUNCTION__, (void *)(uintptr_t) pc);
+            printf("%s: get a interrupt call: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
         }else if (tb_type == INSTR_IRET) {
             // track the function that gets called
             target_ulong pc, cs_base;
             uint32_t flags;
             // This retrieves the pc in an architecture-neutral way
             cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
-            printf("%s: get a interrupt ret: %p\n", __FUNCTION__, (void *)(uintptr_t) pc);
+            printf("%s: get a interrupt ret: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
         }else {
-            printf("UNKNOWN instruction.\n");
+            printf("UNKNOWN instruction\n");
         }
 
-    // to detect ret:
-        // int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
-        //     CPUArchState* env = (CPUArchState*)cpu->env_ptr;
-        //     std::vector<stack_entry> &v = callstacks[get_stackid(env)];
-        //     std::vector<target_ulong> &w = function_stacks[get_stackid(env)];
-        //     if (v.empty()) return 1;
-
-        //     // Search up to 10 down
-        //     for (int i = v.size()-1; i > ((int)(v.size()-10)) && i >= 0; i--) {
-        //         if (tb->pc == v[i].pc) {
-        //             //printf("Matched at depth %d\n", v.size()-i);
-        //             //v.erase(v.begin()+i, v.end());
-
-        //             PPP_RUN_CB(on_ret, cpu, w[i]);
-        //             v.erase(v.begin()+i, v.end());
-        //             w.erase(w.begin()+i, w.end());
-
-        //             break;
-        //         }
-        //     }
-
-        //     return 0;
-        // }
-
+            
 
     return 1;
 }
@@ -3728,25 +3742,190 @@ before_block_exec: called before execution of every basic block
 
 **/
 
+// Does necessary work on a trace entry (called during runtime)
+// 1. If landed here due to function call, then go down in CCT.
+// 2. Look up the current trace under the CCT node creating new if if needed.
+// 3. Update global iterators and curXXXX pointers.
+
+//inline void InstrumentTraceEntry(ADDRINT currentIp){
+inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
+
+    printf("%s: tb->pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+
+    target_ulong currentIp=tb->pc;
+    // if landed due to function call, create a child context node
+    
+    if(gInitiatedCall){
+        UpdateDataOnFunctionEntry(cpu, tb); // it will reset   gInitiatedCall      
+    }
+        
+// ###################################################################
+// commented version from lele:
+      //printf("callerIp: " TARGET_FMT_lx "\n", callerIp);
+    if( (gTraceIter = (gCurrentContext->childTraces).find(currentIp)) != gCurrentContext->childTraces.end()) {
+        // if tracenode is already exists
+        // set the current Trace to the new trace
+        // set the IpVector
+        //printf("Trace Node already exists\n");
+        gCurrentTrace = gTraceIter->second;
+        gCurrentIpVector = gCurrentTrace->childIPs;
+        //lele: set slot index
+        gCurrentSlot = gCurrentTrace->nSlots;
+        printf("Trace Node exists; set/get current slots:%u\n", gCurrentSlot);
+
+     } else {
+        //panda: if not in the current context node, this means in a new function and a new context node is created.
+        
+        // Create new trace node and insert under the context node.
+        printf(__FUNCTION__);
+        printf(": Need to Create new Trace node.\n");
+
+        TraceNode * newChild = new TraceNode();
+        printf("TraceNode New Child Created\n");
+        printf("\tNew Child: set parent\n");
+        newChild->parent = gCurrentContext;
+        printf("\tNew Child: set address\n");
+        newChild->address = currentIp;
+        printf("get currentTraceShadowIp from gTraceShadowMap[currentIp]\n");
+    	target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[currentIp];
+        printf("get recordedSlots from currentTraceShadowIP[-1] %p\n", currentTraceShadowIP);
+        target_ulong recordedSlots = currentTraceShadowIP[-1]; // present one behind
+        if(recordedSlots){
+            printf("Record Slots: " TARGET_FMT_lx "\n", recordedSlots);
+#ifdef CONTINUOUS_DEADINFO
+            // if CONTINUOUS_DEADINFO is set, then all ip vecs come from a fixed 4GB buffer
+            printf("Continuous Info: GetNextIPVecBuffer...\n");
+            newChild->childIPs  = (TraceNode **)GetNextIPVecBuffer(recordedSlots);
+#else            //no CONTINUOUS_DEADINFO
+            printf("NON Continuous Info: malloc new TraceNode**\n");
+            newChild->childIPs = (TraceNode **) malloc( (recordedSlots) * sizeof(TraceNode **) );
+#endif //end CONTINUOUS_DEADINFO
+            newChild->nSlots = recordedSlots;
+            //cerr<<"\n***:"<<recordedSlots; 
+            for(uint32_t i = 0 ; i < recordedSlots ; i++) {
+                newChild->childIPs[i] = newChild;
+            }
+        } else {
+            printf("No record slots read\n");
+            newChild->nSlots = 0;
+            newChild->childIPs = 0;            
+        }    
+        gCurrentContext->childTraces[currentIp] = newChild;
+        gCurrentTrace = newChild;
+        gCurrentIpVector = gCurrentTrace->childIPs;
+        //lele: set slot index
+        gCurrentSlot = gCurrentTrace->nSlots;
+    }    
+//####################################################################################
+// Original version from deadspy:
+
+//     // Check if a trace node with currentIp already exists under this context node
+//     if( (gTraceIter = (gCurrentContext->childTraces).find(currentIp)) != gCurrentContext->childTraces.end()) {
+//         gCurrentTrace = gTraceIter->second;
+//         gCurrentIpVector = gCurrentTrace->childIPs;
+//     } else {
+//         // Create new trace node and insert under the context node.
+        
+//         TraceNode * newChild = new TraceNode();
+//         newChild->parent = gCurrentContext;
+//         newChild->address = currentIp;
+//     	uint64_t * currentTraceShadowIP = (uint64_t *) gTraceShadowMap[currentIp];
+//         uint64_t recordedSlots = currentTraceShadowIP[-1]; // present one behind
+//         if(recordedSlots){
+// #ifdef CONTINUOUS_DEADINFO
+//             // if CONTINUOUS_DEADINFO is set, then all ip vecs come from a fixed 4GB buffer
+//             newChild->childIPs  = (TraceNode **)GetNextIPVecBuffer(recordedSlots);
+// #else            //no CONTINUOUS_DEADINFO
+//             newChild->childIPs = (TraceNode **) malloc( (recordedSlots) * sizeof(TraceNode **) );
+// #endif //end CONTINUOUS_DEADINFO
+//             newChild->nSlots = recordedSlots;
+//             //cerr<<"\n***:"<<recordedSlots; 
+//             for(uint32_t i = 0 ; i < recordedSlots ; i++) {
+//                 newChild->childIPs[i] = newChild;
+//             }
+//         } else {
+//             newChild->nSlots = 0;
+//             newChild->childIPs = 0;            
+//         }          
+        
+//         gCurrentContext->childTraces[currentIp] = newChild;
+//         gCurrentTrace = newChild;
+//         gCurrentIpVector = gCurrentTrace->childIPs;
+//     }
+
+}
+
+/*
+//Refer  
+//  - InstrumentTrace() on every Trace
+        static void InstrumentTrace(TRACE trace, void * f){
+            INS_InsertCall (ins, IPOINT_BEFORE, (AFUNPTR)InstrumentTraceEntry,IARG_INST_PTR,IARG_END);    
+            PopulateIPReverseMapAndAccountTraceInstructions(trace);
+
+        -InstrumentTraceEntry() -> UpdateDataOnFunctionEntry() -> GoDownCallChain(cpu,tb);
+
+        - PopulateIPReverseMapAndAccountTraceInstructions(): 
+            - Instruction() -> ManageCallingContext() on every Instruction in 
+                - GoUpCallChain
+            - build ipShadow before code run. (Allocated here but filled during run. (mem_callback, have size and R/W)
+            - get write size and insert statement InstructionContributionOfBBL2Byte to count total write size.(mem_callback, have size and R/W)
+*/
 int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
-    // if (asid && panda_current_asid(cpu) != asid) return 0;
+    //Lele: if last block initiated a call, then set gInitiatedCall as true. 
+    //  Then next block would be inside a new function call.
+    printf("Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
 
-    // if (window[bbcount % WINDOW_SIZE] != 0) {
-    //     target_ulong old_pc = window[bbcount % WINDOW_SIZE];
-    //     window_insns -= tb_insns[old_pc];
-    //     sub_hist(window_hist, code_hists[old_pc]);
-    // }
+    // Refer: ManageCallingContext() -> GoUpCallChain().
+    // if(INS_IsProcedureCall(ins) ) {
+    // if(gInitiatedCall || gInitiatedINT) {    
+    //     GoDownCallChain(cpu, tb); 
+    // }else 
+    if(gInitiatedRet || gInitiatedIRET){
+        GoUpCallChain();
 
-    // window[bbcount % WINDOW_SIZE] = tb->pc;
-    // window_insns += tb_insns[tb->pc];
-    // add_hist(window_hist, code_hists[tb->pc]);
+        //TODO: check if tb->pc is equal with currentIp
+        printf("%s: go up to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
+        printf("%s: go up to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
+    }
 
-    // bbcount++;
 
-    // if (bbcount % sample_rate == 0) {
-    //     // write out to the histlog
-    //     print_hist(window_hist, window_insns);
-    // }
+    // Refer: InstrumentTrace() TODO
+        //InstrumentTraceEntry() -> UpdateDataOnFunctionEntry() -> GoDownCallChain(cpu,tb);
+
+    InstrumentTraceEntry(cpu, tb);
+
+
+    //Refer: PopulateIPReverseMapAndAccountTraceInstructions()
+    // - PopulateIPReverseMapAndAccountTraceInstructions(): 
+    //     - Instruction() -> ManageCallingContext() on every Instruction in 
+    //         - GoUpCallChain
+    //     - build ipShadow before code run. (Allocated here but filled during run. (mem_callback, have size and R/W)
+    //     - get write size and insert statement InstructionContributionOfBBL2Byte to count total write size.(mem_callback, have size and R/W)
+
+    uint32_t traceSize = tb->size;    
+    ADDRINT * ipShadow = (ADDRINT * )malloc( (1 + traceSize) * sizeof(ADDRINT)); // +1 to hold the number of slots as a metadata
+    ADDRINT  traceAddr = tb->pc;
+    uint32_t slot = 0;
+    
+    // give space to account for nSlots which we record later once we know nWrites
+    ADDRINT * pNumWrites = ipShadow;
+    ipShadow ++;
+    
+    gTraceShadowMap[traceAddr] = ipShadow ;
+    // for( BBL bbl = TRACE_BblHead(trace); BBL_Valid(bbl); bbl = BBL_Next(bbl) ){
+    //     for(INS ins = BBL_InsHead(bbl); INS_Valid(ins); ins = INS_Next(ins)){
+    //         // instrument instruction
+    //         Instruction(ins,slot);		
+    //         if(INS_IsMemoryWrite(ins)){
+    //             // put next slot in corresponding ins start location;
+    //             ipShadow[slot] = INS_Address(ins);
+    //             slot++;
+    //          }
+    //     }
+    
+    // Record the number of child write IPs i.e., number of "slots"
+    *pNumWrites = slot;
+
     return 1;
 }
 
@@ -3754,11 +3933,22 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
 int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     // Lele: after block executed. PC would point to the new function if tb has a call instruction at last.
     //
+    printf("Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
     instr_type tb_type = call_cache[tb->pc];
     if (tb_type == INSTR_CALL) {
-        //how to get current pc here?
-        printf("%s: call detected, how to get current pc here?\n", __FUNCTION__);
+        printf("%s: call detected, set InitiatedCall flag\n", __FUNCTION__);
+        gInitiatedCall=true;
+    }else if (tb_type == INSTR_RET) {
+        printf("%s: return detected, set InitiatedRet flag\n", __FUNCTION__);
+        gInitiatedRet=true;
+    }else if (tb_type == INSTR_INT) {
+        printf("%s: interrupt detected, set InitiatedINT flag\n", __FUNCTION__);
+        gInitiatedINT=true;
+    }else if (tb_type == INSTR_IRET) {
+        printf("%s: iret detected, set InitiatedIRET flag\n", __FUNCTION__);
+        gInitiatedRet=true;
     }
+
     return 1;
 }
 
@@ -3875,13 +4065,82 @@ bool init_plugin(void *self) {
 
     // pcb.virt_mem_before_write = mem_write_callback;
     // panda_register_callback(self, PANDA_CB_VIRT_MEM_BEFORE_WRITE, pcb);
-    // pcb.virt_mem_after_read = mem_read_callback;
-    // panda_register_callback(self, PANDA_CB_VIRT_MEM_AFTER_READ, pcb);
 
+    /*
+    virt_mem_after_write: called after memory is written
+        Arguments:
+            CPUState *env: the current CPU state
+            target_ulong pc: the guest PC doing the write
+            target_ulong addr: the (virtual) address being written
+            target_ulong size: the size of the write
+            void *buf: pointer to the data that was written
+        Return value:
+            unused
+        Notes:
+            You must call panda_enable_memcb() to turn on memory callbacks before this callback will take effect.
+        Signature:
+            int (*virt_mem_after_write)(CPUState *env, target_ulong pc, target_ulong addr, target_ulong size, void *buf);
+    */
+
+    pcb.virt_mem_after_write = mem_write_callback;
+    panda_register_callback(self, PANDA_CB_VIRT_MEM_AFTER_WRITE, pcb);
+    
+    /*
+    virt_mem_after_read: called after memory is read
+        Arguments:
+            CPUState *env: the current CPU state
+            target_ulong pc: the guest PC doing the read
+            target_ulong addr: the (virtual) address being read
+            target_ulong size: the size of the read
+            void *buf: pointer to data just read
+        Return value:
+            unused
+        Notes:
+            You must call panda_enable_memcb() to turn on memory callbacks before this callback will take effect.
+        Signature:
+            int (*virt_mem_after_read)(CPUState *env, target_ulong pc, target_ulong addr, target_ulong size, void *buf);
+    */
+    pcb.virt_mem_after_read = mem_read_callback;
+    panda_register_callback(self, PANDA_CB_VIRT_MEM_AFTER_READ, pcb);
+
+
+    /*
+    after_block_translate: called after the translation of each basic block
+        Arguments:
+            CPUState *env: the current CPU state
+            TranslationBlock *tb: the TB we just translated
+        Return value:
+            unused
+        Signature:
+            int (*after_block_translate)(CPUState *env, TranslationBlock *tb);
+    */
     pcb.after_block_translate = after_block_translate;
     panda_register_callback(self, PANDA_CB_AFTER_BLOCK_TRANSLATE, pcb);
+
+    /*
+    before_block_exec: called before execution of every basic block
+        Arguments:
+            CPUState *env: the current CPU state
+            TranslationBlock *tb: the TB we are about to execute
+        Return value:
+            unused
+        Signature:
+            int (*before_block_exec)(CPUState *env, TranslationBlock *tb);
+    */
     pcb.before_block_exec = before_block_exec;
     panda_register_callback(self, PANDA_CB_BEFORE_BLOCK_EXEC, pcb);
+
+    /*after_block_exec: called after execution of every basic block
+
+    Callback ID: PANDA_CB_AFTER_BLOCK_EXEC
+    Arguments:
+        CPUState *env: the current CPU state
+        TranslationBlock *tb: the TB we just executed
+    Return value:
+        unused
+    Signature::
+        int (*after_block_exec)(CPUState *env, TranslationBlock *tb);
+    */
     pcb.after_block_exec = after_block_exec;
     panda_register_callback(self, PANDA_CB_AFTER_BLOCK_EXEC, pcb);
 
