@@ -2484,6 +2484,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             //      initialize as 0 in coutinuous mode.
             //      or allocate all IPs as tb->size (Non-continuous)
             //  2, fill it during mem_callback, at the same time when we fill gTraceShadowMap
+            //       - Allocate one slot in gPreAllocatedContextBuffer one by one during mem_callback.
             //  --> in this way, we could use the &gCurrentIpVector[slot] (or &(gCurrentTrace->childIPs[slot])) to report as dead context.
             //  This way, the gCurrentTrace->childIPs will be filled in the same pace with gTraceShadowMap.
             //
