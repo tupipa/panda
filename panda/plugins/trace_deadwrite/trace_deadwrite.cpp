@@ -286,6 +286,7 @@ hashVar = hashVar | ((int) key);\
 #define OLD_CTXT (*lastIP)
 #ifndef MULTI_THREADED
 #define CUR_CTXT (&gCurrentIpVector[slot])
+//#define CUR_CTXT (gCurrentContext)
 #else // no MULTI_THREADED
 #define CUR_CTXT (assert( 0 && " NYI"))
 #endif // end of ifndef MULTI_THREADED
@@ -639,6 +640,7 @@ sparse_hash_map<ADDRINT, TraceNode *>::iterator gTraceIter;
 // hash_map<ADDRINT, void *> gTraceShadowMap;
 //Lele: we don't use StartAddr of a trace as key, instead, we use ContextNode's address as key, to store an array, doing the same thing: ---mapping the slots index of each write instruction in a function to its corresponding IP. In order to be compatible with the legacy TraceNode, we use one tracenode to store the array, with StartAddr equal to the ContextNodes' address.
 unordered_map<ADDRINT, void *> gTraceShadowMap;
+unordered_map<ADDRINT, bool> gTraceShadowMapDone;
 TraceNode * gCurrentTrace;
 uint32_t gCurrentSlot;
 
@@ -646,6 +648,7 @@ bool gInitiatedCall = false;
 bool gInitiatedRet = false;
 bool gInitiatedINT = false;
 bool gInitiatedIRET = false;
+bool gNewBasicBlock = false; // tracking new Trace Nodes, and used to update childIPs during mem_callback execution.
 TraceNode ** gCurrentIpVector;
 ADDRINT gCurrentCallerIp;
 
@@ -1173,8 +1176,8 @@ inline VOID ManageCallingContext(CallStack *fstack){
         gCurrentTrace = gTraceIter->second;
         gCurrentIpVector = gCurrentTrace->childIPs;
         //lele: set slot index
-        gCurrentSlot = gCurrentTrace->nSlots;
-        printf("Trace Node exists; set/get current slots:%u\n", gCurrentSlot);
+        // gCurrentSlot = gCurrentTrace->nSlots;
+        // printf("Trace Node exists; set/get current slots:%u\n", gCurrentSlot);
 
      } else {
         //panda: if not in the current context node, this means in a new function and a new context node is created.
@@ -1217,7 +1220,7 @@ inline VOID ManageCallingContext(CallStack *fstack){
         gCurrentTrace = newChild;
         gCurrentIpVector = gCurrentTrace->childIPs;
         //lele: set slot index
-        gCurrentSlot = gCurrentTrace->nSlots;
+        // gCurrentSlot = gCurrentTrace->nSlots;
     }    
 
 //     if(INS_IsProcedureCall(ins) ) {
@@ -1269,7 +1272,7 @@ VOID InitContextTree(){
     ADDRINT  traceAddr = 0;
     uint32_t slot = 0;
     
-    gCurrentSlot = slot;
+    // gCurrentSlot = slot;
     gCurrentCallerIp = 0x0;
     
     // give space to account for nSlots which we record later once we know nWrites
@@ -1757,8 +1760,8 @@ VOID Record8ByteMemWrite(
                 ipZero  == lastIP[1] && ipZero  == lastIP[2] &&
                 ipZero  == lastIP[3] && ipZero  == lastIP[4] &&
                 ipZero  == lastIP[5] && ipZero  == lastIP[6] && ipZero  == lastIP[7] ) {
+                printf("%s: dead all 8\n", __FUNCTION__);
                 REPORT_DEAD(CUR_CTXT, ipZero, myhash, 8);
-                printf("%s, dead all 8\n", __FUNCTION__);
                 // State is already written, so no need to dead write in a tool that detects dead writes
             } else {
                 // slow path 
@@ -2313,105 +2316,6 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 // 	//		rr_get_guest_instr_count(), p.caller,
 // 	//		p.pc);
 
-//         // Also get the full stack here
-//         CallStack f = {0};
-//         f.n = get_callers(f.callers, n_callers, env);
-//         f.pc = p.pc;
-//         f.asid = p.cr3;
-
-
-//        // Print prog point
-// 	// ORDER:
-// 	// W/R	addr callers1 ... callersn pc asid
-//        	fprintf(gTraceFile, "%s\t", (is_write ? "W" : "R"));
-
-//        	fprintf(gTraceFile, TARGET_FMT_lx " ", addr);
-
-//         for (int i = f.n-1; i >= 0; i--) {
-//             fprintf(gTraceFile, TARGET_FMT_lx " ", f.callers[i]);
-//         }
-// 	if (f.n == 0){
-//             fprintf(gTraceFile, "\tno callers\t");
-// 	}
-
-//        	fprintf(gTraceFile, TARGET_FMT_lx " ", f.pc);
-//        	fprintf(gTraceFile, TARGET_FMT_lx " ", f.asid);
-//         // Print strings that matched and how many times
-//         fprintf(gTraceFile, "\n");
-
-//         // call the i-found-a-mem-access-in-asid registered callbacks here
-//         //PPP_RUN_CB(on_trace_mem_asid, env, pc, addr, tofind[str_idx], strlens[str_idx], is_write)
-
-//     }else{
-
-
-// 	//printf("%s\t" TARGET_FMT_lx
-//  	//		"\t %lu \t" TARGET_FMT_lx 
-// 	//		"\t" TARGET_FMT_lx 
-// 	//		"\n",
-//         //    (is_write ? "W" : "R"), addr, 
-// 	//		rr_get_guest_instr_count(), p.caller,
-// 	//		p.pc);
-
-//         // Also get the full stack here
-//         CallStack f = {0};
-//         f.n = get_callers(f.callers, n_callers, env);
-//         f.pc = p.pc;
-//         f.asid = p.cr3;
-
-
-//        // Print prog point
-// 	// ORDER:
-// 	// W/R	addr callers1 ... callersn pc asid
-//        	fprintf(gTraceFile_user, "%s\t", (is_write ? "W" : "R"));
-
-//        	fprintf(gTraceFile_user, TARGET_FMT_lx " ", addr);
-
-//         for (int i = f.n-1; i >= 0; i--) {
-//             fprintf(gTraceFile_user, TARGET_FMT_lx " ", f.callers[i]);
-//         }
-//         if (f.n == 0){
-//                 fprintf(gTraceFile_user, "\tno callers\t");
-//         }
-
-//        	fprintf(gTraceFile_user, TARGET_FMT_lx " ", f.pc);
-//        	fprintf(gTraceFile_user, TARGET_FMT_lx " ", f.asid);
-//         // Print strings that matched and how many times
-//         fprintf(gTraceFile_user, "\n");
-
-
-//         // call the i-found-a-mem-access-in-asid registered callbacks here
-//         //PPP_RUN_CB(on_trace_mem_asid, env, pc, addr, tofind[str_idx], strlens[str_idx], is_write)
-//     }
-
-
-//     for (unsigned int i = 0; i < size; i++) {
-//         uint8_t val = ((uint8_t *)buf)[i];
-//         for(int str_idx = 0; str_idx < num_strings; str_idx++) {
-//             //if (tofind[str_idx][sp.val[str_idx]] == val)
-//             //    sp.val[str_idx]++;
-//             //else
-//             //    sp.val[str_idx] = 0;
-
-//             if (sp.val[str_idx] == strlens[str_idx]) {
-//                 // Victory!
-//                 printf("%s Match of str %d at: instr_count=%lu :  " TARGET_FMT_lx " " TARGET_FMT_lx " " TARGET_FMT_lx "\n",
-//                        (is_write ? "WRITE" : "READ"), str_idx, rr_get_guest_instr_count(), p.caller, p.pc, p.cr3);
-//                 matches[p].val[str_idx]++;
-//                 sp.val[str_idx] = 0;
-
-//                 // Also get the full stack here
-//                 CallStack f = {0};
-//                 f.n = get_callers(f.callers, n_callers, env);
-//                 f.pc = p.pc;
-//                 f.asid = p.cr3;
-//                 matchstacks[p] = f;
-
-
-//             }
-//         }
-//     }
-
 
     //######################################################################################################
     //######################################################################################################
@@ -2459,8 +2363,10 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     //ManageCallingContext(&callstack); //lele: ported from deadspy, May 6, 2017
     
     
-    // uint32_t slot = gCurrentSlot;
-    uint32_t slot=gCurrentTrace->nSlots;
+    uint32_t slot = gCurrentSlot;
+    gCurrentSlot++;
+    // uint32_t slot=gCurrentTrace->nSlots;
+
     // If it is a memory write then count the number of bytes written 
 //#ifndef IP_AND_CCT  
     // //xxx-> IP_AND_CCT uses traces to detect instructions & their write size hence no instruction level counting is needed
@@ -2541,8 +2447,11 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
             // uint32_t slot = gCurrentTrace->nSlots;
 
-            //printf("update ipShadow slot when write detected.\n");
-            // put next slot in corresponding ins start location;
+
+            //update ipShadow slot when write detected
+            // For each Basic block, only update once.
+            // use flag gTraceShadowMapDone[tb->pc] to mark it done at after_block_exe
+
             // first, get the shadowMap and its slot numbers;
             printf("%s: get currentTraceShadowIp from gTraceShadowMap[gCurrentTrace->address]=0x" TARGET_FMT_lx "\n", 
                 __FUNCTION__, gCurrentTrace->address);
@@ -2551,13 +2460,18 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             target_ulong recordedSlots = currentTraceShadowIP[-1]; // present one behind
 
             // second, update slot.
-            currentTraceShadowIP[recordedSlots] = pc;
-            currentTraceShadowIP[-1] ++;
-            gCurrentTrace->nSlots++; 
+            // For each Basic block, only update once.
+            if (gTraceShadowMapDone[gCurrentTrace->address]){
+                printf("%s, No need to update TraceShadowMap with current PC for this block (already done)\n %s\t, pc=" TARGET_FMT_lx ", gCurrentTrace=%p\n",
+                    __FUNCTION__,  __FUNCTION__, pc,gCurrentTrace);
+            }else{
+                currentTraceShadowIP[recordedSlots] = pc;
+                currentTraceShadowIP[-1] ++;
+                gCurrentTrace->nSlots++; 
 
-            printf("%s: new slot created for gCurrentTrace->address: 0x" TARGET_FMT_lx "," TARGET_FMT_lu " (%d)\n", 
-             __FUNCTION__, gCurrentTrace->address, recordedSlots, gCurrentTrace->nSlots);
-
+                printf("%s: new slot created for gCurrentTrace->address: 0x" TARGET_FMT_lx "," TARGET_FMT_lu " (%d)\n", 
+                __FUNCTION__, gCurrentTrace->address, recordedSlots, gCurrentTrace->nSlots);
+            }
             // gCurrentSlot++;
             // gCurrentTrace->nSlots++;
             // printf("new slot created for gCurrentContext->address: " TARGET_FMT_lx ", %u (%u)\n", gCurrentContext->address, gCurrentSlot,gCurrentTrace->nSlots);
@@ -3751,9 +3665,14 @@ before_block_exec: called before execution of every basic block
 **/
 
 // Does necessary work on a trace entry (called during runtime)
-// 1. If landed here due to function call, then go down in CCT.
-// 2. Look up the current trace under the CCT node creating new if if needed.
-// 3. Update global iterators and curXXXX pointers.
+// 1. Look up the current trace under the CCT node creating new if if needed.
+// 2. Update global iterators and curXXXX pointers.
+
+//  lele: should built traceShadowMap after block executed.
+//  In Deadspy: gTraceShadowMap is built during instrumentation. and used here in the instrumentation code.
+//  However, in Panda: we built gTraceShadowMap only when there is a mem write detected in mem_callback.
+//  So , gTraceShadowMap should be built fully after the exe of the block.
+//  So, we need to update TraceNode after block execution.
 
 //inline void InstrumentTraceEntry(ADDRINT currentIp){
 inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
@@ -3778,13 +3697,14 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
         gCurrentTrace = gTraceIter->second;
         gCurrentIpVector = gCurrentTrace->childIPs;
         //lele: set slot index
-        gCurrentSlot = gCurrentTrace->nSlots;
-        printf("Trace Node exists; set/get current slots:%u\n", gCurrentSlot);
+        // gCurrentSlot = gCurrentTrace->nSlots;
+        // printf("Trace Node exists; set/get current slots:%u\n", gCurrentSlot);
 
      } else {
         //panda: if not in the current context node, this means in a new function and a new context node is created.
         
         // Create new trace node and insert under the context node.
+        gNewBasicBlock=true;
         printf(__FUNCTION__);
         printf(": Need to Create new Trace node.\n");
 
@@ -3796,6 +3716,53 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
 
         newChild->address = currentIp;
         printf("\tNew Child: set address as 0x" TARGET_FMT_lx " \n", currentIp);
+
+
+    	target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[currentIp];
+        printf("get currentTraceShadowIp  %p, from gTraceShadowMap[currentIp]\n", currentTraceShadowIP);
+
+        target_ulong recordedSlots = 0; // present one behind
+        if (currentTraceShadowIP){
+            recordedSlots = currentTraceShadowIP[-1]; // present one behind
+        }
+
+        if(recordedSlots >0 ){
+            // slots should be zero, since gTraceShadowMap should not be updated with this Basic Block.
+            printf("%s: WARNING: here slots should be zero here\n",__FUNCTION__);
+        } else {
+            printf("Initialize childTraces[currentIp]...\n");
+            newChild->nSlots = 0;
+            newChild->childIPs = 0;            
+        }    
+        gCurrentContext->childTraces[currentIp] = newChild;
+        gCurrentTrace = newChild;
+        gCurrentIpVector = gCurrentTrace->childIPs;
+        //lele: set slot index
+        // gCurrentSlot = gCurrentTrace->nSlots;
+    }    
+
+}
+
+// Does necessary work on a trace entry (called during runtime)
+// 1. Look up the current trace under the CCT node creating new if if needed.
+// 2. Update global iterators and curXXXX pointers.
+
+//  lele: should built traceShadowMap after block executed.
+//  In Deadspy: gTraceShadowMap is built during instrumentation. and used here in the instrumentation code.
+//  However, in Panda: we built gTraceShadowMap only when there is a mem write detected in mem_callback.
+//  So , gTraceShadowMap should be built fully after the exe of the block.
+//  So, we need to update TraceNode after block execution.
+
+//inline void InstrumentTraceEntry(ADDRINT currentIp){
+inline void UpdateTraceIPs(CPUState *cpu, TranslationBlock *tb){
+
+    printf("%s: tb->pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+
+    target_ulong currentIp=tb->pc;
+    if( (gTraceIter = (gCurrentContext->childTraces).find(currentIp)) != gCurrentContext->childTraces.end()) {
+        //panda: if not in the current context node, this means in a new function and a new context node is created.
+      
+        TraceNode * newChild = gCurrentTrace ;
 
     	target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[currentIp];
         printf("get currentTraceShadowIp  %p, from gTraceShadowMap[currentIp]\n", currentTraceShadowIP);
@@ -3821,54 +3788,19 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
                 newChild->childIPs[i] = newChild;
             }
         } else {
-            printf("No record slots read\n");
+            printf("%s: No record slots for block pc:c=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
             newChild->nSlots = 0;
             newChild->childIPs = 0;            
         }    
-        gCurrentContext->childTraces[currentIp] = newChild;
-        gCurrentTrace = newChild;
+
         gCurrentIpVector = gCurrentTrace->childIPs;
-        //lele: set slot index
-        gCurrentSlot = gCurrentTrace->nSlots;
+
+     } else {
+        printf("%s: ERROR: childTrace for BasicBlock 0x" TARGET_FMT_lx " was not created\n", 
+            __FUNCTION__, tb->pc);
     }    
-//####################################################################################
-// Original version from deadspy:
-
-//     // Check if a trace node with currentIp already exists under this context node
-//     if( (gTraceIter = (gCurrentContext->childTraces).find(currentIp)) != gCurrentContext->childTraces.end()) {
-//         gCurrentTrace = gTraceIter->second;
-//         gCurrentIpVector = gCurrentTrace->childIPs;
-//     } else {
-//         // Create new trace node and insert under the context node.
-        
-//         TraceNode * newChild = new TraceNode();
-//         newChild->parent = gCurrentContext;
-//         newChild->address = currentIp;
-//     	uint64_t * currentTraceShadowIP = (uint64_t *) gTraceShadowMap[currentIp];
-//         uint64_t recordedSlots = currentTraceShadowIP[-1]; // present one behind
-//         if(recordedSlots){
-// #ifdef CONTINUOUS_DEADINFO
-//             // if CONTINUOUS_DEADINFO is set, then all ip vecs come from a fixed 4GB buffer
-//             newChild->childIPs  = (TraceNode **)GetNextIPVecBuffer(recordedSlots);
-// #else            //no CONTINUOUS_DEADINFO
-//             newChild->childIPs = (TraceNode **) malloc( (recordedSlots) * sizeof(TraceNode **) );
-// #endif //end CONTINUOUS_DEADINFO
-//             newChild->nSlots = recordedSlots;
-//             //cerr<<"\n***:"<<recordedSlots; 
-//             for(uint32_t i = 0 ; i < recordedSlots ; i++) {
-//                 newChild->childIPs[i] = newChild;
-//             }
-//         } else {
-//             newChild->nSlots = 0;
-//             newChild->childIPs = 0;            
-//         }          
-        
-//         gCurrentContext->childTraces[currentIp] = newChild;
-//         gCurrentTrace = newChild;
-//         gCurrentIpVector = gCurrentTrace->childIPs;
-//     }
-
 }
+
 
 /*
 //Refer  
@@ -3961,10 +3893,10 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
         printf("%s: go down to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
         
     }
-        
+
 
     // Refer: InstrumentTrace() TODO
-        //InstrumentTraceEntry() -> UpdateDataOnFunctionEntry() -> GoDownCallChain(cpu,tb);
+    //InstrumentTraceEntry() -> UpdateDataOnFunctionEntry() -> GoDownCallChain(cpu,tb);
 
     InstrumentTraceEntry(cpu, tb);
 
@@ -3973,6 +3905,23 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
 
 
 int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
+
+    //  lele: should update Trace IPs after block executed.
+    //  In Deadspy: gTraceShadowMap is built during instrumentation. and used here in the instrumentation code.
+    //  However, in Panda: we built gTraceShadowMap only when there is a mem write detected in mem_callback.
+    //  So , gTraceShadowMap should be built fully after the exe of the block.
+    //  So, we need to update TraceNode after block execution.
+
+    // Refer: InstrumentTrace() TODO
+    //InstrumentTraceEntry() -> UpdateDataOnFunctionEntry() -> GoDownCallChain(cpu,tb);
+    if (gNewBasicBlock){ // only update ChildIPs for one time for each Basic Block.
+        gNewBasicBlock=false;
+        UpdateTraceIPs(cpu,tb);
+    }
+
+    // reset slot index, so that in next basic block, we count mem R/W from the begining.
+    gCurrentSlot = 0;
+
     // Lele: after block executed. PC would point to the new function if tb has a call instruction at last.
     //
     printf("--- Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
@@ -3990,7 +3939,6 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
         printf("%s: iret detected, set InitiatedIRET flag\n", __FUNCTION__);
         gInitiatedRet=true;
     }
-
     return 1;
 }
 
