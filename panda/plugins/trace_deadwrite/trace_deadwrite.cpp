@@ -2473,6 +2473,8 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
         // second, update slot pc in gTraceShadowMap.
         // For each Basic block, only update once.
+        // Also, if gTraceShadowMapDone is true for that basic block, then Trace->childIPs should also be set during 
+        //  initialization.
         if (gTraceShadowMapDone[gCurrentTrace->address]){
             printf("%s: No need to update TraceShadowMap with current PC for this block (already done)\n",
                 __FUNCTION__);
@@ -3714,11 +3716,15 @@ before_block_exec: called before execution of every basic block
 // 1. Look up the current trace under the CCT node creating new if if needed.
 // 2. Update global iterators and curXXXX pointers.
 
-//  lele: should built traceShadowMap after block executed.
-//  In Deadspy: gTraceShadowMap is built during instrumentation. and used here in the instrumentation code.
-//  However, in Panda: we built gTraceShadowMap only when there is a mem write detected in mem_callback.
-//  So , gTraceShadowMap should be built fully after the exe of the block.
-//  So, we need to update TraceNode after block execution.
+//Lele:  split gTraceShadowMap creating and TraceNode creating:
+    
+//         - a new TraceNode didn't require a new gTraceShadowMap of a basic block:
+//         A basic block should have only one area stored in gTraceShadowMap, but could have multiple
+//         TraceNodes stored under different ContextNode.
+    
+//         - InstrumentTraceEntry(): According flag gTraceShadowMapDone[tb->pc] to determine whether
+//         There is already a gTraceShadowMap built for a basic block;
+
 
 //inline void InstrumentTraceEntry(ADDRINT currentIp){
 inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
@@ -3783,41 +3789,7 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
 
      } else {
         //panda: if not in the current context node,  a new BasicBlock(trace) node is created.
-        
-        // // create the gTraceShadowMap and TraceNode at the same time, initialized here but filled at mem_callback
-
-        // // ##############################################
-        // // step 1/3, set new basic block flag; used in after block exe to set gShadowMap as done.
-        // gNewBasicBlock=true;
-
-        // // #############################################
-        // // step 2/3, create and initial gTraceShadowMap()
-        // //Refer: PopulateIPReverseMapAndAccountTraceInstructions()
-        // // - PopulateIPReverseMapAndAccountTraceInstructions(): 
-        // //     - Instruction() -> ManageCallingContext() on every Instruction in 
-        // //         - GoUpCallChain
-        // //     - build ipShadow before code run. (Allocated here but filled during run. (mem_callback, have size and R/W)
-        // //     - get write size and insert statement InstructionContributionOfBBL2Byte to count total write size.(mem_callback, have size and R/W)
-        // printf("%s: create and initial gTraceShadowMap\n", __FUNCTION__);
-
-        // uint32_t traceSize = tb->size;    
-        // ADDRINT * ipShadow = (ADDRINT * )malloc( (1 + traceSize) * sizeof(ADDRINT)); // +1 to hold the number of slots as a metadata
-        // ADDRINT  traceAddr = tb->pc;
-        // uint32_t slot = 0;
-        
-        // // give space to account for nSlots which we record later once we know nWrites
-        // ADDRINT * pNumWrites = ipShadow;
-        // ipShadow ++;
-        
-        // gTraceShadowMap[traceAddr] = ipShadow ;
-
-        // *pNumWrites = slot;
-
-        // printf("%s: reset gCurrentSlot as 0\n", __FUNCTION__);
-        // gCurrentSlot = slot;
-
-        // ###################################################
-        // step 3/3, create and initial new TraceNode.
+        // create and initial new TraceNode.
         // Create new trace node and insert under the context node.
         printf("%s: Create and initialize a new Trace node.\n",__FUNCTION__);
 
@@ -3837,9 +3809,20 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
         }
 
         if(recordedSlots >0 ){
-            // slots should be zero, since gTraceShadowMap should not be updated with this Basic Block.
-            printf("%s: ERROR: here slots should be zero here\n",__FUNCTION__);
-            exit(-1);
+            if (gTraceShadowMapDone[tb->pc]){
+                // if CONTINUOUS_DEADINFO is set, then all ip vecs come from a fixed 4GB buffer
+                printf("%s: create a new TraceNode with old BaiscBlock\n", __FUNCTION__);
+                newChild->childIPs  = (TraceNode **)GetNextIPVecBuffer(recordedSlots);
+                newChild->nSlots = recordedSlots;
+                //cerr<<"\n***:"<<recordedSlots; 
+                for(uint32_t i = 0 ; i < recordedSlots ; i++) {
+                    newChild->childIPs[i] = newChild;
+                }
+            }else{
+                printf("%s: something wrong here, gTraceShadowMapDone should be true.\n", __FUNCTION__);
+                exit(-1);
+            }
+                
         } else {
 
             printf("%s: Initialize gCurrentTrace->childIPs with max size tb->size...\n", __FUNCTION__);
@@ -3861,11 +3844,12 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
         gCurrentContext->childTraces[currentIp] = newChild;
         gCurrentTrace = newChild;
 
-        printf("%s, check gCurrentTrace->childIPs == 0\n", __FUNCTION__);
-        if ( ! gCurrentTrace->childIPs == 0 ) {
-            printf("%s: ERROR: gCurrentTrace->childIPs should be 0 here\n", __FUNCTION__);
-            exit(-1);
-        }
+        // lele: now no need to check ==0 when we reuse a basic block's gTraceShadowMap.
+        // printf("%s, check gCurrentTrace->childIPs == 0\n", __FUNCTION__);
+        // if ( ! gCurrentTrace->childIPs == 0 ) {
+        //     printf("%s: ERROR: gCurrentTrace->childIPs should be 0 here\n", __FUNCTION__);
+        //     exit(-1);
+        // }
 
          gCurrentSlot = 0;
 
