@@ -871,8 +871,11 @@ VOID GoDownCallChain(CPUState *cpu, TranslationBlock *tb){
 inline VOID GoUpCallChain(){
 #ifdef IP_AND_CCT
     //assert(gCurrentContext->parent && "NULL PARENT CTXT");
-    
-    if (gCurrentContext->parent == gRootContext) {
+    if (gCurrentContext == gRootContext){
+        printf("%s: WARNING: RootContext got a return\n", __FUNCTION__);
+        printf("%s: don't change context node.\n",__FUNCTION__);
+        return;
+    }else if (gCurrentContext->parent == gRootContext) {
         // gInitiatedCall = true;//lele: why?
         printf("lele: ret to root context node\n");
     }
