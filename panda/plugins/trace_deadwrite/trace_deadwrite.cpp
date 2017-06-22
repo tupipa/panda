@@ -2479,7 +2479,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
             printf("%s: now check gCurrentIpVector\n", __FUNCTION__);
             if(gCurrentIpVector[slot] != gCurrentTrace){
-                printf("%s: ERROR: should set gCurrentIpVector[slot] != gCurrentTrace.\n");
+                printf("%s: ERROR: should set gCurrentIpVector[slot] != gCurrentTrace.\n", __FUNCTION__);
             }
         }else{
             currentTraceShadowIP[recordedSlots] = pc;
@@ -3806,6 +3806,7 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
         }    
         gCurrentContext->childTraces[currentIp] = newChild;
         gCurrentTrace = newChild;
+        gTraceShadowMapDone[currentIp]=false;
 
         // gCurrentIpVector = gCurrentTrace->childIPs;
         //lele: set slot index
