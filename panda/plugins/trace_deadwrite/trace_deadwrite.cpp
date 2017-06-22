@@ -2504,7 +2504,8 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
                 printf("%s: now in first R/W of a new trace\n", __FUNCTION__);
                 gCurrentTrace->childIPs = (TraceNode **)GetNextIPVecBuffer(1);
 
-                printf("%s: reset gCurrentIpVector pointing to the new Trace->childIPs\n", __FUNCTION__);
+                printf("%s: reset gCurrentIpVector pointing to %p, for tb->pc: " TARGET_FMT_lx " \n",
+                    __FUNCTION__, gCurrentTrace->childIPs, gCurrentTrace->address);
                 gCurrentIpVector = gCurrentTrace->childIPs;
 
             }else{
@@ -3852,6 +3853,8 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
         // }
 
         gCurrentSlot = 0;
+        printf("%s: set gCurrentIpVector pointed to " TARGET_FMT_lx ", for tb->pc: 0x" TARGET_FMT_lx "\n",
+            __FUNCTION__, tb->pc, gCurrentTrace->childIPs);
         gCurrentIpVector = gCurrentTrace->childIPs; // 0 if new basic block, non-zero if reused basic block.
         //lele: set slot index
         // gCurrentSlot = gCurrentTrace->nSlots;
