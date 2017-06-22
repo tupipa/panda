@@ -318,8 +318,8 @@ DeadMap.insert(std::pair<uint64_t, uint64_t>(hashVar,size)); \
 } else {    \
 (gDeadMapIt->second) += size;    \
 }   \
-printf("%s:continuous: report one dead (%p, %p, %d)\n", \
-      __FUNCTION__, curCtxt,lastCtxt, size); \
+printf("%s:continuous: report one dead (&gCurrentIpVector[%d]:%p, %p, %d)\n", \
+      __FUNCTION__, slot, curCtxt,lastCtxt, size); \
 }while(0)
 
 #else // no defined(CONTINUOUS_DEADINFO)
@@ -2366,8 +2366,11 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     //ManageCallingContext(&callstack); //lele: ported from deadspy, May 6, 2017
     
     
-    uint32_t slot = gCurrentSlot;
-    gCurrentSlot++;
+    uint32_t slot = 0; // only used for write op. Set to gCurrentSlot when this is write.
+
+    if (is_write){
+    }
+
     // uint32_t slot=gCurrentTrace->nSlots;
 
     // If it is a memory write then count the number of bytes written 
@@ -2439,68 +2442,70 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
         // UINT32 refSize = INS_MemoryOperandSize(ins, memOp);
 
-        target_ulong refSize = size;
-        if (! is_write){
-            printf("%s: record read pc: %p, addr: %p (%d bytes).\n",
-                __FUNCTION__, (void*)(uintptr_t)pc , (void *)(uintptr_t)addr, (int)size);
+    target_ulong refSize = size;
+    if (! is_write){
+        printf("%s: record read pc: %p, addr: %p (%d bytes).\n",
+            __FUNCTION__, (void*)(uintptr_t)pc , (void *)(uintptr_t)addr, (int)size);
+    }else{
+
+        printf("%s: record write pc: %p, addr: %p (%d bytes).\n",
+            __FUNCTION__, (void*)(uintptr_t)pc, (void *)(uintptr_t)addr, (int)size);
+
+        // uint32_t slot = gCurrentTrace->nSlots;
+
+        slot = gCurrentSlot; // only used for write op.
+        gCurrentSlot++; // increase gCurrentSlot index for next use.
+
+        //update ipShadow slot when write detected
+        // For each Basic block, only update once.
+        // use flag gTraceShadowMapDone[tb->pc] to mark it done at after_block_exe
+
+        // first, get the shadowMap and its slot numbers;
+        printf("%s: get currentTraceShadowIp from gTraceShadowMap[gCurrentTrace->address]=0x" TARGET_FMT_lx "\n", 
+            __FUNCTION__, gCurrentTrace->address);
+        target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[gCurrentTrace->address];
+        printf("%s: get recordedSlots from currentTraceShadowIP[-1] %p\n", __FUNCTION__,currentTraceShadowIP);
+        target_ulong recordedSlots = currentTraceShadowIP[-1]; // present one behind
+
+        // second, update slot pc in gTraceShadowMap.
+        // For each Basic block, only update once.
+        if (gTraceShadowMapDone[gCurrentTrace->address]){
+            printf("%s, No need to update TraceShadowMap with current PC for this block (already done)\n %s\t, pc=" TARGET_FMT_lx ", gCurrentTrace=%p\n",
+                __FUNCTION__,  __FUNCTION__, pc,gCurrentTrace);
         }else{
+            currentTraceShadowIP[recordedSlots] = pc;
+            currentTraceShadowIP[-1] ++;
+            gCurrentTrace->nSlots++; 
 
-            printf("%s: record write pc: %p, addr: %p (%d bytes).\n",
-                __FUNCTION__, (void*)(uintptr_t)pc, (void *)(uintptr_t)addr, (int)size);
-
-            // uint32_t slot = gCurrentTrace->nSlots;
-
-
-            //update ipShadow slot when write detected
-            // For each Basic block, only update once.
-            // use flag gTraceShadowMapDone[tb->pc] to mark it done at after_block_exe
-
-            // first, get the shadowMap and its slot numbers;
-            printf("%s: get currentTraceShadowIp from gTraceShadowMap[gCurrentTrace->address]=0x" TARGET_FMT_lx "\n", 
-                __FUNCTION__, gCurrentTrace->address);
-            target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[gCurrentTrace->address];
-            printf("%s: get recordedSlots from currentTraceShadowIP[-1] %p\n", __FUNCTION__,currentTraceShadowIP);
-            target_ulong recordedSlots = currentTraceShadowIP[-1]; // present one behind
-
-            // second, update slot.
-            // For each Basic block, only update once.
-            if (gTraceShadowMapDone[gCurrentTrace->address]){
-                printf("%s, No need to update TraceShadowMap with current PC for this block (already done)\n %s\t, pc=" TARGET_FMT_lx ", gCurrentTrace=%p\n",
-                    __FUNCTION__,  __FUNCTION__, pc,gCurrentTrace);
-            }else{
-                currentTraceShadowIP[recordedSlots] = pc;
-                currentTraceShadowIP[-1] ++;
-                gCurrentTrace->nSlots++; 
-
-                printf("%s: new slot created for gCurrentTrace->address: 0x" TARGET_FMT_lx "," TARGET_FMT_lu " (%d)\n", 
-                __FUNCTION__, gCurrentTrace->address, recordedSlots, gCurrentTrace->nSlots);
-            }
-            // gCurrentSlot++;
-            // gCurrentTrace->nSlots++;
-            // printf("new slot created for gCurrentContext->address: " TARGET_FMT_lx ", %u (%u)\n", gCurrentContext->address, gCurrentSlot,gCurrentTrace->nSlots);
-
-
-
-        	//target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[gCurrentContext->address];
-            //printf("set recordedSlots of currentTraceShadowIP[-1] %p to %u\n", currentTraceShadowIP, gCurrentSlot);
-            //target_ulong recordedSlots = currentTraceShadowIP[-1]; // 
-            //currentTraceShadowIP[-1] = gCurrentSlot; // 
-
+            printf("%s: new slot created for gCurrentTrace->address: 0x" TARGET_FMT_lx "," TARGET_FMT_lu " (%d)\n", 
+            __FUNCTION__, gCurrentTrace->address, recordedSlots, gCurrentTrace->nSlots);
         }
-        
-        switch(refSize){
-            case 1:{
-                // if (INS_MemoryOperandIsRead(ins, memOp)) {
-                    
-                if (! is_write) {
-                    Record1ByteMemRead((VOID *)(uintptr_t)addr);                        
-                }
-                else {
-                    Record1ByteMemWrite(
+        // gCurrentSlot++;
+        // gCurrentTrace->nSlots++;
+        // printf("new slot created for gCurrentContext->address: " TARGET_FMT_lx ", %u (%u)\n", gCurrentContext->address, gCurrentSlot,gCurrentTrace->nSlots);
+
+
+
+        //target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[gCurrentContext->address];
+        //printf("set recordedSlots of currentTraceShadowIP[-1] %p to %u\n", currentTraceShadowIP, gCurrentSlot);
+        //target_ulong recordedSlots = currentTraceShadowIP[-1]; // 
+        //currentTraceShadowIP[-1] = gCurrentSlot; // 
+
+    }
+    
+    switch(refSize){
+        case 1:{
+            // if (INS_MemoryOperandIsRead(ins, memOp)) {
+                
+            if (! is_write) {
+                Record1ByteMemRead((VOID *)(uintptr_t)addr);                        
+            }
+            else {
+                Record1ByteMemWrite(
 #ifdef IP_AND_CCT
-                        slot,
+                    slot,
 #endif
-                        (VOID *)(uintptr_t)addr);                    
+                    (VOID *)(uintptr_t)addr);                    
 //                     INS_InsertPredicatedCall(ins, IPOINT_BEFORE,
 //                                                 (AFUNPTR) Record1ByteMemWrite,
 // #ifdef IP_AND_CCT
@@ -2508,31 +2513,31 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 // #endif
 //                                                 IARG_MEMORYOP_EA,
 //                                                 memOp, IARG_END);
-                    
-                }
-            }
-                break;
                 
-            case 2:{
-                       
-                if (! is_write) {
-                    Record2ByteMemRead((VOID *)(uintptr_t)addr);                        
-                }
-                else {
-                    Record2ByteMemWrite(
-#ifdef IP_AND_CCT
-                        slot,
-#endif
-                        (VOID *)(uintptr_t)addr);                }
             }
+        }
+            break;
+            
+        case 2:{
                     
+            if (! is_write) {
+                Record2ByteMemRead((VOID *)(uintptr_t)addr);                        
+            }
+            else {
+                Record2ByteMemWrite(
+#ifdef IP_AND_CCT
+                    slot,
+#endif
+                    (VOID *)(uintptr_t)addr);                }
+        }
+                
 //                 if (INS_MemoryOperandIsRead(ins, memOp)) {
-                    
+                
 //                     INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR) Record2ByteMemRead, IARG_MEMORYOP_EA, memOp, IARG_END);
-                    
+                
 //                 }
 //                 if (INS_MemoryOperandIsWritten(ins, memOp)) {   
-                    
+                
 //                     INS_InsertPredicatedCall(ins, IPOINT_BEFORE,
 //                                                 (AFUNPTR) Record2ByteMemWrite, 
 // #ifdef IP_AND_CCT
@@ -2540,117 +2545,117 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 // #endif
 //                                                 IARG_MEMORYOP_EA,
 //                                                 memOp, IARG_END);
-                    
+                
 //                 }
-            // }
-                break;
-                
-            case 4:{
-                       
-                if (! is_write) {
-                    Record4ByteMemRead((VOID *)(uintptr_t)addr);                        
-                }
-                else {
-                    Record4ByteMemWrite(
-#ifdef IP_AND_CCT
-                        slot,
-#endif
-                        (VOID *)(uintptr_t)addr);                }
+        // }
+            break;
+            
+        case 4:{
+                    
+            if (! is_write) {
+                Record4ByteMemRead((VOID *)(uintptr_t)addr);                        
             }
-                break;
-                
-            case 8:{
-                       
-                if (! is_write) {
-                    Record8ByteMemRead((VOID *)(uintptr_t)addr);                        
-                }
-                else {
-                    Record8ByteMemWrite(
+            else {
+                Record4ByteMemWrite(
 #ifdef IP_AND_CCT
-                        slot,
+                    slot,
 #endif
-                        (VOID *)(uintptr_t)addr);                }
+                    (VOID *)(uintptr_t)addr);                }
+        }
+            break;
+            
+        case 8:{
+                    
+            if (! is_write) {
+                Record8ByteMemRead((VOID *)(uintptr_t)addr);                        
             }
-                break;
-                
-            case 10:{
-                if (! is_write) {
-                    Record10ByteMemRead((VOID *)(uintptr_t)addr);                        
-                }
-                else {
-                    Record10ByteMemWrite(
+            else {
+                Record8ByteMemWrite(
 #ifdef IP_AND_CCT
-                        slot,
+                    slot,
 #endif
-                        (VOID *)(uintptr_t)addr);                }
-               
+                    (VOID *)(uintptr_t)addr);                }
+        }
+            break;
+            
+        case 10:{
+            if (! is_write) {
+                Record10ByteMemRead((VOID *)(uintptr_t)addr);                        
             }
-                break;
-                
-            case 16:{ // SORRY! XMM regs use 16 bits :((
+            else {
+                Record10ByteMemWrite(
+#ifdef IP_AND_CCT
+                    slot,
+#endif
+                    (VOID *)(uintptr_t)addr);                }
+            
+        }
+            break;
+            
+        case 16:{ // SORRY! XMM regs use 16 bits :((
 //                 if (INS_MemoryOperandIsRead(ins, memOp)) {
-                    
+                
 //                     INS_InsertPredicatedCall(ins, IPOINT_BEFORE,(AFUNPTR) Record16ByteMemRead, IARG_MEMORYOP_EA, memOp, IARG_END);
-                    
+                
 //                 }
 //                 if (INS_MemoryOperandIsWritten(ins, memOp)) {
-                    
+                
 //                     INS_InsertPredicatedCall(ins, IPOINT_BEFORE,
 //                                                 (AFUNPTR) Record16ByteMemWrite,
 // #ifdef IP_AND_CCT
 //                                                 IARG_UINT32, slot,
 // #endif
 //                                                 IARG_MEMORYOP_EA,memOp, IARG_END);
-                    
+                
 //                 }
 
-                if (! is_write) {
-                    Record16ByteMemRead((VOID *)(uintptr_t)addr);                        
-                }
-                else {
-                    Record16ByteMemWrite(
-#ifdef IP_AND_CCT
-                        slot,
-#endif
-                        (VOID *)(uintptr_t)addr);                }
+            if (! is_write) {
+                Record16ByteMemRead((VOID *)(uintptr_t)addr);                        
             }
-                break;
-                
-            default: {
-                // seeing some stupid 10, 16, 512 (fxsave)byte operations. Suspecting REP-instructions.
+            else {
+                Record16ByteMemWrite(
+#ifdef IP_AND_CCT
+                    slot,
+#endif
+                    (VOID *)(uintptr_t)addr);                }
+        }
+            break;
+            
+        default: {
+            // seeing some stupid 10, 16, 512 (fxsave)byte operations. Suspecting REP-instructions.
 //                 if (INS_MemoryOperandIsRead(ins, memOp)) {
-                    
+                
 //                     INS_InsertPredicatedCall(ins, IPOINT_BEFORE,(AFUNPTR) RecordLargeMemRead, IARG_MEMORYOP_EA, memOp, IARG_MEMORYREAD_SIZE, IARG_END);
-                    
+                
 //                 }
 //                 if (INS_MemoryOperandIsWritten(ins, memOp)) {
-                    
+                
 //                     INS_InsertPredicatedCall(ins, IPOINT_BEFORE,
 //                                                 (AFUNPTR) RecordLargeMemWrite,
 // #ifdef IP_AND_CCT
 //                                                 IARG_UINT32, slot,
 // #endif
 //                                                 IARG_MEMORYOP_EA,memOp, IARG_MEMORYWRITE_SIZE, IARG_END);
-                    
+                
 //                 }
 
-                if (! is_write) {
-                    RecordLargeMemRead((VOID *)(uintptr_t)addr,size);                        
-                }
-                else {
-                    RecordLargeMemWrite(
-#ifdef IP_AND_CCT
-                        slot,
-#endif
-                       (VOID *)(uintptr_t)addr, size);
-                }
+            if (! is_write) {
+                RecordLargeMemRead((VOID *)(uintptr_t)addr,size);                        
             }
-                break;
-                //assert( 0 && "BAD refSize");
-                
+            else {
+                RecordLargeMemWrite(
+#ifdef IP_AND_CCT
+                    slot,
+#endif
+                    (VOID *)(uintptr_t)addr, size);
+            }
         }
-    // }
-    
+            break;
+            //assert( 0 && "BAD refSize");
+            
+    }
+// }
+
 #ifdef MULTI_THREADED
     // Support for MT
     // release the lock if we had taken it
@@ -3746,11 +3751,8 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
 
 }
 
-// Does necessary work on a trace entry (called during runtime)
-// 1. Look up the current trace under the CCT node creating new if if needed.
-// 2. Update global iterators and curXXXX pointers.
 
-//  lele: should built traceShadowMap after block executed.
+//  lele: now after block executed, we should have traceShadowMap built fully. Then we could use this to update Trace IPs. One TraceNode for a new block.
 //  In Deadspy: gTraceShadowMap is built during instrumentation. and used here in the instrumentation code.
 //  However, in Panda: we built gTraceShadowMap only when there is a mem write detected in mem_callback.
 //  So , gTraceShadowMap should be built fully after the exe of the block.
@@ -3774,6 +3776,9 @@ inline void UpdateTraceIPs(CPUState *cpu, TranslationBlock *tb){
         if (currentTraceShadowIP){
             recordedSlots = currentTraceShadowIP[-1]; // present one behind
             printf("get recordedSlots=" TARGET_FMT_lu ", from currentTraceShadowIP[-1]\n", recordedSlots);
+        }else{
+            printf("%s: ERROR: no gTraceShadowMap for 0x" TARGET_FMT_lx "\n", __FUNCTION__, currentIp);
+            exit(-1);
         }
         if(recordedSlots >0 ){
             printf("Record Slots: " TARGET_FMT_lu "\n", recordedSlots);
@@ -3782,20 +3787,21 @@ inline void UpdateTraceIPs(CPUState *cpu, TranslationBlock *tb){
             printf("Continuous Info: GetNextIPVecBuffer...\n");
             newChild->childIPs  = (TraceNode **)GetNextIPVecBuffer(recordedSlots);
 #else            //no CONTINUOUS_DEADINFO
-            printf("NON Continuous Info: malloc new TraceNode**\n");
+            printf("Non-Continuous Info: malloc new TraceNode**\n");
             newChild->childIPs = (TraceNode **) malloc( (recordedSlots) * sizeof(TraceNode **) );
 #endif //end CONTINUOUS_DEADINFO
             newChild->nSlots = recordedSlots;
             //cerr<<"\n***:"<<recordedSlots; 
             for(uint32_t i = 0 ; i < recordedSlots ; i++) {
                 newChild->childIPs[i] = newChild;
+                printf("%s: &newChild->childIPs[%d]: %p", __FUNCTION__, i, &newChild->childIPs[i]);
+                printf("%s: &gCurrentTrace->childIPs[%d]: %p", __FUNCTION__, i, &gCurrentTrace->childIPs[i]);
             }
         } else {
             printf("%s: No record slots for block pc:c=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
             newChild->nSlots = 0;
             newChild->childIPs = 0;            
         }    
-
         gCurrentIpVector = gCurrentTrace->childIPs;
 
      } else {
@@ -3928,6 +3934,7 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
         printf("%s: mark gTraceShadowMap as done for this block\n", __FUNCTION__);
         gTraceShadowMapDone[tb->pc]=true;
 
+        printf("%s: update TraceNode IPs with the gTraceShadowMap\n", __FUNCTION__);
         UpdateTraceIPs(cpu,tb);
     }
 
