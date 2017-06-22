@@ -2993,11 +2993,11 @@ inline target_ulong GetMeasurementBaseCount(){
         for (; mapIt != DeadMap.end(); mapIt++) {
             MergedDeadInfo tmpMergedDeadInfo;
             uint64_t hash = mapIt->first;
-	    printf("%s: get one dead info: 0x%lx\n", __FUNCTION__, hash);
+	        printf("%s: read one dead info: 0x%lx\n", __FUNCTION__, hash);
             TraceNode ** ctxt1 = (TraceNode **)(gPreAllocatedContextBuffer + (hash >> 32));
-            printf("get ctxt1: %p\n", ctxt1);
-	    TraceNode ** ctxt2 = (TraceNode **)(gPreAllocatedContextBuffer + (hash & 0xffffffff));
-            printf("get ctxt2: %p\n", ctxt2);
+            printf("get ctxt1: %p, *ctxt1: %p\n", ctxt1, *ctxt1);
+	        TraceNode ** ctxt2 = (TraceNode **)(gPreAllocatedContextBuffer + (hash & 0xffffffff));
+            printf("get ctxt2: %p, *ctxt2: %p\n", ctxt2, *ctxt2);
             
             tmpMergedDeadInfo.context1 = (*ctxt1)->parent;
 	    printf("get context1: %p\n", tmpMergedDeadInfo.context1);
