@@ -2476,9 +2476,15 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
         if (gTraceShadowMapDone[gCurrentTrace->address]){
             printf("%s, No need to update TraceShadowMap with current PC for this block (already done)\n %s\t, pc=" TARGET_FMT_lx ", gCurrentTrace=%p\n",
                 __FUNCTION__,  __FUNCTION__, pc,gCurrentTrace);
+
+            printf("%s: now check gCurrentIpVector\n", __FUNCTION__);
+            if(gCurrentIpVector[slot] != gCurrentTrace){
+                printf("%s: ERROR: should set gCurrentIpVector[slot] != gCurrentTrace.\n");
+            }
         }else{
             currentTraceShadowIP[recordedSlots] = pc;
             currentTraceShadowIP[-1] ++;
+            gCurrentTrace->nSlots++; 
 
 
             // UpdateTraceIPs is splited into two steps:
@@ -2491,7 +2497,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             //  This way, the gCurrentTrace->childIPs will be filled in the same pace with gTraceShadowMap.
             //
             // Update gTrace->childIPs and -> nSlots by this new slot
-            if (gCurrentTrace->nSlots == 0){
+            if (gCurrentTrace->childIPs == 0){
                 // for first slot, also set childIPs.
                 gCurrentTrace->childIPs = (TraceNode **)GetNextIPVecBuffer(1);
                 gCurrentIpVector = gCurrentTrace->childIPs;
@@ -2505,19 +2511,22 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             gCurrentTrace->childIPs[recordedSlots] = gCurrentTrace;
             printf("%s: add one Slot in gCurrentTrace &gCurrentTrace->childIPs[%d]: %p\n", 
                 __FUNCTION__, (int)recordedSlots, &gCurrentTrace->childIPs[recordedSlots]);
+
+            printf("%s: new slot created for gCurrentTrace->address: 0x" TARGET_FMT_lx "," TARGET_FMT_lu " (%d)\n", 
+            __FUNCTION__, gCurrentTrace->address, recordedSlots, gCurrentTrace->nSlots);
+
             //also check IPVecBuffer:
+            printf("%s: checking gPreAllocatedContextBuffer[gCurPreAllocatedContextBufferIndex-1]\n",__FUNCTION__);
             if (gPreAllocatedContextBuffer[gCurPreAllocatedContextBufferIndex-1] != gCurrentTrace){
                 printf("%s: ERROR: gPreAllocatedContextBuffer[gCurPreAllocatedContextBufferIndex-1] != gCurrentTrace",
                     __FUNCTION__);
             }
+            printf("%s: checking gCurrentIpVector[recordedSlots]\n",__FUNCTION__);
             if (gCurrentIpVector[recordedSlots] != gCurrentTrace){
                 printf("%s: ERROR: gCurrentIpVector[recordedSlots] != gCurrentTrace",
                     __FUNCTION__);
             }
-            gCurrentTrace->nSlots++; 
 
-            printf("%s: new slot created for gCurrentTrace->address: 0x" TARGET_FMT_lx "," TARGET_FMT_lu " (%d)\n", 
-            __FUNCTION__, gCurrentTrace->address, recordedSlots, gCurrentTrace->nSlots);
         }
         // gCurrentSlot++;
         // gCurrentTrace->nSlots++;
@@ -3797,9 +3806,13 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
         }    
         gCurrentContext->childTraces[currentIp] = newChild;
         gCurrentTrace = newChild;
+
+        // gCurrentIpVector = gCurrentTrace->childIPs;
         //lele: set slot index
         // gCurrentSlot = gCurrentTrace->nSlots;
     }    
+
+
 
 }
 
