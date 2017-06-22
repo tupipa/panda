@@ -3615,7 +3615,7 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     printf("--- Now in %s: pc=0x" TARGET_FMT_lx "\n",__FUNCTION__ , tb->pc);
     
     //Lele: check asid.
-    target_ulong asid_cur = panda_current_asid(env);
+    target_ulong asid_cur = panda_current_asid(cpu);
     if (gTraceOne){
         if (asid_cur != gCurrentASID){
             printf("%s: ignore ASID " TARGET_FMT_lx , __FUNCTION__, asid_cur);
@@ -3653,7 +3653,7 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     call_cache[tb->pc] = disas_block(env, tb->pc, tb->size);
 
     // detect the last instruction type
-    
+
     instr_type tb_type = call_cache[tb->pc];
     if (tb_type == INSTR_CALL) {
         // track the function that gets called
@@ -3896,7 +3896,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     printf("--- Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
 
     //Lele: check asid.
-    target_ulong asid_cur = panda_current_asid(env);
+    target_ulong asid_cur = panda_current_asid(cpu);
     if (gTraceOne){
         if (asid_cur != gCurrentASID){
             printf("%s: ignore ASID " TARGET_FMT_lx , __FUNCTION__, asid_cur);
@@ -4010,7 +4010,7 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     printf("--- Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
 
     //Lele: check asid.
-    target_ulong asid_cur = panda_current_asid(env);
+    target_ulong asid_cur = panda_current_asid(cpu);
     if (gTraceOne){
         if (asid_cur != gCurrentASID){
             printf("%s: ignore ASID " TARGET_FMT_lx , __FUNCTION__, asid_cur);
