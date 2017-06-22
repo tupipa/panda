@@ -1248,8 +1248,8 @@ inline VOID GoUpCallChain(){
 // Initialized the fields of the root node of all context trees
 VOID InitContextTree(){
     //gCurrentASID = 0x0; 
-    //gTraceKernel=true;
-    gTraceApp=true;
+    gTraceKernel=true;
+    //gTraceApp=true;
     //gTraceOne=true;
     //gCurrentASID = 0x000000001fb14000;
      
@@ -2484,8 +2484,6 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
         }else{
             currentTraceShadowIP[recordedSlots] = pc;
             currentTraceShadowIP[-1] ++;
-            gCurrentTrace->nSlots++; 
-
 
             // UpdateTraceIPs is splited into two steps:
             //  1, at at the InstrumentTraceEntry: 
@@ -2499,21 +2497,24 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             // Update gTrace->childIPs and -> nSlots by this new slot
             if (gCurrentTrace->childIPs == 0){
                 // for first slot, also set childIPs.
+                printf("%s: now in first R/W of a new trace\n", __FUNCTION__);
                 gCurrentTrace->childIPs = (TraceNode **)GetNextIPVecBuffer(1);
                 gCurrentIpVector = gCurrentTrace->childIPs;
 
             }else{
                 // if not first slot, call this to update IP index.
                 // 
+                printf("%s: not the first R/W of a new trace, just allocate one slot in IpVectBuffer\n", __FUNCTION__);
                 GetNextIPVecBuffer(1);
             }
 
             gCurrentTrace->childIPs[recordedSlots] = gCurrentTrace;
+            gCurrentTrace->nSlots++; 
             printf("%s: add one Slot in gCurrentTrace &gCurrentTrace->childIPs[%d]: %p\n", 
                 __FUNCTION__, (int)recordedSlots, &gCurrentTrace->childIPs[recordedSlots]);
 
-            printf("%s: new slot created for gCurrentTrace->address: 0x" TARGET_FMT_lx "," TARGET_FMT_lu " (%d)\n", 
-            __FUNCTION__, gCurrentTrace->address, recordedSlots, gCurrentTrace->nSlots);
+            printf("%s: new slot created for gCurrentTrace->address: 0x" TARGET_FMT_lx "\n", 
+            __FUNCTION__, gCurrentTrace->address);
 
             //also check IPVecBuffer:
             printf("%s: checking gPreAllocatedContextBuffer[gCurPreAllocatedContextBufferIndex-1]\n",__FUNCTION__);
@@ -3612,34 +3613,38 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
 
     printf("\n---------------- a new block --------------------\n");
     printf("--- Now in %s: pc=0x" TARGET_FMT_lx "\n",__FUNCTION__ , tb->pc);
+    
+    //Lele: check asid.
+    target_ulong asid_cur = panda_current_asid(env);
+    if (gTraceOne){
+        if (asid_cur != gCurrentASID){
+            printf("%s: ignore ASID " TARGET_FMT_lx , __FUNCTION__, asid_cur);
+            return 1;
+        } else{
+            printf("\n one mem op for ASID: 0x" TARGET_FMT_lx "\n", gCurrentASID);
+        }
+    }else if (gTraceKernel){
+        if (asid_cur != 0x0 ){
+            printf("%s: ignore ASID " TARGET_FMT_lx , __FUNCTION__, asid_cur);
+            return 1;
+        } else{
+            printf("\n Kernel mem op\n");
+        }
+    }else if (gTraceApp){
+        if (asid_cur == 0x0 ){
+            printf("%s: ignore ASID " TARGET_FMT_lx , __FUNCTION__, asid_cur);
+            return 1;
+        } else{
+            printf("\n App mem op, ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
+        }
+    }else{
+        // no filters
+        printf("\n All: Mem op for ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
+    }
+
+
     // Refer: trace_insthist: after_block_translate
 
-    // size_t count;
-    // uint8_t mem[1024] = {};
-    // target_ulong asid = panda_current_asid(cpu);
-
-    // // apply filter according to ASID.
-    // if (gTraceKernel){
-    //     if(asid != 0x0) return 0;
-    //     printf("%s:ignore non-kernel asid: " TARGET_FMT_lx "\n", __FUNCTION__, asid);
-    // }else if (gTraceApp && asid == 0x0){
-    //    printf("%s:ignore kernel asid: " TARGET_FMT_lx "\n", __FUNCTION__, asid);
-    //    return 0;
-    // }else if (gTraceOne){
-    //     if (asid != gCurrentASID ) return 0;
-    //     printf("%s:not target asid, ignore: " TARGET_FMT_lx "\n", __FUNCTION__, asid);
-    // }
-
-    // if (!init_capstone_done) init_capstone(cpu);
-
-    // panda_virtual_memory_rw(cpu, tb->pc, mem, tb->size, false);
-    // count = cs_disasm(handle, mem, tb->size, tb->pc, 0, &insn);
-    // for (unsigned i = 0; i < count; i++)
-    //     //code_hists[tb->pc][insn[i].mnemonic]++;
-    //     printf("%s: get one instruction: <pc,mem> = <0x" TARGET_FMT_lx ",%s>\n",__FUNCTION__,(tb->pc+i),insn[i].mnemonic);
-    // tb_insns_count[tb->pc] = count;
-
-      
     // Refer: callstack_instr: after_block_translate(CPUState *cpu, TranslationBlock *tb)
     
     if (!init_capstone_done) init_capstone(cpu);
@@ -3647,57 +3652,41 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     CPUArchState* env = (CPUArchState*)cpu->env_ptr;
     call_cache[tb->pc] = disas_block(env, tb->pc, tb->size);
 
-    // to detect call:
-        // int after_block_exec(CPUState* cpu, TranslationBlock *tb) {
-        //  CPUArchState* env = (CPUArchState*)cpu->env_ptr;
-        //  instr_type tb_type = call_cache[tb->pc];
-        //  if (tb_type == INSTR_CALL) {
-        //     stack_entry se = {tb->pc+tb->size,tb_type};
-        //     callstacks[get_stackid(env)].push_back(se);
-
-        //     // Also track the function that gets called
-        //     target_ulong pc, cs_base;
-        //     uint32_t flags;
-        //     // This retrieves the pc in an architecture-neutral way
-        //     cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
-        //     function_stacks[get_stackid(env)].push_back(pc);
-
-        //     PPP_RUN_CB(on_call, cpu, pc);
-        // }
-
-        instr_type tb_type = call_cache[tb->pc];
-        if (tb_type == INSTR_CALL) {
-            // track the function that gets called
-            target_ulong pc, cs_base;
-            uint32_t flags;
-            // This retrieves the pc in an architecture-neutral way
-            cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
-            printf("%s: get a function call: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
-            //gInitiatedCall=true;
-        }else if (tb_type == INSTR_RET) {
-            // track the function that gets called
-            target_ulong pc, cs_base;
-            uint32_t flags;
-            // This retrieves the pc in an architecture-neutral way
-            cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
-            printf("%s: get a function ret: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
-        }else if (tb_type == INSTR_INT) {
-            // track the function that gets called
-            target_ulong pc, cs_base;
-            uint32_t flags;
-            // This retrieves the pc in an architecture-neutral way
-            cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
-            printf("%s: get a interrupt call: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
-        }else if (tb_type == INSTR_IRET) {
-            // track the function that gets called
-            target_ulong pc, cs_base;
-            uint32_t flags;
-            // This retrieves the pc in an architecture-neutral way
-            cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
-            printf("%s: get a interrupt ret: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
-        }else {
-            printf("UNKNOWN instruction\n");
-        }
+    // detect the last instruction type
+    
+    instr_type tb_type = call_cache[tb->pc];
+    if (tb_type == INSTR_CALL) {
+        // track the function that gets called
+        target_ulong pc, cs_base;
+        uint32_t flags;
+        // This retrieves the pc in an architecture-neutral way
+        cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
+        printf("%s: get a function call: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
+        //gInitiatedCall=true;
+    }else if (tb_type == INSTR_RET) {
+        // track the function that gets called
+        target_ulong pc, cs_base;
+        uint32_t flags;
+        // This retrieves the pc in an architecture-neutral way
+        cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
+        printf("%s: get a function ret: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
+    }else if (tb_type == INSTR_INT) {
+        // track the function that gets called
+        target_ulong pc, cs_base;
+        uint32_t flags;
+        // This retrieves the pc in an architecture-neutral way
+        cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
+        printf("%s: get a interrupt call: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
+    }else if (tb_type == INSTR_IRET) {
+        // track the function that gets called
+        target_ulong pc, cs_base;
+        uint32_t flags;
+        // This retrieves the pc in an architecture-neutral way
+        cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
+        printf("%s: get a interrupt ret: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
+    }else {
+        printf("UNKNOWN instruction\n");
+    }
 
             
 
@@ -3749,7 +3738,7 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
         // if tracenode is already exists
         // set the current Trace to the new trace
         // set the IpVector
-        //printf("Trace Node already exists\n");
+        printf("Trace Node already exists\n");
         gCurrentTrace = gTraceIter->second;
         gCurrentIpVector = gCurrentTrace->childIPs;
         //lele: set slot index
@@ -3906,6 +3895,34 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     //  Then next block would be inside a new function call.
     printf("--- Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
 
+    //Lele: check asid.
+    target_ulong asid_cur = panda_current_asid(env);
+    if (gTraceOne){
+        if (asid_cur != gCurrentASID){
+            printf("%s: ignore ASID " TARGET_FMT_lx , __FUNCTION__, asid_cur);
+            return 1;
+        } else{
+            printf("\n one mem op for ASID: 0x" TARGET_FMT_lx "\n", gCurrentASID);
+        }
+    }else if (gTraceKernel){
+        if (asid_cur != 0x0 ){
+            printf("%s: ignore ASID " TARGET_FMT_lx , __FUNCTION__, asid_cur);
+            return 1;
+        } else{
+            printf("\n Kernel mem op\n");
+        }
+    }else if (gTraceApp){
+        if (asid_cur == 0x0 ){
+            printf("%s: ignore ASID " TARGET_FMT_lx , __FUNCTION__, asid_cur);
+            return 1;
+        } else{
+            printf("\n App mem op, ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
+        }
+    }else{
+        // no filters
+        printf("\n All: Mem op for ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
+    }
+
 
 
     //Refer: PopulateIPReverseMapAndAccountTraceInstructions()
@@ -3991,6 +4008,35 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     // Lele: after block executed. PC would point to the new function if tb has a call instruction at last.
     //
     printf("--- Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+
+    //Lele: check asid.
+    target_ulong asid_cur = panda_current_asid(env);
+    if (gTraceOne){
+        if (asid_cur != gCurrentASID){
+            printf("%s: ignore ASID " TARGET_FMT_lx , __FUNCTION__, asid_cur);
+            return 1;
+        } else{
+            printf("\n one mem op for ASID: 0x" TARGET_FMT_lx "\n", gCurrentASID);
+        }
+    }else if (gTraceKernel){
+        if (asid_cur != 0x0 ){
+            printf("%s: ignore ASID " TARGET_FMT_lx , __FUNCTION__, asid_cur);
+            return 1;
+        } else{
+            printf("\n Kernel mem op\n");
+        }
+    }else if (gTraceApp){
+        if (asid_cur == 0x0 ){
+            printf("%s: ignore ASID " TARGET_FMT_lx , __FUNCTION__, asid_cur);
+            return 1;
+        } else{
+            printf("\n App mem op, ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
+        }
+    }else{
+        // no filters
+        printf("\n All: Mem op for ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
+    }
+
 
     
     //  lele: should update Trace IPs after block executed.
