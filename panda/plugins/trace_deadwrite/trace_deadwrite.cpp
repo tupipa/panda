@@ -3906,6 +3906,11 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
 
 int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
 
+    // Lele: after block executed. PC would point to the new function if tb has a call instruction at last.
+    //
+    printf("--- Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+
+    
     //  lele: should update Trace IPs after block executed.
     //  In Deadspy: gTraceShadowMap is built during instrumentation. and used here in the instrumentation code.
     //  However, in Panda: we built gTraceShadowMap only when there is a mem write detected in mem_callback.
@@ -3922,9 +3927,6 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     // reset slot index, so that in next basic block, we count mem R/W from the begining.
     gCurrentSlot = 0;
 
-    // Lele: after block executed. PC would point to the new function if tb has a call instruction at last.
-    //
-    printf("--- Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
     instr_type tb_type = call_cache[tb->pc];
     if (tb_type == INSTR_CALL) {
         printf("%s: call detected, set InitiatedCall flag\n", __FUNCTION__);
