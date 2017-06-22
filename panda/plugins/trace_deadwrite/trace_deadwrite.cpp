@@ -807,34 +807,35 @@ inline void ** GetNextIPVecBuffer(uint32_t size){
 
 #ifdef IP_AND_CCT
 
-// Analysis routine called on entering a function (found in symbol table only)
-//inline VOID UpdateDataOnFunctionEntry(ADDRINT currentIp){
-inline VOID UpdateDataOnFunctionEntry(CPUState *cpu, TranslationBlock *tb){
-    
-    // if I enter here due to a tail-call, then we will make it a child under the parent context node
-    // if (!gInitiatedCall){
-    //     printf("a tailer call?\n");
-    //     gCurrentContext = gCurrentContext->parent;
-    // } else {
+    // Analysis routine called on entering a function (found in symbol table only)
+    //inline VOID UpdateDataOnFunctionEntry(ADDRINT currentIp){
+    //LELE: moved to before_block_exec
+    inline VOID UpdateDataOnFunctionEntry(CPUState *cpu, TranslationBlock *tb){
 
-    if (gInitiatedCall){
-        // normal function call, so unset gInitiatedCall
-        printf("%s:get a new function call !\n", __FUNCTION__);
-        gInitiatedCall = false;
-        // Let GoDownCallChain do the work needed to setup pointers for child nodes.
-        GoDownCallChain(cpu,tb);
+        // if I enter here due to a tail-call, then we will make it a child under the parent context node
+        // if (!gInitiatedCall){
+        //     printf("a tailer call?\n");
+        //     gCurrentContext = gCurrentContext->parent;
+        // } else {
 
-        //TODO: check if tb->pc is equal with currentIp
-        printf("%s: go down to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
-        printf("%s: go down to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
+        if (gInitiatedCall){
+            // normal function call, so unset gInitiatedCall
+            printf("%s:get a new function call !\n", __FUNCTION__);
+            gInitiatedCall = false;
+            // Let GoDownCallChain do the work needed to setup pointers for child nodes.
+            GoDownCallChain(cpu,tb);
+
+            //TODO: check if tb->pc is equal with currentIp
+            printf("%s: go down to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
+            printf("%s: go down to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
         
-    }else{
-        printf("ERROR: call function entry, but call flag is not true\n");
-        exit(-1);
+        }else{
+            printf("ERROR: call function entry, but call flag is not true\n");
+            exit(-1);
+        }
+
+
     }
-    
-    
-}
 
 #endif //end IP_AND_CCT
 
@@ -879,6 +880,8 @@ inline VOID GoUpCallChain(){
 #else    // no IP_AND_CCT
     gCurrentContext = gCurrentContext->parent;
 #endif    //end IP_AND_CCT
+
+    printf("%s: up to parent context: bb addr: 0x" TARGET_FMT_lx "\n",__FUNCTION__, gCurrentContext->address);
     
 }
 #else // MULTI_THREADED
@@ -3638,7 +3641,7 @@ after_block_translate: called after the translation of each basic block
 int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
 
     printf("\n---------------- a new block --------------------\n");
-    printf("Now in %s: pc=0x" TARGET_FMT_lx "\n",__FUNCTION__ , tb->pc);
+    printf("--- Now in %s: pc=0x" TARGET_FMT_lx "\n",__FUNCTION__ , tb->pc);
     // Refer: trace_insthist: after_block_translate
 
     // size_t count;
@@ -3759,10 +3762,10 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
 
     target_ulong currentIp=tb->pc;
     // if landed due to function call, create a child context node
-    
-    if(gInitiatedCall){
-        UpdateDataOnFunctionEntry(cpu, tb); // it will reset   gInitiatedCall      
-    }
+   
+    // if(gInitiatedCall){
+    //     UpdateDataOnFunctionEntry(cpu, tb); // it will reset   gInitiatedCall      
+    // }
         
 // ###################################################################
 // commented version from lele:
@@ -3887,7 +3890,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
 
     //Lele: if last block initiated a call, then set gInitiatedCall as true. 
     //  Then next block would be inside a new function call.
-    printf("Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
+    printf("--- Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
 
 
 
@@ -3928,14 +3931,37 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     // if(gInitiatedCall || gInitiatedINT) {    
     //     GoDownCallChain(cpu, tb); 
     // }else 
-    if(gInitiatedRet || gInitiatedIRET){
-        GoUpCallChain();
+    if(gInitiatedRet){
 
+        printf("%s:get a new function ret.\n", __FUNCTION__);
+        gInitiatedRet=false;
+        GoUpCallChain();
         //TODO: check if tb->pc is equal with currentIp
         printf("%s: go up to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
         printf("%s: go up to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
-    }
+    }else if(gInitiatedIRET){
 
+        printf("%s:get a new interrupt ret.\n", __FUNCTION__);
+        gInitiatedIRET=false;
+        GoUpCallChain();
+        //TODO: check if tb->pc is equal with currentIp
+        printf("%s: go up to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
+        printf("%s: go up to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
+
+    }else if(gInitiatedCall){
+        //Refer: UpdateDataOnFunctionEntry(cpu, tb); // it will reset   gInitiatedCall      
+        // normal function call, so unset gInitiatedCall
+        printf("%s:get a new function call !\n", __FUNCTION__);
+        gInitiatedCall = false;
+
+        // Let GoDownCallChain do the work needed to setup pointers for child nodes.
+        GoDownCallChain(cpu,tb);
+        //TODO: check if tb->pc is equal with currentIp
+        printf("%s: go down to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
+        printf("%s: go down to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
+        
+    }
+        
 
     // Refer: InstrumentTrace() TODO
         //InstrumentTraceEntry() -> UpdateDataOnFunctionEntry() -> GoDownCallChain(cpu,tb);
@@ -3949,7 +3975,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
 int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     // Lele: after block executed. PC would point to the new function if tb has a call instruction at last.
     //
-    printf("Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+    printf("--- Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
     instr_type tb_type = call_cache[tb->pc];
     if (tb_type == INSTR_CALL) {
         printf("%s: call detected, set InitiatedCall flag\n", __FUNCTION__);
