@@ -3618,28 +3618,28 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     target_ulong asid_cur = panda_current_asid(cpu);
     if (gTraceOne){
         if (asid_cur != gCurrentASID){
-            printf("%s: ignore ASID " TARGET_FMT_lx , __FUNCTION__, asid_cur);
+            printf("%s: ignore ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             return 1;
         } else{
             printf("\n one mem op for ASID: 0x" TARGET_FMT_lx "\n", gCurrentASID);
         }
     }else if (gTraceKernel){
         if (asid_cur != 0x0 ){
-            printf("%s: ignore ASID " TARGET_FMT_lx , __FUNCTION__, asid_cur);
+            printf("%s: ignore ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             return 1;
         } else{
-            printf("\n Kernel mem op\n");
+            printf("\n kernel block\n");
         }
     }else if (gTraceApp){
         if (asid_cur == 0x0 ){
-            printf("%s: ignore ASID " TARGET_FMT_lx , __FUNCTION__, asid_cur);
+            printf("%s: ignore ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             return 1;
         } else{
-            printf("\n App mem op, ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
+            printf("\nApp block, ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
         }
     }else{
         // no filters
-        printf("\n All: Mem op for ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
+        printf("\n All: a block for ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
     }
 
 
@@ -3899,28 +3899,28 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     target_ulong asid_cur = panda_current_asid(cpu);
     if (gTraceOne){
         if (asid_cur != gCurrentASID){
-            printf("%s: ignore ASID " TARGET_FMT_lx , __FUNCTION__, asid_cur);
+            printf("%s: ignore ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             return 1;
         } else{
             printf("\n one mem op for ASID: 0x" TARGET_FMT_lx "\n", gCurrentASID);
         }
     }else if (gTraceKernel){
         if (asid_cur != 0x0 ){
-            printf("%s: ignore ASID " TARGET_FMT_lx , __FUNCTION__, asid_cur);
+            printf("%s: ignore ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             return 1;
         } else{
-            printf("\n Kernel mem op\n");
+            printf("\n kernel block\n");
         }
     }else if (gTraceApp){
         if (asid_cur == 0x0 ){
-            printf("%s: ignore ASID " TARGET_FMT_lx , __FUNCTION__, asid_cur);
+            printf("%s: ignore ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             return 1;
         } else{
-            printf("\n App mem op, ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
+            printf("\nApp block, ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
         }
     }else{
         // no filters
-        printf("\n All: Mem op for ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
+        printf("\n All: a block for ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
     }
 
 
@@ -4013,28 +4013,28 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     target_ulong asid_cur = panda_current_asid(cpu);
     if (gTraceOne){
         if (asid_cur != gCurrentASID){
-            printf("%s: ignore ASID " TARGET_FMT_lx , __FUNCTION__, asid_cur);
+            printf("%s: ignore ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             return 1;
         } else{
             printf("\n one mem op for ASID: 0x" TARGET_FMT_lx "\n", gCurrentASID);
         }
     }else if (gTraceKernel){
         if (asid_cur != 0x0 ){
-            printf("%s: ignore ASID " TARGET_FMT_lx , __FUNCTION__, asid_cur);
+            printf("%s: ignore ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             return 1;
         } else{
-            printf("\n Kernel mem op\n");
+            printf("\n kernel block\n");
         }
     }else if (gTraceApp){
         if (asid_cur == 0x0 ){
-            printf("%s: ignore ASID " TARGET_FMT_lx , __FUNCTION__, asid_cur);
+            printf("%s: ignore ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             return 1;
         } else{
-            printf("\n App mem op, ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
+            printf("\nApp block, ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
         }
     }else{
         // no filters
-        printf("\n All: Mem op for ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
+        printf("\n All: a block for ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
     }
 
 
