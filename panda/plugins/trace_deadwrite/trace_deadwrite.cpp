@@ -1251,7 +1251,8 @@ VOID InitContextTree(){
     //gTraceKernel=true;
     //gTraceApp=true;
     gTraceOne=true;
-    gCurrentASID = 0x000000001fb14000;
+    //gCurrentASID = 0x000000001fb14000;
+    gCurrentASID = 0x0;
      
 #ifdef IP_AND_CCT
     // MAX 10 context trees
@@ -2478,7 +2479,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
         if (gTraceShadowMapDone[gCurrentTrace->address]){
             printf("%s: No need to update TraceShadowMap with current PC for this block (already done)\n",
                 __FUNCTION__);
-            printf("%s: pc=" TARGET_FMT_lx ", gCurrentTrace=%p, tb->pc=0x" TARGET_FMT_lx "\n",
+            printf("%s: pc=0x" TARGET_FMT_lx ", gCurrentTrace=%p, tb->pc=0x" TARGET_FMT_lx "\n",
                 __FUNCTION__, pc,gCurrentTrace, gCurrentTrace->address);
 
             printf("%s: now check gCurrentIpVector\n", __FUNCTION__);
@@ -2504,7 +2505,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
                 printf("%s: now in first R/W of a new trace\n", __FUNCTION__);
                 gCurrentTrace->childIPs = (TraceNode **)GetNextIPVecBuffer(1);
 
-                printf("%s: reset gCurrentIpVector pointing to %p, for tb->pc: " TARGET_FMT_lx " \n",
+                printf("%s: reset gCurrentIpVector pointing to %p, for tb->pc: 0x" TARGET_FMT_lx " \n",
                     __FUNCTION__, gCurrentTrace->childIPs, gCurrentTrace->address);
                 gCurrentIpVector = gCurrentTrace->childIPs;
 
@@ -3618,6 +3619,11 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     printf("\n---------------- a new block --------------------\n");
     printf("--- Now in %s: pc=0x" TARGET_FMT_lx "\n",__FUNCTION__ , tb->pc);
     
+    // for each block, different translations could be different. 
+    // we here keep the lastest translation, how to keep consistent????
+    printf("%s: for each block, translations could be different. why? \n", __FUNCTION__);
+    printf("%s: gTraceShadowMap might be not usefull across all the blocks???? how to resolve? \n", __FUNCTION__);
+
     //Lele: check asid.
     target_ulong asid_cur = panda_current_asid(cpu);
     if (gTraceOne){
@@ -3740,7 +3746,7 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
     // if landed due to function call, create a child context node
     // create the gTraceShadowMap and TraceNode at the same time, initialized here but filled at mem_callback
     if (gTraceShadowMapDone[tb->pc]){
-        printf("%s: No need to update TraceShadowMap for tb->pc: " TARGET_FMT_lx "\n", 
+        printf("%s: No need to update TraceShadowMap for tb->pc: 0x" TARGET_FMT_lx "\n", 
             __FUNCTION__, tb->pc);
         printf("%s: but might need to create new trace node under the context Node.\n",
             __FUNCTION__);
@@ -3826,15 +3832,16 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
                 
         } else {
 
-            printf("%s: Initialize gCurrentTrace->childIPs with max size tb->size...\n", __FUNCTION__);
+            // printf("%s: Initialize gCurrentTrace->childIPs with max size tb->size...\n", __FUNCTION__);
 
-            printf("%s: TODO: might be improved with only nSlots allocated as deadspy\n",__FUNCTION__);
+            // printf("%s: TODO: might be improved with only nSlots allocated as deadspy\n",__FUNCTION__);
 
 #ifdef CONTINUOUS_DEADINFO
             // if CONTINUOUS_DEADINFO is set, then all ip vecs come from a fixed 4GB buffer
-            // printf("Continuous Info: GetNextIPVecBuffer...\n");
+            //  printf("Continuous Info: GetNextIPVecBuffer...\n");
             // newChild->childIPs  = (TraceNode **)GetNextIPVecBuffer(1);
             // initialize as 0, get from IPVecBuffer one by one during mem_callback
+            printf("%s: Continuous Info: initialize childIPs as 0\n", __FUNCTION__);
             newChild->childIPs = 0;
 #else            //no CONTINUOUS_DEADINFO
             printf("Non-Continuous Info: malloc new TraceNode**\n");
@@ -3852,9 +3859,10 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
         //     exit(-1);
         // }
 
-        gCurrentSlot = 0;
-        printf("%s: set gCurrentIpVector pointed to " TARGET_FMT_lx ", for tb->pc: 0x" TARGET_FMT_lx "\n",
-            __FUNCTION__, tb->pc, gCurrentTrace->childIPs);
+        // printf("%s: enter a trace, reset gCurrentSlot\n", __FUNCTION__);
+        // gCurrentSlot = 0;
+        printf("%s: set gCurrentIpVector pointed to %p, for tb->pc: 0x" TARGET_FMT_lx "\n", 
+            __FUNCTION__, gCurrentTrace->childIPs, tb->pc);
         gCurrentIpVector = gCurrentTrace->childIPs; // 0 if new basic block, non-zero if reused basic block.
         //lele: set slot index
         // gCurrentSlot = gCurrentTrace->nSlots;
@@ -3957,21 +3965,21 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     target_ulong asid_cur = panda_current_asid(cpu);
     if (gTraceOne){
         if (asid_cur != gCurrentASID){
-            printf("%s: ignore ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+            printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             return 1;
         } else{
             printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
         }
     }else if (gTraceKernel){
         if (asid_cur != 0x0 ){
-            printf("%s: ignore ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+            printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             return 1;
         } else{
             printf("\n kernel block\n");
         }
     }else if (gTraceApp){
         if (asid_cur == 0x0 ){
-            printf("%s: ignore ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+            printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             return 1;
         } else{
             printf("\nApp block, ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
@@ -4039,21 +4047,21 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     target_ulong asid_cur = panda_current_asid(cpu);
     if (gTraceOne){
         if (asid_cur != gCurrentASID){
-            printf("%s: ignore ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+            printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             return 1;
         } else{
             printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
         }
     }else if (gTraceKernel){
         if (asid_cur != 0x0 ){
-            printf("%s: ignore ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+            printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             return 1;
         } else{
             printf("\n kernel block\n");
         }
     }else if (gTraceApp){
         if (asid_cur == 0x0 ){
-            printf("%s: ignore ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+            printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             return 1;
         } else{
             printf("\nApp block, ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
