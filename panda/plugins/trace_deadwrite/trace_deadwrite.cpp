@@ -3921,6 +3921,10 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     //InstrumentTraceEntry() -> UpdateDataOnFunctionEntry() -> GoDownCallChain(cpu,tb);
     if (gNewBasicBlock){ // only update ChildIPs for one time for each Basic Block.
         gNewBasicBlock=false;
+
+        printf("%s: mark gTraceShadowMap as done for this block\n");
+        gTraceShadowMapDone[tb->pc]=true;
+
         UpdateTraceIPs(cpu,tb);
     }
 
