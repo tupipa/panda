@@ -1400,7 +1400,7 @@ inline VOID Do4ByteCount() {
 }
 
 inline VOID Do8ByteCount() {
-    printf("%s\n",__FUNCTION__);
+    //printf("%s\n",__FUNCTION__);
 	g8ByteWriteInstrCount ++;
 }
 
@@ -1794,7 +1794,7 @@ VOID Record8ByteMemWrite(
         	*((uint64_t * )(status +  PAGE_OFFSET((uintptr_t)addr))) = EIGHT_BYTE_WRITE_ACTION;
         }
         lastIP[0] = CUR_CTXT;
-        printf("%s, record write, lastIP[0]=%p (&gCurrentIpVector[%d])\n",__FUNCTION__, lastIP[0], slot);
+        printf("%s, record 8 bytes write to addr %p with context=%p (&gCurrentIpVector[%d])\n",__FUNCTION__,addr, lastIP[0], slot);
         lastIP[1] = CUR_CTXT;
         lastIP[2] = CUR_CTXT;
         lastIP[3] = CUR_CTXT;
@@ -2288,7 +2288,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
             return 1;
         } else{
-            printf("\n one mem op for ASID: 0x" TARGET_FMT_lx "\n", gCurrentASID);
+            printf("%s: ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
         }
     }else if (gTraceKernel){
         if (asid_cur != 0x0 ){
@@ -2383,7 +2383,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     if(is_write){
         // USIZE writeSize = INS_MemoryWriteSize(ins);
         target_ulong writeSize = size;
-        printf("counting written bytes:  " TARGET_FMT_lu "\n", writeSize);
+        //printf("counting written bytes:  " TARGET_FMT_lu "\n", writeSize);
         switch(writeSize){
             case 1:
                 // INS_InsertPredicatedCall(ins, IPOINT_BEFORE, (AFUNPTR) Do1ByteCount, IARG_END);
@@ -2463,19 +2463,21 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
         // use flag gTraceShadowMapDone[tb->pc] to mark it done at after_block_exe
 
         // first, get the shadowMap and its slot numbers;
-        printf("%s: get currentTraceShadowIp from gTraceShadowMap[gCurrentTrace->address]=0x" TARGET_FMT_lx "\n", 
+        printf("%s: get currentTraceShadowIp for current tb: 0x" TARGET_FMT_lx "\n", 
             __FUNCTION__, gCurrentTrace->address);
         target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[gCurrentTrace->address];
-        printf("%s: get TraceShadowIP array from gTraceShadowMap[gCurrentTrace->address] %p\n", 
-            __FUNCTION__,currentTraceShadowIP);
+        // printf("%s: get TraceShadowIP array from gTraceShadowMap[gCurrentTrace->address] %p\n", 
+        //     __FUNCTION__,currentTraceShadowIP);
         target_ulong recordedSlots = currentTraceShadowIP[-1]; // present one behind
-        printf("%s: get recordedSlots from currentTraceShadowIP[-1] %d\n", __FUNCTION__,(int)recordedSlots);
+        printf("%s: get recordedSlots %d\n", __FUNCTION__,(int)recordedSlots);
 
         // second, update slot pc in gTraceShadowMap.
         // For each Basic block, only update once.
         if (gTraceShadowMapDone[gCurrentTrace->address]){
-            printf("%s, No need to update TraceShadowMap with current PC for this block (already done)\n %s\t, pc=" TARGET_FMT_lx ", gCurrentTrace=%p\n",
-                __FUNCTION__,  __FUNCTION__, pc,gCurrentTrace);
+            printf("%s: No need to update TraceShadowMap with current PC for this block (already done)\n",
+                __FUNCTION__);
+            printf("%s:pc=" TARGET_FMT_lx ", gCurrentTrace=%p, tb->pc=0x" TARGET_FMT_lx "\n",
+                __FUNCTION__, pc,gCurrentTrace, gCurrentTrace->address);
 
             printf("%s: now check gCurrentIpVector\n", __FUNCTION__);
             if(gCurrentIpVector[slot] != gCurrentTrace){
@@ -2500,7 +2502,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
                 printf("%s: now in first R/W of a new trace\n", __FUNCTION__);
                 gCurrentTrace->childIPs = (TraceNode **)GetNextIPVecBuffer(1);
 
-                printf("%s: reset gCurrentIpVector for a new Trace\n", __FUNCTION__);
+                printf("%s: reset gCurrentIpVector pointing to the new Trace->childIPs\n", __FUNCTION__);
                 gCurrentIpVector = gCurrentTrace->childIPs;
 
             }else{
@@ -2514,9 +2516,6 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             gCurrentTrace->nSlots++; 
             printf("%s: add one Slot in gCurrentTrace &gCurrentTrace->childIPs[%d]: %p\n", 
                 __FUNCTION__, (int)recordedSlots, &gCurrentTrace->childIPs[recordedSlots]);
-
-            printf("%s: new slot created for gCurrentTrace->address: 0x" TARGET_FMT_lx "\n", 
-            __FUNCTION__, gCurrentTrace->address);
 
             //also check IPVecBuffer:
             printf("%s: checking gPreAllocatedContextBuffer[gCurPreAllocatedContextBufferIndex-1]\n",__FUNCTION__);
