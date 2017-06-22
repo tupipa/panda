@@ -2466,8 +2466,10 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
         printf("%s: get currentTraceShadowIp from gTraceShadowMap[gCurrentTrace->address]=0x" TARGET_FMT_lx "\n", 
             __FUNCTION__, gCurrentTrace->address);
         target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[gCurrentTrace->address];
-        printf("%s: get recordedSlots from currentTraceShadowIP[-1] %p\n", __FUNCTION__,currentTraceShadowIP);
+        printf("%s: get TraceShadowIP array from gTraceShadowMap[gCurrentTrace->address] %p\n", 
+            __FUNCTION__,currentTraceShadowIP);
         target_ulong recordedSlots = currentTraceShadowIP[-1]; // present one behind
+        printf("%s: get recordedSlots from currentTraceShadowIP[-1] %d\n", __FUNCTION__,(int)recordedSlots);
 
         // second, update slot pc in gTraceShadowMap.
         // For each Basic block, only update once.
@@ -2504,6 +2506,10 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             //also check IPVecBuffer:
             if (gPreAllocatedContextBuffer[gCurPreAllocatedContextBufferIndex-1] != gCurrentTrace){
                 printf("%s: ERROR: gPreAllocatedContextBuffer[gCurPreAllocatedContextBufferIndex-1] != gCurrentTrace",
+                    __FUNCTION__);
+            }
+            if (gCurrentIpVector[recordedSlots] != gCurrentTrace){
+                printf("%s: ERROR: gCurrentIpVector[recordedSlots] != gCurrentTrace",
                     __FUNCTION__);
             }
             gCurrentTrace->nSlots++; 
