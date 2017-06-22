@@ -1757,13 +1757,14 @@ VOID Record8ByteMemWrite(
         if (sizeof(state) == 8 && state != EIGHT_BYTE_READ_ACTION) {
             DECLARE_HASHVAR(myhash);
             void * ipZero = lastIP[0];
+            printf("%s: lastIP[0]=%p\n", __FUNCTION__, ipZero);
             // fast path where all bytes are dead by same context
             // TODO:lele only supports 64bit here.
             if ( sizeof(state) == 8 && state == EIGHT_BYTE_WRITE_ACTION &&
                 ipZero  == lastIP[1] && ipZero  == lastIP[2] &&
                 ipZero  == lastIP[3] && ipZero  == lastIP[4] &&
                 ipZero  == lastIP[5] && ipZero  == lastIP[6] && ipZero  == lastIP[7] ) {
-                printf("%s: dead all 8\n", __FUNCTION__);
+                printf("%s: dead all 8 on same oldIP\n", __FUNCTION__);
                 REPORT_DEAD(CUR_CTXT, ipZero, myhash, 8);
                 // State is already written, so no need to dead write in a tool that detects dead writes
             } else {
@@ -1793,6 +1794,7 @@ VOID Record8ByteMemWrite(
         	*((uint64_t * )(status +  PAGE_OFFSET((uintptr_t)addr))) = EIGHT_BYTE_WRITE_ACTION;
         }
         lastIP[0] = CUR_CTXT;
+        printf("%s, record write, lastIP[0]=%p (&gCurrentIpVector[%d])\n",__FUNCTION__, lastIP[0], slot);
         lastIP[1] = CUR_CTXT;
         lastIP[2] = CUR_CTXT;
         lastIP[3] = CUR_CTXT;
@@ -2475,6 +2477,18 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
         }else{
             currentTraceShadowIP[recordedSlots] = pc;
             currentTraceShadowIP[-1] ++;
+
+
+    // UpdateTraceIPs is splited into two steps:
+    //  1, allocate all IPs as tb->size at the InstrumentTraceEntry
+    //  2, fill it during mem_callback, at the same time when we fill gTraceShadowMap
+    //  --> in this way, we could use the &gCurrentIpVector[i] (or &(gCurrentTrace->childIPs[i])) to report as dead context.
+    //  This way, the gCurrentTrace->childIPs will be filled in the same pace with gTraceShadowMap.
+    //
+            // Update gTrace->childIPs and -> nSlots by this new slot
+            gCurrentTrace->childIPs[recordedSlots] = gCurrentTrace;
+            printf("%s: add one Slot in gCurrentTrace &gCurrentTrace->childIPs[%d]: %p", 
+                __FUNCTION__, (int)recordedSlots, &gCurrentTrace->childIPs[recordedSlots]);
             gCurrentTrace->nSlots++; 
 
             printf("%s: new slot created for gCurrentTrace->address: 0x" TARGET_FMT_lx "," TARGET_FMT_lu " (%d)\n", 
@@ -3736,11 +3750,23 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
 
         if(recordedSlots >0 ){
             // slots should be zero, since gTraceShadowMap should not be updated with this Basic Block.
-            printf("%s: WARNING: here slots should be zero here\n",__FUNCTION__);
+            printf("%s: ERROR: here slots should be zero here\n",__FUNCTION__);
+            exit(-1);
         } else {
-            printf("Initialize childTraces[currentIp]...\n");
+
+            printf("%s: Initialize gCurrentTrace->childIPs with max size tb->size...\n", __FUNCTION__);
+
+            printf("%s: TODO: might be improved with only nSlots allocated as deadspy\n",__FUNCTION__);
+
+            #ifdef CONTINUOUS_DEADINFO
+            // if CONTINUOUS_DEADINFO is set, then all ip vecs come from a fixed 4GB buffer
+            printf("Continuous Info: GetNextIPVecBuffer...\n");
+            newChild->childIPs  = (TraceNode **)GetNextIPVecBuffer(tb->size);
+#else            //no CONTINUOUS_DEADINFO
+            printf("Non-Continuous Info: malloc new TraceNode**\n");
+            newChild->childIPs = (TraceNode **) malloc( (tb->size) * sizeof(TraceNode **) );
+#endif //end CONTINUOUS_DEADINFO
             newChild->nSlots = 0;
-            newChild->childIPs = 0;            
         }    
         gCurrentContext->childTraces[currentIp] = newChild;
         gCurrentTrace = newChild;
@@ -3752,63 +3778,70 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
 }
 
 
+//  UpdateTraceIPs:
 //  lele: now after block executed, we should have traceShadowMap built fully. Then we could use this to update Trace IPs. One TraceNode for a new block.
 //  In Deadspy: gTraceShadowMap is built during instrumentation. and used here in the instrumentation code.
 //  However, in Panda: we built gTraceShadowMap only when there is a mem write detected in mem_callback.
 //  So , gTraceShadowMap should be built fully after the exe of the block.
 //  So, we need to update TraceNode after block execution.
-
+// Lele: updated: 
+// UpdateTraceIPs is splited into two steps:
+//  1, allocate all IPs as tb->size at the InstrumentTraceEntry
+//  2, fill it during mem_callback, at the same time when we fill gTraceShadowMap
+//  --> in this way, we could use the &gCurrentIpVector[i] (or &(gCurrentTrace->childIPs[i])) to report as dead context.
+//  This way, the gCurrentTrace->childIPs will be filled in the same pace with gTraceShadowMap.
+//
 //inline void InstrumentTraceEntry(ADDRINT currentIp){
-inline void UpdateTraceIPs(CPUState *cpu, TranslationBlock *tb){
+// inline void UpdateTraceIPs(CPUState *cpu, TranslationBlock *tb){
 
-    printf("%s: tb->pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+//     printf("%s: tb->pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
 
-    target_ulong currentIp=tb->pc;
-    if( (gTraceIter = (gCurrentContext->childTraces).find(currentIp)) != gCurrentContext->childTraces.end()) {
-        //panda: if not in the current context node, this means in a new function and a new context node is created.
+//     target_ulong currentIp=tb->pc;
+//     if( (gTraceIter = (gCurrentContext->childTraces).find(currentIp)) != gCurrentContext->childTraces.end()) {
+//         //panda: if not in the current context node, this means in a new function and a new context node is created.
       
-        TraceNode * newChild = gCurrentTrace ;
+//         TraceNode * newChild = gCurrentTrace ;
 
-    	target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[currentIp];
-        printf("get currentTraceShadowIp  %p, from gTraceShadowMap[currentIp]\n", currentTraceShadowIP);
+//     	target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[currentIp];
+//         printf("get currentTraceShadowIp  %p, from gTraceShadowMap[currentIp]\n", currentTraceShadowIP);
 
-        target_ulong recordedSlots = 0; // present one behind
-        if (currentTraceShadowIP){
-            recordedSlots = currentTraceShadowIP[-1]; // present one behind
-            printf("get recordedSlots=" TARGET_FMT_lu ", from currentTraceShadowIP[-1]\n", recordedSlots);
-        }else{
-            printf("%s: ERROR: no gTraceShadowMap for 0x" TARGET_FMT_lx "\n", __FUNCTION__, currentIp);
-            exit(-1);
-        }
-        if(recordedSlots >0 ){
-            printf("Record Slots: " TARGET_FMT_lu "\n", recordedSlots);
-#ifdef CONTINUOUS_DEADINFO
-            // if CONTINUOUS_DEADINFO is set, then all ip vecs come from a fixed 4GB buffer
-            printf("Continuous Info: GetNextIPVecBuffer...\n");
-            newChild->childIPs  = (TraceNode **)GetNextIPVecBuffer(recordedSlots);
-#else            //no CONTINUOUS_DEADINFO
-            printf("Non-Continuous Info: malloc new TraceNode**\n");
-            newChild->childIPs = (TraceNode **) malloc( (recordedSlots) * sizeof(TraceNode **) );
-#endif //end CONTINUOUS_DEADINFO
-            newChild->nSlots = recordedSlots;
-            //cerr<<"\n***:"<<recordedSlots; 
-            for(uint32_t i = 0 ; i < recordedSlots ; i++) {
-                newChild->childIPs[i] = newChild;
-                printf("%s: &newChild->childIPs[%d]: %p", __FUNCTION__, i, &newChild->childIPs[i]);
-                printf("%s: &gCurrentTrace->childIPs[%d]: %p", __FUNCTION__, i, &gCurrentTrace->childIPs[i]);
-            }
-        } else {
-            printf("%s: No record slots for block pc:c=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
-            newChild->nSlots = 0;
-            newChild->childIPs = 0;            
-        }    
-        gCurrentIpVector = gCurrentTrace->childIPs;
+//         target_ulong recordedSlots = 0; // present one behind
+//         if (currentTraceShadowIP){
+//             recordedSlots = currentTraceShadowIP[-1]; // present one behind
+//             printf("get recordedSlots=" TARGET_FMT_lu ", from currentTraceShadowIP[-1]\n", recordedSlots);
+//         }else{
+//             printf("%s: ERROR: no gTraceShadowMap for 0x" TARGET_FMT_lx "\n", __FUNCTION__, currentIp);
+//             exit(-1);
+//         }
+//         if(recordedSlots >0 ){
+//             printf("Record Slots: " TARGET_FMT_lu "\n", recordedSlots);
+// #ifdef CONTINUOUS_DEADINFO
+//             // if CONTINUOUS_DEADINFO is set, then all ip vecs come from a fixed 4GB buffer
+//             printf("Continuous Info: GetNextIPVecBuffer...\n");
+//             newChild->childIPs  = (TraceNode **)GetNextIPVecBuffer(recordedSlots);
+// #else            //no CONTINUOUS_DEADINFO
+//             printf("Non-Continuous Info: malloc new TraceNode**\n");
+//             newChild->childIPs = (TraceNode **) malloc( (recordedSlots) * sizeof(TraceNode **) );
+// #endif //end CONTINUOUS_DEADINFO
+//             newChild->nSlots = recordedSlots;
+//             //cerr<<"\n***:"<<recordedSlots; 
+//             for(uint32_t i = 0 ; i < recordedSlots ; i++) {
+//                 newChild->childIPs[i] = newChild;
+//                 printf("%s: &newChild->childIPs[%d]: %p", __FUNCTION__, i, &newChild->childIPs[i]);
+//                 printf("%s: &gCurrentTrace->childIPs[%d]: %p", __FUNCTION__, i, &gCurrentTrace->childIPs[i]);
+//             }
+//         } else {
+//             printf("%s: No record slots for block pc:c=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+//             newChild->nSlots = 0;
+//             newChild->childIPs = 0;            
+//         }    
+//         gCurrentIpVector = gCurrentTrace->childIPs;
 
-     } else {
-        printf("%s: ERROR: childTrace for BasicBlock 0x" TARGET_FMT_lx " was not created\n", 
-            __FUNCTION__, tb->pc);
-    }    
-}
+//      } else {
+//         printf("%s: ERROR: childTrace for BasicBlock 0x" TARGET_FMT_lx " was not created\n", 
+//             __FUNCTION__, tb->pc);
+//     }    
+// }
 
 
 /*
@@ -3934,8 +3967,8 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
         printf("%s: mark gTraceShadowMap as done for this block\n", __FUNCTION__);
         gTraceShadowMapDone[tb->pc]=true;
 
-        printf("%s: update TraceNode IPs with the gTraceShadowMap\n", __FUNCTION__);
-        UpdateTraceIPs(cpu,tb);
+        // printf("%s: update TraceNode IPs with the gTraceShadowMap\n", __FUNCTION__);
+        // UpdateTraceIPs(cpu,tb);
     }
 
     // reset slot index, so that in next basic block, we count mem R/W from the begining.
