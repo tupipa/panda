@@ -3851,9 +3851,8 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
         //     exit(-1);
         // }
 
-         gCurrentSlot = 0;
-
-        // gCurrentIpVector = gCurrentTrace->childIPs;
+        gCurrentSlot = 0;
+        gCurrentIpVector = gCurrentTrace->childIPs; // 0 if new basic block, non-zero if reused basic block.
         //lele: set slot index
         // gCurrentSlot = gCurrentTrace->nSlots;
     }    
