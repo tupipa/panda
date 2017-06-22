@@ -2479,16 +2479,32 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             currentTraceShadowIP[-1] ++;
 
 
-    // UpdateTraceIPs is splited into two steps:
-    //  1, allocate all IPs as tb->size at the InstrumentTraceEntry
-    //  2, fill it during mem_callback, at the same time when we fill gTraceShadowMap
-    //  --> in this way, we could use the &gCurrentIpVector[i] (or &(gCurrentTrace->childIPs[i])) to report as dead context.
-    //  This way, the gCurrentTrace->childIPs will be filled in the same pace with gTraceShadowMap.
-    //
+            // UpdateTraceIPs is splited into two steps:
+            //  1, at at the InstrumentTraceEntry: 
+            //      initialize as 0 in coutinuous mode.
+            //      or allocate all IPs as tb->size (Non-continuous)
+            //  2, fill it during mem_callback, at the same time when we fill gTraceShadowMap
+            //  --> in this way, we could use the &gCurrentIpVector[slot] (or &(gCurrentTrace->childIPs[slot])) to report as dead context.
+            //  This way, the gCurrentTrace->childIPs will be filled in the same pace with gTraceShadowMap.
+            //
             // Update gTrace->childIPs and -> nSlots by this new slot
+            if (gCurrentTrace->nSlots == 0){
+                // for first slot, also set childIPs.
+                gCurrentTrace->childIPs = (TraceNode **)GetNextIPVecBuffer(1);
+            }else{
+                // if not first slot, call this to update IP index.
+                // 
+                GetNextIPVecBuffer(1);
+            }
+
             gCurrentTrace->childIPs[recordedSlots] = gCurrentTrace;
             printf("%s: add one Slot in gCurrentTrace &gCurrentTrace->childIPs[%d]: %p\n", 
                 __FUNCTION__, (int)recordedSlots, &gCurrentTrace->childIPs[recordedSlots]);
+            //also check IPVecBuffer:
+            if (gPreAllocatedContextBuffer[gCurPreAllocatedContextBufferIndex-1] != gCurrentTrace){
+                printf("%s: ERROR: gPreAllocatedContextBuffer[gCurPreAllocatedContextBufferIndex-1] != gCurrentTrace",
+                    __FUNCTION__);
+            }
             gCurrentTrace->nSlots++; 
 
             printf("%s: new slot created for gCurrentTrace->address: 0x" TARGET_FMT_lx "," TARGET_FMT_lu " (%d)\n", 
@@ -3758,10 +3774,12 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
 
             printf("%s: TODO: might be improved with only nSlots allocated as deadspy\n",__FUNCTION__);
 
-            #ifdef CONTINUOUS_DEADINFO
+#ifdef CONTINUOUS_DEADINFO
             // if CONTINUOUS_DEADINFO is set, then all ip vecs come from a fixed 4GB buffer
-            printf("Continuous Info: GetNextIPVecBuffer...\n");
-            newChild->childIPs  = (TraceNode **)GetNextIPVecBuffer(tb->size);
+            // printf("Continuous Info: GetNextIPVecBuffer...\n");
+            // newChild->childIPs  = (TraceNode **)GetNextIPVecBuffer(1);
+            // initialize as 0, get from IPVecBuffer one by one during mem_callback
+            newChild->childIPs = 0;
 #else            //no CONTINUOUS_DEADINFO
             printf("Non-Continuous Info: malloc new TraceNode**\n");
             newChild->childIPs = (TraceNode **) malloc( (tb->size) * sizeof(TraceNode **) );
