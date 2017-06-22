@@ -2494,6 +2494,8 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             if (gCurrentTrace->nSlots == 0){
                 // for first slot, also set childIPs.
                 gCurrentTrace->childIPs = (TraceNode **)GetNextIPVecBuffer(1);
+                gCurrentIpVector = gCurrentTrace->childIPs;
+
             }else{
                 // if not first slot, call this to update IP index.
                 // 
@@ -3795,7 +3797,6 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
         }    
         gCurrentContext->childTraces[currentIp] = newChild;
         gCurrentTrace = newChild;
-        gCurrentIpVector = gCurrentTrace->childIPs;
         //lele: set slot index
         // gCurrentSlot = gCurrentTrace->nSlots;
     }    
