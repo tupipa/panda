@@ -317,7 +317,7 @@ DeadMap.insert(std::pair<uint64_t, uint64_t>(hashVar,size)); \
 } else {    \
 (gDeadMapIt->second) += size;    \
 }   \
-printf("%s:report one dead (%p, %p, %d)\n", \
+printf("%s:continuous: report one dead (%p, %p, %d)\n", \
       __FUNCTION__, curCtxt,lastCtxt, size); \
 }while(0)
 
@@ -332,7 +332,7 @@ DeadMap.insert(std::pair<uint64_t, uint64_t>(hashVar,deadInfo)); \
 } else {    \
 (gDeadMapIt->second.count) += size;    \
 }   \
-printf("%s:report one dead (%p, %p, %d)\n", \
+printf("%s: no-continuous, report one dead (%p, %p, %d)\n", \
       __FUNCTION__, curCtxt,lastCtxt, size); \
 }while(0)
 
@@ -2573,14 +2573,14 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
                 // if (INS_MemoryOperandIsRead(ins, memOp)) {
                     
                 if (! is_write) {
-                    Record1ByteMemRead((VOID *)(uintptr_t)pc);                        
+                    Record1ByteMemRead((VOID *)(uintptr_t)addr);                        
                 }
                 else {
                     Record1ByteMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        (VOID *)(uintptr_t)pc);                    
+                        (VOID *)(uintptr_t)addr);                    
 //                     INS_InsertPredicatedCall(ins, IPOINT_BEFORE,
 //                                                 (AFUNPTR) Record1ByteMemWrite,
 // #ifdef IP_AND_CCT
@@ -2596,14 +2596,14 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             case 2:{
                        
                 if (! is_write) {
-                    Record2ByteMemRead((VOID *)(uintptr_t)pc);                        
+                    Record2ByteMemRead((VOID *)(uintptr_t)addr);                        
                 }
                 else {
                     Record2ByteMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        (VOID *)(uintptr_t)pc);                }
+                        (VOID *)(uintptr_t)addr);                }
             }
                     
 //                 if (INS_MemoryOperandIsRead(ins, memOp)) {
@@ -2628,41 +2628,41 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             case 4:{
                        
                 if (! is_write) {
-                    Record4ByteMemRead((VOID *)(uintptr_t)pc);                        
+                    Record4ByteMemRead((VOID *)(uintptr_t)addr);                        
                 }
                 else {
                     Record4ByteMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        (VOID *)(uintptr_t)pc);                }
+                        (VOID *)(uintptr_t)addr);                }
             }
                 break;
                 
             case 8:{
                        
                 if (! is_write) {
-                    Record8ByteMemRead((VOID *)(uintptr_t)pc);                        
+                    Record8ByteMemRead((VOID *)(uintptr_t)addr);                        
                 }
                 else {
                     Record8ByteMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        (VOID *)(uintptr_t)pc);                }
+                        (VOID *)(uintptr_t)addr);                }
             }
                 break;
                 
             case 10:{
                 if (! is_write) {
-                    Record10ByteMemRead((VOID *)(uintptr_t)pc);                        
+                    Record10ByteMemRead((VOID *)(uintptr_t)addr);                        
                 }
                 else {
                     Record10ByteMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        (VOID *)(uintptr_t)pc);                }
+                        (VOID *)(uintptr_t)addr);                }
                
             }
                 break;
@@ -2685,14 +2685,14 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 //                 }
 
                 if (! is_write) {
-                    Record16ByteMemRead((VOID *)(uintptr_t)pc);                        
+                    Record16ByteMemRead((VOID *)(uintptr_t)addr);                        
                 }
                 else {
                     Record16ByteMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                        (VOID *)(uintptr_t)pc);                }
+                        (VOID *)(uintptr_t)addr);                }
             }
                 break;
                 
@@ -2715,14 +2715,14 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 //                 }
 
                 if (! is_write) {
-                    RecordLargeMemRead((VOID *)(uintptr_t)pc,size);                        
+                    RecordLargeMemRead((VOID *)(uintptr_t)addr,size);                        
                 }
                 else {
                     RecordLargeMemWrite(
 #ifdef IP_AND_CCT
                         slot,
 #endif
-                       (VOID *)(uintptr_t)pc, size);
+                       (VOID *)(uintptr_t)addr, size);
                 }
             }
                 break;
@@ -4070,15 +4070,19 @@ bool init_plugin(void *self) {
     if(!init_callstack_instr_api()) return false;
 
 
-    //panda_do_flush_tb();
-    //printf("do_flush_tb enabled\n");
+    panda_do_flush_tb();
+    printf("do_flush_tb enabled\n");
+    // tb chaining disable
+    panda_disable_tb_chaining();
+    printf("panda basic block chaining disabled\n");
+
 
     // Need this to get EIP with our callbacks
     panda_enable_precise_pc();
     // Enable memory logging
     panda_enable_memcb();
 
-
+    
     // pcb.virt_mem_before_write = mem_write_callback;
     // panda_register_callback(self, PANDA_CB_VIRT_MEM_BEFORE_WRITE, pcb);
 
