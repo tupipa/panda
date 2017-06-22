@@ -948,295 +948,295 @@ inline VOID GoUpCallChain(){
 //     // return ;
 //   }
   
-inline VOID ManageCallingContext(CallStack *fstack){
-#ifdef TESTING_BYTES
-	return; // no CCT
-#endif // end TESTING_BYTES
+// inline VOID ManageCallingContext(CallStack *fstack){
+// #ifdef TESTING_BYTES
+// 	return; // no CCT
+// #endif // end TESTING_BYTES
     
-    // manage context
-    // lele: need to write new functions and methods to manage context
-    // generally: 
-    //  1, we use context node and ip slots solution, don't use any trace nodes.(But during adaption, we use only on TraceNode with ContextNode's IP as key)
-    //  This would reduce lots of overhead compared to Trace solution in PIN Deadspy. At least there is only one array store write IPs instead of many Trace Nodes.
-    //  2, we need to detect current context change by prog_point info and update our CCT by goDown/goUp;
-    //
-    //lele: check and detect a function call boundaries by comparing the CallStack with the current call CCT.
-    // if context node of currentIp is the last one of the caller stack. No func call is initiated.
-    // if context node of currentIp is the second last of the caller stack. New func call has been done.
-    // Otherwise, if current context node doesn't exists in the caller stack. Distinguish it by the last one of the call stack.
-    //  - a ret : last caller is the parent of current context node.
-    //  - a new func call : last caller is not the parent of current context node.
+//     // manage context
+//     // lele: need to write new functions and methods to manage context
+//     // generally: 
+//     //  1, we use context node and ip slots solution, don't use any trace nodes.(But during adaption, we use only on TraceNode with ContextNode's IP as key)
+//     //  This would reduce lots of overhead compared to Trace solution in PIN Deadspy. At least there is only one array store write IPs instead of many Trace Nodes.
+//     //  2, we need to detect current context change by prog_point info and update our CCT by goDown/goUp;
+//     //
+//     //lele: check and detect a function call boundaries by comparing the CallStack with the current call CCT.
+//     // if context node of currentIp is the last one of the caller stack. No func call is initiated.
+//     // if context node of currentIp is the second last of the caller stack. New func call has been done.
+//     // Otherwise, if current context node doesn't exists in the caller stack. Distinguish it by the last one of the call stack.
+//     //  - a ret : last caller is the parent of current context node.
+//     //  - a new func call : last caller is not the parent of current context node.
 
-    // if an function call, continue with trace entry method from PIN deadspy, otherwise, return.
+//     // if an function call, continue with trace entry method from PIN deadspy, otherwise, return.
 
 
-    //printf("step 1/3: detect whether in new func\n");
-    //#################################################
-    //################# step 1/3, detect whether in ####
-    //  - current function, iff curContextNode is the same with last of caller stack, or 
-    //                         caller stack size is zero and curContextNode is the same with root of ContextNode.
-    //      - just return in this case, do nothing to context nodes.
-    //
-    //  - a ret function, iff curContextNode doesn't exists in call stack but last caller is the parent of the current context node.
-    //      -call goUpCallChain to update curContextNode.
-    //
-    //  - a new function call, iff curContextNode is the same with second last of caller stack, or 
-    //                              curContextNode is not in the call stack and laster caller is not the parent of current context node(WRONG/IMP CASE).
-    //      -call goDownCallChain to create new ContextNode
-    //
-    // we don't detect function call directly. 
-    // we find a new function by comparing the last function in call stack with the current function.
-    gInitiatedCall = false;
-    gInitiatedRet = false;
+//     //printf("step 1/3: detect whether in new func\n");
+//     //#################################################
+//     //################# step 1/3, detect whether in ####
+//     //  - current function, iff curContextNode is the same with last of caller stack, or 
+//     //                         caller stack size is zero and curContextNode is the same with root of ContextNode.
+//     //      - just return in this case, do nothing to context nodes.
+//     //
+//     //  - a ret function, iff curContextNode doesn't exists in call stack but last caller is the parent of the current context node.
+//     //      -call goUpCallChain to update curContextNode.
+//     //
+//     //  - a new function call, iff curContextNode is the same with second last of caller stack, or 
+//     //                              curContextNode is not in the call stack and laster caller is not the parent of current context node(WRONG/IMP CASE).
+//     //      -call goDownCallChain to create new ContextNode
+//     //
+//     // we don't detect function call directly. 
+//     // we find a new function by comparing the last function in call stack with the current function.
+//     gInitiatedCall = false;
+//     gInitiatedRet = false;
 
-    ADDRINT curContextIp = gCurrentContext->address;
-    ADDRINT parContextIp;
+//     ADDRINT curContextIp = gCurrentContext->address;
+//     ADDRINT parContextIp;
 
-    // ADDRINT currentIp = fstack->pc;
-    ADDRINT callerIp, callerCallerIp;
+//     // ADDRINT currentIp = fstack->pc;
+//     ADDRINT callerIp, callerCallerIp;
 
     
-    printf("curContextIp: " TARGET_FMT_lx "\n", curContextIp);
-    if (fstack->n < 0){
-            printf("ERROR: get neg callers.\n");
-            exit(-1);
+//     printf("curContextIp: " TARGET_FMT_lx "\n", curContextIp);
+//     if (fstack->n < 0){
+//             printf("ERROR: get neg callers.\n");
+//             exit(-1);
 
-    }else if (fstack->n == 0){
-        // no callers, must be in current func
-        //printf("%s: get 0 callers\n", __FUNCTION__);
-        if (gCurrentContext != gRootContext  && gCurrentContext-> parent != gRootContext){
-            //when no func, gCurrentContext or its parent must be equal with gRootContext
-            printf("ERROR: when no func, gCurrentContext must point to gRootContext!!!\n");
-            exit(-1);
-        }else if (gCurrentContext-> parent == gRootContext){
-            gInitiatedRet = true;
-            printf("return to no func level!!\n");
-        //}else{
-            //printf("GOOD: init, no function yet!\n");
-        }
-        callerIp=gCurrentCallerIp;
+//     }else if (fstack->n == 0){
+//         // no callers, must be in current func
+//         //printf("%s: get 0 callers\n", __FUNCTION__);
+//         if (gCurrentContext != gRootContext  && gCurrentContext-> parent != gRootContext){
+//             //when no func, gCurrentContext or its parent must be equal with gRootContext
+//             printf("ERROR: when no func, gCurrentContext must point to gRootContext!!!\n");
+//             exit(-1);
+//         }else if (gCurrentContext-> parent == gRootContext){
+//             gInitiatedRet = true;
+//             printf("return to no func level!!\n");
+//         //}else{
+//             //printf("GOOD: init, no function yet!\n");
+//         }
+//         callerIp=gCurrentCallerIp;
 
-        //keep gInitatedCall to be false in this case;
-    }else {
-        // call stack has at least one element, could be three cases:
-        // - current func
-        // - a new func
-        // - a ret 
+//         //keep gInitatedCall to be false in this case;
+//     }else {
+//         // call stack has at least one element, could be three cases:
+//         // - current func
+//         // - a new func
+//         // - a ret 
 
-        // get last caller's ip
-        callerIp = fstack->callers[CALLERS_LAST];
-        printf("get callerIp on stack: " TARGET_FMT_lx "\n", callerIp);
-        gCurrentCallerIp= callerIp;
-        // callerIp = fstack->callers[0];
-        if(fstack->n == 1){
-            printf("first level function ever!!!\n");
-        }
+//         // get last caller's ip
+//         callerIp = fstack->callers[CALLERS_LAST];
+//         printf("get callerIp on stack: " TARGET_FMT_lx "\n", callerIp);
+//         gCurrentCallerIp= callerIp;
+//         // callerIp = fstack->callers[0];
+//         if(fstack->n == 1){
+//             printf("first level function ever!!!\n");
+//         }
 
-        // detect in current func by compare last caller with current Context.
-        if (curContextIp == callerIp){
-            //no new call if last caller is the same with current Context.
-            gInitiatedCall = false;
-            printf("no new call, do nothing.\n");
-            return;
-        }else{
-            // now curContextIp is not last caller, two cases:
-            // a ret, or a new func call
-            if(fstack->n == 1){
-                //in first level function; if gCurrentContext pointed to root, then should be in new function
-                if (gCurrentContext == gRootContext){
-                    printf("Entered first level function from root!\n");
-                    // callerIp is first level's func; move currentContext to this func;
-                    // create one child of RootContext
-                    gInitiatedCall = true;
-                }else{
-                    printf("gCurrentContext is not root; instruction is in first level func; so not new func. Do nothing.\n");
-                }
-            }else{
-                //in other level functions:
-                // - a new func call, curContextNode is the second last of call stack, or
-                //                    curContextNode is not the second last of call stack, neither it's parent is the last one in call stack, but in the second last is it's parent.
-                // - a ret, curContextNode is not the second last of call stack, but it's parent is the last in call stack.
-                callerCallerIp = fstack->callers[CALLERS_SECOND_LAST];
-                if (curContextIp == callerCallerIp){
-                    // current Context is the second last of call stack, enter a new func.
-                    // curContext will become the parent of this new func.
-                    // first detect whether this func is already a children of currentContext. if not, create one.
-                    // set cur context with callerIp.
-                    gInitiatedCall=true;
-                    printf("curContext is equal to caller of the caller; so new call detected\n");
-                }else {
-                    // current Context is neither the last nor the second last in the call stack.
-                    // - a ret: current Context's parent is the last in call stack.
-                    // WRONG: current Context's parent is not the last in call stack.
-                    // //curContext is impossible to be root when there are more than one callers in stack.
-                    if (gCurrentContext == gRootContext){
-                        printf("Error: current context node should not be root context when there are >2 callers in stack. A new context should be created when there is 1 callers in stack.\n");
-                    }
-                    ContextNode * parContext = gCurrentContext->parent;
-                    // parContext is impossible to be root: parent context must be last in call stack, so should not be the root.
-                    // when parent of the cur context node is the root, it's in the first func, call stack is at most 2 callers where cur context is the second last in call stack.
-                    parContextIp = parContext->address;
+//         // detect in current func by compare last caller with current Context.
+//         if (curContextIp == callerIp){
+//             //no new call if last caller is the same with current Context.
+//             gInitiatedCall = false;
+//             printf("no new call, do nothing.\n");
+//             return;
+//         }else{
+//             // now curContextIp is not last caller, two cases:
+//             // a ret, or a new func call
+//             if(fstack->n == 1){
+//                 //in first level function; if gCurrentContext pointed to root, then should be in new function
+//                 if (gCurrentContext == gRootContext){
+//                     printf("Entered first level function from root!\n");
+//                     // callerIp is first level's func; move currentContext to this func;
+//                     // create one child of RootContext
+//                     gInitiatedCall = true;
+//                 }else{
+//                     printf("gCurrentContext is not root; instruction is in first level func; so not new func. Do nothing.\n");
+//                 }
+//             }else{
+//                 //in other level functions:
+//                 // - a new func call, curContextNode is the second last of call stack, or
+//                 //                    curContextNode is not the second last of call stack, neither it's parent is the last one in call stack, but in the second last is it's parent.
+//                 // - a ret, curContextNode is not the second last of call stack, but it's parent is the last in call stack.
+//                 callerCallerIp = fstack->callers[CALLERS_SECOND_LAST];
+//                 if (curContextIp == callerCallerIp){
+//                     // current Context is the second last of call stack, enter a new func.
+//                     // curContext will become the parent of this new func.
+//                     // first detect whether this func is already a children of currentContext. if not, create one.
+//                     // set cur context with callerIp.
+//                     gInitiatedCall=true;
+//                     printf("curContext is equal to caller of the caller; so new call detected\n");
+//                 }else {
+//                     // current Context is neither the last nor the second last in the call stack.
+//                     // - a ret: current Context's parent is the last in call stack.
+//                     // WRONG: current Context's parent is not the last in call stack.
+//                     // //curContext is impossible to be root when there are more than one callers in stack.
+//                     if (gCurrentContext == gRootContext){
+//                         printf("Error: current context node should not be root context when there are >2 callers in stack. A new context should be created when there is 1 callers in stack.\n");
+//                     }
+//                     ContextNode * parContext = gCurrentContext->parent;
+//                     // parContext is impossible to be root: parent context must be last in call stack, so should not be the root.
+//                     // when parent of the cur context node is the root, it's in the first func, call stack is at most 2 callers where cur context is the second last in call stack.
+//                     parContextIp = parContext->address;
 
-                    if(parContextIp == callerIp){
-                        gInitiatedRet = true;
-                        printf("parent ContextIp is equal to the caller Ip, a ret detected. \n");
-                    }else{
-                        printf("Error: callers>=2: current Context is neither the last nor the second last in the call stack, and current Context's parent is not the last in call stack.\n");
-                        exit(-1);
-                    }
-                }
-            }
+//                     if(parContextIp == callerIp){
+//                         gInitiatedRet = true;
+//                         printf("parent ContextIp is equal to the caller Ip, a ret detected. \n");
+//                     }else{
+//                         printf("Error: callers>=2: current Context is neither the last nor the second last in the call stack, and current Context's parent is not the last in call stack.\n");
+//                         exit(-1);
+//                     }
+//                 }
+//             }
 
-        }
+//         }
         
-    }
-
-    // ###################################################
-    // ################### step 2/3, #####################
-    // ###################################################
-    //  - create Context Node when new func call; 
-    //  - store IP to shadow pages
-    //  to simulate the PopulateIPReverseMapAndAccountTraceInstructions() on every new func call, which had store IPs for all 
-    //  Instructions
-    //  - reset slot to 0.
-    //  - add current pc as first instruction in ip
-
-    //printf("step 2/3: create Context Node when new func call\n");
-    
-    ////////////////////////////////////
-    // InstrumentTrace(TRACE trace, void * f):
-    //   BBL bbl = TRACE_BblHead(trace);
-    //   INS ins = BBL_InsHead(bbl);
-    //   INS_InsertCall (ins, IPOINT_BEFORE, (AFUNPTR)InstrumentTraceEntry,IARG_INST_PTR,IARG_END);    
-    //   PopulateIPReverseMapAndAccountTraceInstructions(trace);
-
-    // // Does necessary work on a trace entry (called during runtime)
-    // // 1. If landed here due to function call, then go down in CCT.
-    // // 2. Look up the current trace under the CCT node creating new if if needed.
-    // // 3. Update global iterators and curXXXX pointers.
-
-    // inline void InstrumentTraceEntry(ADDRINT currentIp){
-        
-    // if landed due to function call, create a child context node
-
-    if(gInitiatedCall){
-        // gInitatedCall = true, means this mem R/W instruction is inside a new function call
-        // So, we need to:
-        //  - update the CCT with a new Context Node and 
-        //  - update corresponding array slot index to store the new IP with mem W (no read)
-        //
-        // a new function call is on the top of call stack.
-        printf("gInitiatedCall=true\n");
-
-        UpdateDataOnFunctionEntry(callerIp); // it will reset   gInitiatedCall  
-
-        // MOVED to block assemb.
-        // printf("setup according to PopulateIPReverseMapAndAccountTraceInstructions() in deadspy\n");
-        // //uint32_t traceSize = TRACE_Size(trace);    
-        // uint32_t traceSize = 0x80;    //lele: TODO: determine the size of function
-     
-        // ADDRINT * ipShadow = (ADDRINT * )malloc( (1 + traceSize) * sizeof(ADDRINT)); // +1 to hold the number of slots as a metadata
-        // ADDRINT  traceAddr = callerIp;
-        // uint32_t slot = 0;
-    
-        // gCurrentSlot = slot;
-    
-        // // give space to account for nSlots which we record later once we know nWrites
-        // ADDRINT * pNumWrites = ipShadow;
-        // ipShadow ++;
-        // gTraceShadowMap[traceAddr] = ipShadow ;
-
-        //  // Record the number of child write IPs i.e., number of "slots"
-        // *pNumWrites = slot;
-
-    }else if(gInitiatedRet){
-        printf("get a ret; call GoUpCallChain...\n");
-        // Let GoDownCallChain do the work needed to setup pointers for child nodes.
-        GoUpCallChain();
-    }else if (gInitiatedCall && gInitiatedRet){
-        printf("ERROR: cant ret and call at same time\n");
-        exit(-1);
-    // }else{
-    //     printf("no new call, no ret.\n");
-    }
-    
-    //#######################################################
-    // ######################## setp 3/3, #################
-    // update currentIp slots for curContextNode. necessary here!
-    // lele: we adapt the name of "Trace" to store the slots. Might be improved by using a single TraceNode instead of a map with only one TraceNode.
-
-    // Check if a trace node with currentIp already exists under this context node
-    
-    //printf("step 3/3, update currentIp slots for curContextNode. necessary here!\n");
-    // Check if a trace node with currentIp already exists under this context node    
-          
-    //printf("callerIp: " TARGET_FMT_lx "\n", callerIp);
-    if( (gTraceIter = (gCurrentContext->childTraces).find(callerIp)) != gCurrentContext->childTraces.end()) {
-        // if tracenode is already exists
-        // set the current Trace to the new trace
-        // set the IpVector
-        //printf("Trace Node already exists\n");
-        gCurrentTrace = gTraceIter->second;
-        gCurrentIpVector = gCurrentTrace->childIPs;
-        //lele: set slot index
-        // gCurrentSlot = gCurrentTrace->nSlots;
-        // printf("Trace Node exists; set/get current slots:%u\n", gCurrentSlot);
-
-     } else {
-        //panda: if not in the current context node, this means in a new function and a new context node is created.
-        
-        // Create new trace node and insert under the context node.
-        printf(__FUNCTION__);
-        printf(": Need to Create new Trace node.\n");
-
-        TraceNode * newChild = new TraceNode();
-        printf("TraceNode New Child Created\n");
-        printf("\tNew Child: set parent\n");
-        newChild->parent = gCurrentContext;
-        printf("\tNew Child: set address\n");
-        newChild->address = callerIp;
-        printf("get currentTraceShadowIp from gTraceShadowMap[callerIp]\n");
-    	target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[callerIp];
-        printf("get recordedSlots from currentTraceShadowIP[-1] %p\n", currentTraceShadowIP);
-        target_ulong recordedSlots = currentTraceShadowIP[-1]; // present one behind
-        if(recordedSlots){
-            printf("Record Slots: " TARGET_FMT_lx "\n", recordedSlots);
-#ifdef CONTINUOUS_DEADINFO
-            // if CONTINUOUS_DEADINFO is set, then all ip vecs come from a fixed 4GB buffer
-            printf("Continuous Info: GetNextIPVecBuffer...\n");
-            newChild->childIPs  = (TraceNode **)GetNextIPVecBuffer(recordedSlots);
-#else            //no CONTINUOUS_DEADINFO
-            printf("NON Continuous Info: malloc new TraceNode**\n");
-            newChild->childIPs = (TraceNode **) malloc( (recordedSlots) * sizeof(TraceNode **) );
-#endif //end CONTINUOUS_DEADINFO
-            newChild->nSlots = recordedSlots;
-            //cerr<<"\n***:"<<recordedSlots; 
-            for(uint32_t i = 0 ; i < recordedSlots ; i++) {
-                newChild->childIPs[i] = newChild;
-            }
-        } else {
-            printf("No record slots read\n");
-            newChild->nSlots = 0;
-            newChild->childIPs = 0;            
-        }    
-        gCurrentContext->childTraces[callerIp] = newChild;
-        gCurrentTrace = newChild;
-        gCurrentIpVector = gCurrentTrace->childIPs;
-        //lele: set slot index
-        // gCurrentSlot = gCurrentTrace->nSlots;
-    }    
-
-//     if(INS_IsProcedureCall(ins) ) {
-// #ifdef IP_AND_CCT
-//         INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) SetCallInitFlag,IARG_END);
-// #else        // no IP_AND_CCT        
-//         INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) GoDownCallChain, IARG_BRANCH_TARGET_ADDR, IARG_END);
-// #endif // end IP_AND_CCT        
-//     }else if(INS_IsRet(ins)){
-//         INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) GoUpCallChain, IARG_END);
 //     }
-    printf("%s: done manage context for one memory operating instruction\n\n", __FUNCTION__);
-}
+
+//     // ###################################################
+//     // ################### step 2/3, #####################
+//     // ###################################################
+//     //  - create Context Node when new func call; 
+//     //  - store IP to shadow pages
+//     //  to simulate the PopulateIPReverseMapAndAccountTraceInstructions() on every new func call, which had store IPs for all 
+//     //  Instructions
+//     //  - reset slot to 0.
+//     //  - add current pc as first instruction in ip
+
+//     //printf("step 2/3: create Context Node when new func call\n");
+    
+//     ////////////////////////////////////
+//     // InstrumentTrace(TRACE trace, void * f):
+//     //   BBL bbl = TRACE_BblHead(trace);
+//     //   INS ins = BBL_InsHead(bbl);
+//     //   INS_InsertCall (ins, IPOINT_BEFORE, (AFUNPTR)InstrumentTraceEntry,IARG_INST_PTR,IARG_END);    
+//     //   PopulateIPReverseMapAndAccountTraceInstructions(trace);
+
+//     // // Does necessary work on a trace entry (called during runtime)
+//     // // 1. If landed here due to function call, then go down in CCT.
+//     // // 2. Look up the current trace under the CCT node creating new if if needed.
+//     // // 3. Update global iterators and curXXXX pointers.
+
+//     // inline void InstrumentTraceEntry(ADDRINT currentIp){
+        
+//     // if landed due to function call, create a child context node
+
+//     if(gInitiatedCall){
+//         // gInitatedCall = true, means this mem R/W instruction is inside a new function call
+//         // So, we need to:
+//         //  - update the CCT with a new Context Node and 
+//         //  - update corresponding array slot index to store the new IP with mem W (no read)
+//         //
+//         // a new function call is on the top of call stack.
+//         printf("gInitiatedCall=true\n");
+
+//         UpdateDataOnFunctionEntry(callerIp); // it will reset   gInitiatedCall  
+
+//         // MOVED to block assemb.
+//         // printf("setup according to PopulateIPReverseMapAndAccountTraceInstructions() in deadspy\n");
+//         // //uint32_t traceSize = TRACE_Size(trace);    
+//         // uint32_t traceSize = 0x80;    //lele: TODO: determine the size of function
+     
+//         // ADDRINT * ipShadow = (ADDRINT * )malloc( (1 + traceSize) * sizeof(ADDRINT)); // +1 to hold the number of slots as a metadata
+//         // ADDRINT  traceAddr = callerIp;
+//         // uint32_t slot = 0;
+    
+//         // gCurrentSlot = slot;
+    
+//         // // give space to account for nSlots which we record later once we know nWrites
+//         // ADDRINT * pNumWrites = ipShadow;
+//         // ipShadow ++;
+//         // gTraceShadowMap[traceAddr] = ipShadow ;
+
+//         //  // Record the number of child write IPs i.e., number of "slots"
+//         // *pNumWrites = slot;
+
+//     }else if(gInitiatedRet){
+//         printf("get a ret; call GoUpCallChain...\n");
+//         // Let GoDownCallChain do the work needed to setup pointers for child nodes.
+//         GoUpCallChain();
+//     }else if (gInitiatedCall && gInitiatedRet){
+//         printf("ERROR: cant ret and call at same time\n");
+//         exit(-1);
+//     // }else{
+//     //     printf("no new call, no ret.\n");
+//     }
+    
+//     //#######################################################
+//     // ######################## setp 3/3, #################
+//     // update currentIp slots for curContextNode. necessary here!
+//     // lele: we adapt the name of "Trace" to store the slots. Might be improved by using a single TraceNode instead of a map with only one TraceNode.
+
+//     // Check if a trace node with currentIp already exists under this context node
+    
+//     //printf("step 3/3, update currentIp slots for curContextNode. necessary here!\n");
+//     // Check if a trace node with currentIp already exists under this context node    
+          
+//     //printf("callerIp: " TARGET_FMT_lx "\n", callerIp);
+//     if( (gTraceIter = (gCurrentContext->childTraces).find(callerIp)) != gCurrentContext->childTraces.end()) {
+//         // if tracenode is already exists
+//         // set the current Trace to the new trace
+//         // set the IpVector
+//         //printf("Trace Node already exists\n");
+//         gCurrentTrace = gTraceIter->second;
+//         gCurrentIpVector = gCurrentTrace->childIPs;
+//         //lele: set slot index
+//         // gCurrentSlot = gCurrentTrace->nSlots;
+//         // printf("Trace Node exists; set/get current slots:%u\n", gCurrentSlot);
+
+//      } else {
+//         //panda: if not in the current context node, this means in a new function and a new context node is created.
+        
+//         // Create new trace node and insert under the context node.
+//         printf(__FUNCTION__);
+//         printf(": Need to Create new Trace node.\n");
+
+//         TraceNode * newChild = new TraceNode();
+//         printf("TraceNode New Child Created\n");
+//         printf("\tNew Child: set parent\n");
+//         newChild->parent = gCurrentContext;
+//         printf("\tNew Child: set address\n");
+//         newChild->address = callerIp;
+//         printf("get currentTraceShadowIp from gTraceShadowMap[callerIp]\n");
+//     	target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[callerIp];
+//         printf("get recordedSlots from currentTraceShadowIP[-1] %p\n", currentTraceShadowIP);
+//         target_ulong recordedSlots = currentTraceShadowIP[-1]; // present one behind
+//         if(recordedSlots){
+//             printf("Record Slots: " TARGET_FMT_lx "\n", recordedSlots);
+// #ifdef CONTINUOUS_DEADINFO
+//             // if CONTINUOUS_DEADINFO is set, then all ip vecs come from a fixed 4GB buffer
+//             printf("Continuous Info: GetNextIPVecBuffer...\n");
+//             newChild->childIPs  = (TraceNode **)GetNextIPVecBuffer(recordedSlots);
+// #else            //no CONTINUOUS_DEADINFO
+//             printf("NON Continuous Info: malloc new TraceNode**\n");
+//             newChild->childIPs = (TraceNode **) malloc( (recordedSlots) * sizeof(TraceNode **) );
+// #endif //end CONTINUOUS_DEADINFO
+//             newChild->nSlots = recordedSlots;
+//             //cerr<<"\n***:"<<recordedSlots; 
+//             for(uint32_t i = 0 ; i < recordedSlots ; i++) {
+//                 newChild->childIPs[i] = newChild;
+//             }
+//         } else {
+//             printf("No record slots read\n");
+//             newChild->nSlots = 0;
+//             newChild->childIPs = 0;            
+//         }    
+//         gCurrentContext->childTraces[callerIp] = newChild;
+//         gCurrentTrace = newChild;
+//         gCurrentIpVector = gCurrentTrace->childIPs;
+//         //lele: set slot index
+//         // gCurrentSlot = gCurrentTrace->nSlots;
+//     }    
+
+// //     if(INS_IsProcedureCall(ins) ) {
+// // #ifdef IP_AND_CCT
+// //         INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) SetCallInitFlag,IARG_END);
+// // #else        // no IP_AND_CCT        
+// //         INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) GoDownCallChain, IARG_BRANCH_TARGET_ADDR, IARG_END);
+// // #endif // end IP_AND_CCT        
+// //     }else if(INS_IsRet(ins)){
+// //         INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR) GoUpCallChain, IARG_END);
+// //     }
+//     printf("%s: done manage context for one memory operating instruction\n\n", __FUNCTION__);
+// }
 
 
 
