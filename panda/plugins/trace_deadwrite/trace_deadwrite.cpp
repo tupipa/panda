@@ -1248,10 +1248,10 @@ inline VOID GoUpCallChain(){
 // Initialized the fields of the root node of all context trees
 VOID InitContextTree(){
     //gCurrentASID = 0x0; 
-    gTraceKernel=true;
+    //gTraceKernel=true;
     //gTraceApp=true;
-    //gTraceOne=true;
-    //gCurrentASID = 0x000000001fb14000;
+    gTraceOne=true;
+    gCurrentASID = 0x000000001fb14000;
      
 #ifdef IP_AND_CCT
     // MAX 10 context trees
