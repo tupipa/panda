@@ -318,8 +318,8 @@ DeadMap.insert(std::pair<uint64_t, uint64_t>(hashVar,size)); \
 } else {    \
 (gDeadMapIt->second) += size;    \
 }   \
-printf("%s:continuous: report one dead (&gCurrentIpVector[%d]:%p, %p, %d)\n", \
-      __FUNCTION__, slot, curCtxt,lastCtxt, size); \
+printf("%s:continuous: report one dead (&gCurrentIpVector[%d]:%p, %p, %d, hash :0x%lx)\n", \
+      __FUNCTION__, slot, curCtxt,lastCtxt, size, hashVar); \
 }while(0)
 
 #else // no defined(CONTINUOUS_DEADINFO)
@@ -2487,7 +2487,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     //
             // Update gTrace->childIPs and -> nSlots by this new slot
             gCurrentTrace->childIPs[recordedSlots] = gCurrentTrace;
-            printf("%s: add one Slot in gCurrentTrace &gCurrentTrace->childIPs[%d]: %p", 
+            printf("%s: add one Slot in gCurrentTrace &gCurrentTrace->childIPs[%d]: %p\n", 
                 __FUNCTION__, (int)recordedSlots, &gCurrentTrace->childIPs[recordedSlots]);
             gCurrentTrace->nSlots++; 
 
