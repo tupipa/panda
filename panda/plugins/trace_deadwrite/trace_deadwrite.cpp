@@ -1294,6 +1294,7 @@ VOID InitContextTree(){
     gTraceShadowMap[traceAddr] = ipShadow ;
 
     //lele: gTraceShadowMapIps;
+    printf("BUG HERE\n");
     unordered_map<ADDRINT,bool> * mapIps = 
         (unordered_map<ADDRINT, bool> *) malloc (sizeof(unordered_map<ADDRINT,bool>));
     (*mapIps)[traceAddr]=false;
