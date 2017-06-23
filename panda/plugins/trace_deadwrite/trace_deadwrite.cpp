@@ -1295,8 +1295,8 @@ VOID InitContextTree(){
 
     //lele: gTraceShadowMapIps;
     unordered_map<ADDRINT,bool> * mapIps = 
-        (unoerdered_map<ADDRINT, bool> *) malloc (sizeof(unoerdered_map<ADDRINT,bool>));
-    mapIps[traceAddr]=false;
+        (unordered_map<ADDRINT, bool> *) malloc (sizeof(unordered_map<ADDRINT,bool>));
+    (*mapIps)[traceAddr]=false;
     gTraceShadowMapIps[traceAddr] = mapIps;
 
 
@@ -2503,7 +2503,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             // }
             printf("%s: check to update TraceShadowMap when no current pc is stored \n", __FUNCTION__);
 
-            if (gTraceShadowMapIps[gCurrentTrace->address][pc]){
+            if ((*gTraceShadowMapIps[gCurrentTrace->address])[pc]){
                 printf("%s: gTraceShadowMap already has this pc" TARGET_FMT_lx ", no need to update\n",__FUNCTION__, pc);
                 needUpdate=false;
             }
@@ -2511,7 +2511,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
         if(needUpdate){
             currentTraceShadowIP[recordedSlots] = pc;
-            gTraceShadowMapIps[gCurrentTrace->address][pc]=true;
+            (*gTraceShadowMapIps[gCurrentTrace->address])[pc]=true;
             currentTraceShadowIP[-1] ++;
 
             // UpdateTraceIPs is splited into two steps:
@@ -3645,7 +3645,8 @@ inline void InitializeTraceShadowMap(CPUState *cpu, TranslationBlock *tb){
         printf("%s: an re-translated basic block, now check its size\n",__FUNCTION__);
 
         target_ulong blockSize = traceShadowIP[-2]; // present one behind
-        printf("%s: get block size  %d, from gTraceShadowMap[0x" TARGET_FMT_lx "][-2]\n", (int)blockSize, tb->pc);
+        printf("%s: get block size  %d, from gTraceShadowMap[0x" TARGET_FMT_lx "][-2]\n",
+            __FUNCTION__, (int)blockSize, tb->pc);
 
         if (tb->size > blockSize){
             printf("%s: block re-translated to a bigger tb size, update TraceShadowMap for tb->pc: 0x"
@@ -3702,8 +3703,8 @@ inline void InitializeTraceShadowMap(CPUState *cpu, TranslationBlock *tb){
 
         //lele: gTraceShadowMapIps;
         unordered_map<ADDRINT,bool> * mapIps = 
-            (unoerdered_map<ADDRINT, bool> *) malloc (sizeof(unoerdered_map<ADDRINT,bool>));
-        mapIps[traceAddr]=false;
+            (unordered_map<ADDRINT, bool> *) malloc (sizeof(unordered_map<ADDRINT,bool>));
+        (*mapIps)[traceAddr]=false;
         gTraceShadowMapIps[traceAddr] = mapIps;
 
         printf("%s: set gTraceShadowMap[0x" TARGET_FMT_lx "] as false for this block\n", __FUNCTION__, tb->pc);
