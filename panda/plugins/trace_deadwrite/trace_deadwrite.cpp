@@ -21,7 +21,7 @@ This plugin traces deadwrites, and print them to file
             ContextNode
             MergedDeadInfo, 
             DeadInfoForPresentation,
-            TraceNode,
+            TraceNode,-> BlockNode
             DeadInfo,
             include 'google sparse hash map'
 
@@ -479,7 +479,7 @@ FILE *gTraceFile_user = NULL;
 
 #ifdef IP_AND_CCT
 struct MergedDeadInfo;
-struct TraceNode;
+struct BlockNode;
 struct DeadInfoForPresentation;
 inline ADDRINT GetIPFromInfo(void * ptr);
 inline string GetLineFromInfo(void * ptr);
@@ -498,8 +498,8 @@ struct ContextNode {
     ContextNode * parent;
     sparse_hash_map<ADDRINT,ContextNode *> childContexts;
 #ifdef IP_AND_CCT
-    sparse_hash_map<ADDRINT,TraceNode *> childBlocks;
-    // TraceNode * childTrace;
+    sparse_hash_map<ADDRINT,BlockNode *> childBlocks;
+    // BlockNode * childTrace;
 #endif // end IP_AND_CCT    
     ADDRINT address;
     
@@ -562,9 +562,9 @@ struct DeadInfoForPresentation{
     target_ulong count;
 };
 
-struct TraceNode{
+struct BlockNode{
     ContextNode * parent;
-    TraceNode ** childIPs;
+    BlockNode ** childIPs;
     ADDRINT address;
     uint32_t nSlots;
 };
@@ -635,14 +635,14 @@ vector<ContextTree> gContextTreeVector;
 
 
 #ifdef IP_AND_CCT
-sparse_hash_map<ADDRINT, TraceNode *>::iterator gTraceIter;
+sparse_hash_map<ADDRINT, BlockNode *>::iterator gTraceIter;
 //dense_hash_map<ADDRINT, void *> gBlockShadowMap;
 // hash_map<ADDRINT, void *> gBlockShadowMap;
-//Lele: we don't use StartAddr of a trace as key, instead, we use ContextNode's address as key, to store an array, doing the same thing: ---mapping the slots index of each write instruction in a function to its corresponding IP. In order to be compatible with the legacy TraceNode, we use one tracenode to store the array, with StartAddr equal to the ContextNodes' address.
+//Lele: we don't use StartAddr of a trace as key, instead, we use ContextNode's address as key, to store an array, doing the same thing: ---mapping the slots index of each write instruction in a function to its corresponding IP. In order to be compatible with the legacy BlockNode, we use one tracenode to store the array, with StartAddr equal to the ContextNodes' address.
 unordered_map<ADDRINT, void *> gBlockShadowMap;
 unordered_map<ADDRINT, bool> gTraceShadowMapDone;
 unordered_map<ADDRINT, unordered_map<ADDRINT, bool> *> gTraceShadowMapIps;
-TraceNode * gCurrentBBlock;
+BlockNode * gCurrentBBlock;
 uint32_t gCurrentSlot;
 
 bool gInitiatedCall = false;
@@ -650,7 +650,7 @@ bool gInitiatedRet = false;
 bool gInitiatedINT = false;
 bool gInitiatedIRET = false;
 bool gNewBasicBlock = false; // tracking new Trace Nodes, and used to update childIPs during mem_callback execution.
-TraceNode ** gCurrentIpVector;
+BlockNode ** gCurrentIpVector;
 ADDRINT gCurrentCallerIp;
 
 bool gTraceKernel=false; //trace all kernel processes; asid=0
@@ -957,7 +957,7 @@ inline VOID GoUpCallChain(){
 //     // manage context
 //     // lele: need to write new functions and methods to manage context
 //     // generally: 
-//     //  1, we use context node and ip slots solution, don't use any trace nodes.(But during adaption, we use only on TraceNode with ContextNode's IP as key)
+//     //  1, we use context node and ip slots solution, don't use any trace nodes.(But during adaption, we use only on BlockNode with ContextNode's IP as key)
 //     //  This would reduce lots of overhead compared to Trace solution in PIN Deadspy. At least there is only one array store write IPs instead of many Trace Nodes.
 //     //  2, we need to detect current context change by prog_point info and update our CCT by goDown/goUp;
 //     //
@@ -1164,7 +1164,7 @@ inline VOID GoUpCallChain(){
 //     //#######################################################
 //     // ######################## setp 3/3, #################
 //     // update currentIp slots for curContextNode. necessary here!
-//     // lele: we adapt the name of "Trace" to store the slots. Might be improved by using a single TraceNode instead of a map with only one TraceNode.
+//     // lele: we adapt the name of "Trace" to store the slots. Might be improved by using a single BlockNode instead of a map with only one BlockNode.
 
 //     // Check if a trace node with currentIp already exists under this context node
     
@@ -1190,8 +1190,8 @@ inline VOID GoUpCallChain(){
 //         printf(__FUNCTION__);
 //         printf(": Need to Create new Trace node.\n");
 
-//         TraceNode * newChild = new TraceNode();
-//         printf("TraceNode New Child Created\n");
+//         BlockNode * newChild = new BlockNode();
+//         printf("BlockNode New Child Created\n");
 //         printf("\tNew Child: set parent\n");
 //         newChild->parent = gCurrentContext;
 //         printf("\tNew Child: set address\n");
@@ -1205,10 +1205,10 @@ inline VOID GoUpCallChain(){
 // #ifdef CONTINUOUS_DEADINFO
 //             // if CONTINUOUS_DEADINFO is set, then all ip vecs come from a fixed 4GB buffer
 //             printf("Continuous Info: GetNextIPVecBuffer...\n");
-//             newChild->childIPs  = (TraceNode **)GetNextIPVecBuffer(recordedSlots);
+//             newChild->childIPs  = (BlockNode **)GetNextIPVecBuffer(recordedSlots);
 // #else            //no CONTINUOUS_DEADINFO
-//             printf("NON Continuous Info: malloc new TraceNode**\n");
-//             newChild->childIPs = (TraceNode **) malloc( (recordedSlots) * sizeof(TraceNode **) );
+//             printf("NON Continuous Info: malloc new BlockNode**\n");
+//             newChild->childIPs = (BlockNode **) malloc( (recordedSlots) * sizeof(BlockNode **) );
 // #endif //end CONTINUOUS_DEADINFO
 //             newChild->nSlots = recordedSlots;
 //             //cerr<<"\n***:"<<recordedSlots; 
@@ -2541,7 +2541,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             if (gCurrentBBlock->childIPs == 0){
                 // for first slot, also set childIPs.
                 printf("%s: now in first R/W of a new trace\n", __FUNCTION__);
-                gCurrentBBlock->childIPs = (TraceNode **)GetNextIPVecBuffer(1);
+                gCurrentBBlock->childIPs = (BlockNode **)GetNextIPVecBuffer(1);
 
                 printf("%s: reset gCurrentIpVector pointing to %p, for tb->pc: 0x" TARGET_FMT_lx " \n",
                     __FUNCTION__, gCurrentBBlock->childIPs, gCurrentBBlock->address);
@@ -2997,15 +2997,15 @@ inline target_ulong GetMeasurementBaseCount(){
     //  within a trace node, returns the IP corresponding to that slot
     //inline ADDRINT GetIPFromInfo(void * ptr){
     inline ADDRINT GetIPFromInfo(void * ptr){
-        //lele: use ContextNode->address as key instead of TraceNode
-		TraceNode * traceNode = *((TraceNode **) ptr);
+        //lele: use ContextNode->address as key instead of BlockNode
+		BlockNode * traceNode = *((BlockNode **) ptr);
         // ContextNode * contextNode = (ContextNode *) ptr;
         
 		// what is my slot id ?
 		uint32_t slotNo = 0;
 		for( ; slotNo < traceNode->nSlots; slotNo++){
 		// for( ; slotNo < contextNode->nSlots; slotNo++){
-			if (&traceNode->childIPs[slotNo] == (TraceNode **) ptr)
+			if (&traceNode->childIPs[slotNo] == (BlockNode **) ptr)
 				break;
 		}
         
@@ -3091,10 +3091,10 @@ inline target_ulong GetMeasurementBaseCount(){
             MergedDeadInfo tmpMergedDeadInfo;
             uint64_t hash = mapIt->first;
 	        printf("%s: read one dead info: 0x%lx\n", __FUNCTION__, hash);
-            TraceNode ** ctxt1 = (TraceNode **)(gPreAllocatedContextBuffer + (hash >> 32));
+            BlockNode ** ctxt1 = (BlockNode **)(gPreAllocatedContextBuffer + (hash >> 32));
             printf("get ctxt1: %p, ", ctxt1);
             printf(" *ctxt1: %p\n", *ctxt1);
-	        TraceNode ** ctxt2 = (TraceNode **)(gPreAllocatedContextBuffer + (hash & 0xffffffff));
+	        BlockNode ** ctxt2 = (BlockNode **)(gPreAllocatedContextBuffer + (hash & 0xffffffff));
             printf("get ctxt2: %p, *ctxt2: %p\n", ctxt2, *ctxt2);
             printf("get ctxt2: %p, *ctxt2: %p\n", ctxt2, *ctxt2);
             
@@ -3129,8 +3129,8 @@ inline target_ulong GetMeasurementBaseCount(){
         for (; mapIt != DeadMap.end(); mapIt++) {
             MergedDeadInfo tmpMergedDeadInfo;
             printf("counting written bytes:  " TARGET_FMT_lx "\n", writeSize);
-            tmpMergedDeadInfo.context1 = (*((TraceNode **)((mapIt->second).firstIP)))->parent;
-            tmpMergedDeadInfo.context2 = (*((TraceNode **)((mapIt->second).secondIP)))->parent;
+            tmpMergedDeadInfo.context1 = (*((BlockNode **)((mapIt->second).firstIP)))->parent;
+            tmpMergedDeadInfo.context2 = (*((BlockNode **)((mapIt->second).secondIP)))->parent;
 #ifdef MERGE_SAME_LINES
             tmpMergedDeadInfo.line1 = GetLineFromInfo(mapIt->second.firstIP);
             tmpMergedDeadInfo.line2 = GetLineFromInfo(mapIt->second.secondIP);
@@ -3857,9 +3857,9 @@ before_block_exec: called before execution of every basic block
 // 1. Look up the current trace under the CCT node creating new if if needed.
 // 2. Update global iterators and curXXXX pointers.
 
-//Lele:  split gBlockShadowMap creating and TraceNode creating:
+//Lele:  split gBlockShadowMap creating and BlockNode creating:
     
-//         - a new TraceNode didn't require a new gBlockShadowMap of a basic block:
+//         - a new BlockNode didn't require a new gBlockShadowMap of a basic block:
 //         A basic block should have only one area stored in gBlockShadowMap, but could have multiple
 //         TraceNodes stored under different ContextNode.
     
@@ -3878,7 +3878,7 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
     gCurrentSlot = 0;
 
     // if landed due to function call, create a child context node
-    // create one TraceNode each time we call a basic block under current context.
+    // create one BlockNode each time we call a basic block under current context.
     //  - For same context Node, only one traceNode for the same basic block.
     //  - same basic block could be created under different context node.
     //  - initialized here but filled at mem_callback.
@@ -3898,13 +3898,13 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 
      } else {
         //panda: if not in the current context node,  a new BasicBlock(trace) node is created.
-        // create and initial new TraceNode.
+        // create and initial new BlockNode.
 
         // Create new trace node and insert under the context node.
 
         printf("%s: Create and initialize a new Trace node.\n",__FUNCTION__);
 
-        TraceNode * newChild = new TraceNode();
+        BlockNode * newChild = new BlockNode();
         newChild->parent = gCurrentContext;
         printf("\tNew Child: set parent as %p\n", gCurrentContext);
 
@@ -3944,13 +3944,13 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 #ifdef CONTINUOUS_DEADINFO
             // if CONTINUOUS_DEADINFO is set, then all ip vecs come from a fixed 4GB buffer
             //  printf("Continuous Info: GetNextIPVecBuffer...\n");
-            // newChild->childIPs  = (TraceNode **)GetNextIPVecBuffer(1);
+            // newChild->childIPs  = (BlockNode **)GetNextIPVecBuffer(1);
             // initialize as 0, get from IPVecBuffer one by one during mem_callback
             printf("%s: Continuous Info: initialize childIPs as 0\n", __FUNCTION__);
             newChild->childIPs = 0;
 #else            //no CONTINUOUS_DEADINFO
-            printf("Non-Continuous Info: malloc new TraceNode**\n");
-            newChild->childIPs = (TraceNode **) malloc( (tb->size) * sizeof(TraceNode **) );
+            printf("Non-Continuous Info: malloc new BlockNode**\n");
+            newChild->childIPs = (BlockNode **) malloc( (tb->size) * sizeof(BlockNode **) );
 #endif //end CONTINUOUS_DEADINFO
             newChild->nSlots = 0;
         }    
@@ -3979,11 +3979,11 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 
 
 //  UpdateTraceIPs:
-//  lele: now after block executed, we should have traceShadowMap built fully. Then we could use this to update Trace IPs. One TraceNode for a new block.
+//  lele: now after block executed, we should have traceShadowMap built fully. Then we could use this to update Trace IPs. One BlockNode for a new block.
 //  In Deadspy: gBlockShadowMap(gTraceShadowMap) is built during instrumentation. and used here in the instrumentation code.
 //  However, in Panda: we built gBlockShadowMap only when there is a mem write detected in mem_callback.
 //  So , gBlockShadowMap should be built fully after the exe of the block.
-//  So, we need to update TraceNode after block execution.
+//  So, we need to update BlockNode after block execution.
 // Lele: updated: 
 // UpdateTraceIPs is splited into two steps:
 //  1, allocate all IPs as tb->size at the instrumentBeforeBlockExe
@@ -4000,7 +4000,7 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 //     if( (gTraceIter = (gCurrentContext->childBlocks).find(currentIp)) != gCurrentContext->childBlocks.end()) {
 //         //panda: if not in the current context node, this means in a new function and a new context node is created.
       
-//         TraceNode * newChild = gCurrentBBlock ;
+//         BlockNode * newChild = gCurrentBBlock ;
 
 //     	target_ulong * currentTraceShadowIP = (target_ulong *) gBlockShadowMap[currentIp];
 //         printf("get currentTraceShadowIp  %p, from gBlockShadowMap[currentIp]\n", currentTraceShadowIP);
@@ -4018,10 +4018,10 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 // #ifdef CONTINUOUS_DEADINFO
 //             // if CONTINUOUS_DEADINFO is set, then all ip vecs come from a fixed 4GB buffer
 //             printf("Continuous Info: GetNextIPVecBuffer...\n");
-//             newChild->childIPs  = (TraceNode **)GetNextIPVecBuffer(recordedSlots);
+//             newChild->childIPs  = (BlockNode **)GetNextIPVecBuffer(recordedSlots);
 // #else            //no CONTINUOUS_DEADINFO
-//             printf("Non-Continuous Info: malloc new TraceNode**\n");
-//             newChild->childIPs = (TraceNode **) malloc( (recordedSlots) * sizeof(TraceNode **) );
+//             printf("Non-Continuous Info: malloc new BlockNode**\n");
+//             newChild->childIPs = (BlockNode **) malloc( (recordedSlots) * sizeof(BlockNode **) );
 // #endif //end CONTINUOUS_DEADINFO
 //             newChild->nSlots = recordedSlots;
 //             //cerr<<"\n***:"<<recordedSlots; 
@@ -4182,7 +4182,7 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     //  In Deadspy: gBlockShadowMap(gTraceShadowMap) is built during instrumentation. and used here in the instrumentation code.
     //  However, in Panda: we built gBlockShadowMap only when there is a mem write detected in mem_callback.
     //  So , gBlockShadowMap should be built fully after the exe of the block.
-    //  So, we need to update TraceNode after block execution.
+    //  So, we need to update BlockNode after block execution.
 
     // Refer: InstrumentTrace() TODO
     //InstrumentTraceEntry() -> UpdateDataOnFunctionEntry() -> GoDownCallChain(cpu,tb);
