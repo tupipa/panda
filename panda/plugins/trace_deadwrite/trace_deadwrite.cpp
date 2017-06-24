@@ -2582,7 +2582,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
         // check IpVector Slot
         if(!gCurrentIpVector){
             printf("%s: ERROR: gCurrentIpVector is nil\n", __FUNCTION__);
-        else if(!gCurrentIpVector[slot]){
+        }else if(!gCurrentIpVector[slot]){
             printf("%s: ERROR: IpVector[%d] is nil\n", __FUNCTION__, (int)slot);
         }else{
             printf("%s: IpVector[%d] is good\n", __FUNCTION__, (int)slot);
