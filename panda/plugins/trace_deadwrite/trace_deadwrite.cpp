@@ -2481,7 +2481,6 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
         slot = gCurrentSlot; // only used for write op.
         gCurrentSlot++; // increase gCurrentSlot index for next use.
-
         //update ipShadow slot when write detected
         // For each Basic block, only update once.
         // use flag gTraceShadowMapDone[tb->pc] to mark it done at after_block_exe
@@ -2571,6 +2570,11 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
                     __FUNCTION__);
             }
 
+        }
+
+        // check IpVector Slot
+        if(!gCurrentIpVector[slot]){
+            printf("%s: ERROR: IpVector[%d] is nil\n", __FUNCTION__, (int)slot);
         }
         // gCurrentSlot++;
         // gCurrentBBlock->nSlots++;
@@ -3090,7 +3094,7 @@ inline target_ulong GetMeasurementBaseCount(){
         for (; mapIt != DeadMap.end(); mapIt++) {
             MergedDeadInfo tmpMergedDeadInfo;
             uint64_t hash = mapIt->first;
-	        printf("%s: read one dead info: 0x%lx\n", __FUNCTION__, hash);
+	        printf("%s: read one dead info: hash: 0x%lx\n", __FUNCTION__, hash);
             BlockNode ** ctxt1 = (BlockNode **)(gPreAllocatedContextBuffer + (hash >> 32));
             printf("get ctxt1: %p, ", ctxt1);
             printf(" *ctxt1: %p\n", *ctxt1);
