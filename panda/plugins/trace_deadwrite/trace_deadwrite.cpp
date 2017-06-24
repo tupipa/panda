@@ -40,7 +40,7 @@ This plugin traces deadwrites, and print them to file
       PIN Deadspy uses this to find and store function call stack. But don't use this in panda:
       Reason: Panda could get call stacks by intrumenting in the instruction level by plugin 'callstack_instr'
         - InstrumentTrace()
-        - InstrumentTraceEntry() : get function info
+        - InstrumentTraceEntry() : instrumentBeforeBlockExe : get function info
         - (), 
             - InstructionContributionOfBBL1Byte()
 
@@ -498,7 +498,7 @@ struct ContextNode {
     ContextNode * parent;
     sparse_hash_map<ADDRINT,ContextNode *> childContexts;
 #ifdef IP_AND_CCT
-    sparse_hash_map<ADDRINT,TraceNode *> childTraces;
+    sparse_hash_map<ADDRINT,TraceNode *> childBlocks;
     // TraceNode * childTrace;
 #endif // end IP_AND_CCT    
     ADDRINT address;
@@ -1172,7 +1172,7 @@ inline VOID GoUpCallChain(){
 //     // Check if a trace node with currentIp already exists under this context node    
           
 //     //printf("callerIp: " TARGET_FMT_lx "\n", callerIp);
-//     if( (gTraceIter = (gCurrentContext->childTraces).find(callerIp)) != gCurrentContext->childTraces.end()) {
+//     if( (gTraceIter = (gCurrentContext->childBlocks).find(callerIp)) != gCurrentContext->childBlocks.end()) {
 //         // if tracenode is already exists
 //         // set the current Trace to the new trace
 //         // set the IpVector
@@ -1220,7 +1220,7 @@ inline VOID GoUpCallChain(){
 //             newChild->nSlots = 0;
 //             newChild->childIPs = 0;            
 //         }    
-//         gCurrentContext->childTraces[callerIp] = newChild;
+//         gCurrentContext->childBlocks[callerIp] = newChild;
 //         gCurrentBBlock = newChild;
 //         gCurrentIpVector = gCurrentBBlock->childIPs;
 //         //lele: set slot index
@@ -2529,7 +2529,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             currentTraceShadowIP[-1] ++;
 
             // UpdateTraceIPs is splited into two steps:
-            //  1, at at the InstrumentTraceEntry: 
+            //  1, at at the instrumentBeforeBlockExe: 
             //      initialize as 0 in coutinuous mode.
             //      or allocate all IPs as tb->size (Non-continuous)
             //  2, fill it during mem_callback, at the same time when we fill gTraceShadowMap
@@ -3863,12 +3863,12 @@ before_block_exec: called before execution of every basic block
 //         A basic block should have only one area stored in gTraceShadowMap, but could have multiple
 //         TraceNodes stored under different ContextNode.
     
-//         - InstrumentTraceEntry(): According flag gTraceShadowMapDone[tb->pc] to determine whether
+//         - instrumentBeforeBlockExe(): According flag gTraceShadowMapDone[tb->pc] to determine whether
 //         There is already a gTraceShadowMap built for a basic block;
 
 
-//inline void InstrumentTraceEntry(ADDRINT currentIp){
-inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
+//inline void instrumentBeforeBlockExe(ADDRINT currentIp){
+inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 
     printf("%s: tb->pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
 
@@ -3883,8 +3883,8 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
     //  - same basic block could be created under different context node.
     //  - initialized here but filled at mem_callback.
 
-    //if( (gTraceIter = (gCurrentContext->childTraces).find(currentIp)) != gCurrentContext->childTraces.end()) {
-    if( (gTraceIter = (gCurrentContext->childTraces).find(currentIp)) != gCurrentContext->childTraces.end()) {
+    //if( (gTraceIter = (gCurrentContext->childBlocks).find(currentIp)) != gCurrentContext->childBlocks.end()) {
+    if( (gTraceIter = (gCurrentContext->childBlocks).find(currentIp)) != gCurrentContext->childBlocks.end()) {
         // if tracenode is already exists
         // set the current Trace to the new trace
         // set the IpVector
@@ -3899,7 +3899,9 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
      } else {
         //panda: if not in the current context node,  a new BasicBlock(trace) node is created.
         // create and initial new TraceNode.
+
         // Create new trace node and insert under the context node.
+
         printf("%s: Create and initialize a new Trace node.\n",__FUNCTION__);
 
         TraceNode * newChild = new TraceNode();
@@ -3918,33 +3920,19 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
         }else{
             // a block not translated but appear in before_block_exe:
             // also create gTraceShadowMap for it.
-
-        printf("%s: update gTraceShadowMap when necessary, for tb->pc: " TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
-
-        InitializeTraceShadowMap(cpu, tb);
-
+            printf("%s: update gTraceShadowMap when necessary, for tb->pc: " TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+            InitializeTraceShadowMap(cpu, tb);
         }
+
+        // create newChild->childIPs and initialize them according to Basic block size.
 
         if(recordedSlots >0 ){
 
-            if (gTraceShadowMapDone[tb->pc]){
-
-            // Lele: don't use the old gTraceShadowMap,
-            //  - the old TraceShadowMap will be checked and updated during mem_callback
-            //  - this is because for same translated block, different execution iterations will have different mem ops.
-                printf("%s: old gTraceShadowMap is not used: tb->pc=0x" TARGET_FMT_lx ".\n", __FUNCTION__, tb->pc);
-            // 
-            //     // if CONTINUOUS_DEADINFO is set, then all ip vecs come from a fixed 4GB buffer
-            //     printf("%s: create a new TraceNode with old BaiscBlock\n", __FUNCTION__);
-            //     newChild->childIPs  = (TraceNode **)GetNextIPVecBuffer(recordedSlots);
-            //     newChild->nSlots = recordedSlots;
-            //     //cerr<<"\n***:"<<recordedSlots; 
-            //     for(uint32_t i = 0 ; i < recordedSlots ; i++) {
-            //         newChild->childIPs[i] = newChild;
-            //     }
-            }else{
-                printf("%s: something wrong here, gTraceShadowMapDone should be true.\n", __FUNCTION__);
-                exit(-1);
+             if (gTraceShadowMapDone[tb->pc]){
+                // Lele: don't use the old gTraceShadowMap,
+                //  - the old TraceShadowMap will be checked and updated during mem_callback
+                //  - this is because for same translated block, different execution iterations will have different mem ops.
+                //printf("%s: old gTraceShadowMap is not used: tb->pc=0x" TARGET_FMT_lx ".\n", __FUNCTION__, tb->pc);
             }
                 
         } else {
@@ -3966,7 +3954,7 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
 #endif //end CONTINUOUS_DEADINFO
             newChild->nSlots = 0;
         }    
-        gCurrentContext->childTraces[currentIp] = newChild;
+        gCurrentContext->childBlocks[currentIp] = newChild;
         gCurrentBBlock = newChild;
 
         // lele: now no need to check ==0 when we reuse a basic block's gTraceShadowMap.
@@ -3998,18 +3986,18 @@ inline void InstrumentTraceEntry(CPUState *cpu, TranslationBlock *tb){
 //  So, we need to update TraceNode after block execution.
 // Lele: updated: 
 // UpdateTraceIPs is splited into two steps:
-//  1, allocate all IPs as tb->size at the InstrumentTraceEntry
+//  1, allocate all IPs as tb->size at the instrumentBeforeBlockExe
 //  2, fill it during mem_callback, at the same time when we fill gTraceShadowMap
 //  --> in this way, we could use the &gCurrentIpVector[i] (or &(gCurrentBBlock->childIPs[i])) to report as dead context.
 //  This way, the gCurrentBBlock->childIPs will be filled in the same pace with gTraceShadowMap.
 //
-//inline void InstrumentTraceEntry(ADDRINT currentIp){
+//inline void instrumentBeforeBlockExe(ADDRINT currentIp){
 // inline void UpdateTraceIPs(CPUState *cpu, TranslationBlock *tb){
 
 //     printf("%s: tb->pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
 
 //     target_ulong currentIp=tb->pc;
-//     if( (gTraceIter = (gCurrentContext->childTraces).find(currentIp)) != gCurrentContext->childTraces.end()) {
+//     if( (gTraceIter = (gCurrentContext->childBlocks).find(currentIp)) != gCurrentContext->childBlocks.end()) {
 //         //panda: if not in the current context node, this means in a new function and a new context node is created.
       
 //         TraceNode * newChild = gCurrentBBlock ;
@@ -4148,7 +4136,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     // Refer: InstrumentTrace() TODO
     //InstrumentTraceEntry() -> UpdateDataOnFunctionEntry() -> GoDownCallChain(cpu,tb);
 
-    InstrumentTraceEntry(cpu, tb);
+    instrumentBeforeBlockExe(cpu, tb);
 
     return 1;
 }
