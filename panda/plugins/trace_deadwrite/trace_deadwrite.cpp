@@ -640,6 +640,8 @@ sparse_hash_map<ADDRINT, BlockNode *>::iterator gTraceIter;
 // hash_map<ADDRINT, void *> gBlockShadowMap;
 //Lele: we don't use StartAddr of a trace as key, instead, we use ContextNode's address as key, to store an array, doing the same thing: ---mapping the slots index of each write instruction in a function to its corresponding IP. In order to be compatible with the legacy BlockNode, we use one tracenode to store the array, with StartAddr equal to the ContextNodes' address.
 unordered_map<ADDRINT, void *> gBlockShadowMap;
+ADDRINT * gTmpBlockIpShadow;
+
 unordered_map<ADDRINT, bool> gBlockShadowMapDone;
 unordered_map<ADDRINT, unordered_map<ADDRINT, bool> *> gTraceShadowMapIps;
 BlockNode * gCurrentTraceBlock;
@@ -1197,10 +1199,10 @@ inline VOID GoUpCallChain(){
 //         newChild->parent = gCurrentContext;
 //         printf("\tNew Child: set address\n");
 //         newChild->address = callerIp;
-//         printf("get currentTraceShadowIp from gBlockShadowMap[callerIp]\n");
-//     	target_ulong * currentTraceShadowIP = (target_ulong *) gBlockShadowMap[callerIp];
-//         printf("get recordedSlots from currentTraceShadowIP[-1] %p\n", currentTraceShadowIP);
-//         target_ulong recordedSlots = currentTraceShadowIP[-1]; // present one behind
+//         printf("get currentBlockShadowMap from gBlockShadowMap[callerIp]\n");
+//     	target_ulong * currentBlockShadowMap = (target_ulong *) gBlockShadowMap[callerIp];
+//         printf("get recordedSlots from currentBlockShadowMap[-1] %p\n", currentBlockShadowMap);
+//         target_ulong recordedSlots = currentBlockShadowMap[-1]; // present one behind
 //         if(recordedSlots){
 //             printf("Record Slots: " TARGET_FMT_lx "\n", recordedSlots);
 // #ifdef CONTINUOUS_DEADINFO
@@ -2489,14 +2491,18 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
         // first, get the shadowMap and its current total slots counts;
         printf("%s: get currentTraceShadowMap for current tb: 0x" TARGET_FMT_lx "\n", 
             __FUNCTION__, gCurrentTraceBlock->address);
-        target_ulong * currentTraceShadowIP = (target_ulong *) gBlockShadowMap[gCurrentTraceBlock->address];
-        // printf("%s: get TraceShadowIP array from gBlockShadowMap[gCurrentTraceBlock->address] %p\n", 
-        //     __FUNCTION__,currentTraceShadowIP);
-        if (! currentTraceShadowIP){
+
+        auto shadowIt = gBlockShadowMap.find(gCurrentTraceBlock->address) ;
+        if (shadowIt == gBlockShadowMap.end()){
             printf("%s: ERROR: no shadowMap created for tb->pc: " TARGET_FMT_lx "\n",
                 __FUNCTION__, gCurrentTraceBlock->address);
+            exit(-1);
         }
-        target_ulong recordedSlots = currentTraceShadowIP[-1]; // present one behind
+        target_ulong * currentBlockShadowMap = (target_ulong *) gBlockShadowMap[gCurrentTraceBlock->address];
+        // printf("%s: get TraceShadowIP array from gBlockShadowMap[gCurrentTraceBlock->address] %p\n", 
+        //     __FUNCTION__,currentBlockShadowMap);
+       
+        target_ulong recordedSlots = currentBlockShadowMap[-1]; // present one behind
         printf("%s: get recordedSlots %d\n", __FUNCTION__,(int)recordedSlots);
 
         // second, update slot pc in gBlockShadowMap.
@@ -2525,13 +2531,14 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
 
         if(needUpdate){
-            currentTraceShadowIP[recordedSlots] = pc;
+            currentBlockShadowMap[slot] = pc;
             (*gTraceShadowMapIps[gCurrentTraceBlock->address])[pc]=true;
-            currentTraceShadowIP[-1] ++;
+            currentBlockShadowMap[-1] ++;
         }
 
 
-        //Third, update gCurrentTraceIpVector if a new Trace.
+        //Third, update gCurrentTraceBlock->childIPs if a new Trace;
+        //      also update gCurrentTraceIpVector if a new Trace.
 
         if (gNewBlockNode || gCurrentTraceBlock->childIPs == 0){
             // UpdateTraceIPs is splited into two steps:
@@ -2549,7 +2556,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
                 printf("%s: now in first R/W of a new trace\n", __FUNCTION__);
                 gCurrentTraceBlock->childIPs = (BlockNode **)GetNextIPVecBuffer(1);
 
-                printf("%s: reset gCurrentTraceIpVector pointing to %p, for tb->pc: 0x" TARGET_FMT_lx " \n",
+                printf("%s: reset gCurrentTraceIpVector pointing to %p, for tb->pc: 0x" TARGET_FMT_lx "\n",
                     __FUNCTION__, gCurrentTraceBlock->childIPs, gCurrentTraceBlock->address);
                 gCurrentTraceIpVector = gCurrentTraceBlock->childIPs;
 
@@ -2601,10 +2608,10 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
 
 
-        //target_ulong * currentTraceShadowIP = (target_ulong *) gBlockShadowMap[gCurrentContext->address];
-        //printf("set recordedSlots of currentTraceShadowIP[-1] %p to %u\n", currentTraceShadowIP, gCurrentSlot);
-        //target_ulong recordedSlots = currentTraceShadowIP[-1]; // 
-        //currentTraceShadowIP[-1] = gCurrentSlot; // 
+        //target_ulong * currentBlockShadowMap = (target_ulong *) gBlockShadowMap[gCurrentContext->address];
+        //printf("set recordedSlots of currentBlockShadowMap[-1] %p to %u\n", currentBlockShadowMap, gCurrentSlot);
+        //target_ulong recordedSlots = currentBlockShadowMap[-1]; // 
+        //currentBlockShadowMap[-1] = gCurrentSlot; // 
 
     }
     
@@ -3692,14 +3699,13 @@ inline void InitializeBlockShadowMap(CPUState *cpu, TranslationBlock *tb){
              TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
             needUpdate=true;
             replaced=true;
-            printf("%s: reset gBlockShadowMapDone[" TARGET_FMT_lx "]\n", __FUNCTION__, tb->pc);
-            gBlockShadowMapDone[tb->pc]=false;
         }
 
     }else{
         //printf("%s: a new translated block, need update its shadowMap\n", __FUNCTION__);
         needUpdate=true;
     }
+
 
     if(needUpdate){
 
@@ -3713,6 +3719,8 @@ inline void InitializeBlockShadowMap(CPUState *cpu, TranslationBlock *tb){
             traceShadowIP --;
             traceShadowIP --;
             free(traceShadowIP);
+            printf("%s: reset gBlockShadowMapDone[" TARGET_FMT_lx "]\n", __FUNCTION__, tb->pc);
+            gBlockShadowMapDone[tb->pc]=false;
         }
         // #############################################
         // create and initial gBlockShadowMap()
@@ -3902,6 +3910,7 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
         gCurrentTraceBlock = gTraceIter->second;
         printf("%s: reset gCurrentTraceBlock for existed Node\n", __FUNCTION__);
         gCurrentTraceIpVector = gCurrentTraceBlock->childIPs;
+        printf("%s: reset gCurrentTraceIpVector to %p\n", __FUNCTION__, gCurrentTraceBlock->childIPs);
         //lele: set slot index
         // gCurrentSlot = gCurrentTraceBlock->nSlots;
         // printf("Trace Node exists; set/get current slots:%u\n", gCurrentSlot);
@@ -3922,12 +3931,12 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
         newChild->address = currentIp;
         printf("\tNew Child: set address as 0x" TARGET_FMT_lx " \n", currentIp);
 
-    	target_ulong * currentTraceShadowIP = (target_ulong *) gBlockShadowMap[currentIp];
-        printf("get currentTraceShadow  %p, from gBlockShadowMap[currentIp]\n", currentTraceShadowIP);
+    	target_ulong * currentBlockShadowMap = (target_ulong *) gBlockShadowMap[currentIp];
+        printf("get currentTraceShadow  %p, from gBlockShadowMap[currentIp]\n", currentBlockShadowMap);
 
         target_ulong recordedSlots = 0; // present one behind
-        if (currentTraceShadowIP){
-            recordedSlots = currentTraceShadowIP[-1]; // present one behind
+        if (currentBlockShadowMap){
+            recordedSlots = currentBlockShadowMap[-1]; // present one behind
         }else{
             // a block not translated but appear in before_block_exe:
             // also create gBlockShadowMap for it.
@@ -4115,6 +4124,18 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     //InstrumentTraceEntry() -> UpdateDataOnFunctionEntry() -> GoDownCallChain(cpu,tb);
 
     instrumentBeforeBlockExe(cpu, tb);
+
+    // TODO: in order to avoid the situation:
+    // where for same basic block, execution in different times could have different write pcs.    
+    // Now TODO: add gTmpBlockIpShadow as an temperal shadowMap:
+    // gBlockShadowMap:
+    //  - after translation, only initialize gBlockShadowMap[pc]
+    //  - during block execution(mem_callback), don't update gBlockShadowMap[pc].
+    //  - before block execution, initialize gBlockShadowMap[pc] only if pc is not there;
+    // gTmpBlockIpShadow:
+    //  - before block execution, initialize it
+    //  - during mem_callback, store all mem_writes <slot, pc> in gTmpBlockIpShadow
+    //  - after block execution, compare gBlockShadowMap[pc] with gTmpBlockIpShadow, merge them with increasing sorted pc, and maximum tb size.
 
     return 1;
 }
