@@ -640,7 +640,7 @@ sparse_hash_map<ADDRINT, BlockNode *>::iterator gTraceIter;
 // hash_map<ADDRINT, void *> gBlockShadowMap;
 //Lele: we don't use StartAddr of a trace as key, instead, we use ContextNode's address as key, to store an array, doing the same thing: ---mapping the slots index of each write instruction in a function to its corresponding IP. In order to be compatible with the legacy BlockNode, we use one tracenode to store the array, with StartAddr equal to the ContextNodes' address.
 unordered_map<ADDRINT, void *> gBlockShadowMap;
-unordered_map<ADDRINT, bool> gTraceShadowMapDone;
+unordered_map<ADDRINT, bool> gBlockShadowMapDone;
 unordered_map<ADDRINT, unordered_map<ADDRINT, bool> *> gTraceShadowMapIps;
 BlockNode * gCurrentTraceBlock;
 uint32_t gCurrentSlot;
@@ -2484,7 +2484,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
         gCurrentSlot++; // increase gCurrentSlot index for next use.
         //update ipShadow slot when write detected
         // For each Basic block, only update once.
-        // use flag gTraceShadowMapDone[tb->pc] to mark it done at after_block_exe
+        // use flag gBlockShadowMapDone[tb->pc] to mark it done at after_block_exe
 
         // first, get the shadowMap and its current total slots counts;
         printf("%s: get currentTraceShadowMap for current tb: 0x" TARGET_FMT_lx "\n", 
@@ -2501,11 +2501,11 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
         // second, update slot pc in gBlockShadowMap.
         // For each Basic block, only update once.
-        // Also, if gTraceShadowMapDone is true for that basic block, then Trace->childIPs should also be set during 
+        // Also, if gBlockShadowMapDone is true for that basic block, then Trace->childIPs should also be set during 
         //  initialization.
         bool needUpdate=true;
 
-        if (gTraceShadowMapDone[gCurrentTraceBlock->address]){
+        if (gBlockShadowMapDone[gCurrentTraceBlock->address]){
             // printf("%s: No need to update TraceShadowMap with current PC for this block (already done)\n",
             //     __FUNCTION__);
             // printf("%s: pc=0x" TARGET_FMT_lx ", gCurrentTraceBlock=%p, tb->pc=0x" TARGET_FMT_lx "\n",
@@ -3666,7 +3666,7 @@ InitializeBlockShadowMap()
     //  - initialized here but filled at mem_callback during block exe
     //  - might be filled during different iterations of block exe, since for same block, block exe could have different mem behaviors.
     //    --> we use gTraceShadowMapIps to track whether we have an IP in the gBlockShadowMap, if we have, no need to update gBlockShadowMap, if not, we'll update it.
-    //    --> So we don't use gTraceShadowMapDone to indicate whether we need to udpate gBlockShadowMap anymore. We only use this to trigger the checking of gTraceShadowMapIps.
+    //    --> So we don't use gBlockShadowMapDone to indicate whether we need to udpate gBlockShadowMap anymore. We only use this to trigger the checking of gTraceShadowMapIps.
 
     //  - for a new Translation of the previously translated block, we will compare its size with the older translated version, store the larger size as the final.
 */
@@ -3692,8 +3692,8 @@ inline void InitializeBlockShadowMap(CPUState *cpu, TranslationBlock *tb){
              TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
             needUpdate=true;
             replaced=true;
-            printf("%s: reset gTraceShadowMapDone[" TARGET_FMT_lx "]\n", __FUNCTION__, tb->pc);
-            gTraceShadowMapDone[tb->pc]=false;
+            printf("%s: reset gBlockShadowMapDone[" TARGET_FMT_lx "]\n", __FUNCTION__, tb->pc);
+            gBlockShadowMapDone[tb->pc]=false;
         }
 
     }else{
@@ -3888,7 +3888,7 @@ before_block_exec: called before execution of every basic block
 //         A basic block should have only one area stored in gBlockShadowMap, but could have multiple
 //         TraceNodes stored under different ContextNode.
     
-//         - instrumentBeforeBlockExe(): According flag gTraceShadowMapDone[tb->pc] to determine whether
+//         - instrumentBeforeBlockExe(): According flag gBlockShadowMapDone[tb->pc] to determine whether
 //         There is already a gBlockShadowMap built for a basic block;
 
 
@@ -3955,7 +3955,7 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 
         if(recordedSlots >0 ){
 
-             if (gTraceShadowMapDone[tb->pc]){
+             if (gBlockShadowMapDone[tb->pc]){
                 // Lele: don't use the old gBlockShadowMap,
                 //  - the old TraceShadowMap will be checked and updated during mem_callback
                 //  - this is because for same translated block, different execution iterations will have different mem ops.
@@ -4216,7 +4216,7 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     if (gNewBasicBlock){ // only update ChildIPs for one time for each Basic Block.
         gNewBasicBlock=false;
         printf("%s: mark gBlockShadowMap[0x" TARGET_FMT_lx "] as done for this block\n", __FUNCTION__, tb->pc);
-        gTraceShadowMapDone[tb->pc]=true;
+        gBlockShadowMapDone[tb->pc]=true;
     }
     if (gNewBlockNode){
         gNewBlockNode = false;
