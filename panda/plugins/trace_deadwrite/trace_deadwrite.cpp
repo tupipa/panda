@@ -636,10 +636,10 @@ vector<ContextTree> gContextTreeVector;
 
 #ifdef IP_AND_CCT
 sparse_hash_map<ADDRINT, TraceNode *>::iterator gTraceIter;
-//dense_hash_map<ADDRINT, void *> gTraceShadowMap;
-// hash_map<ADDRINT, void *> gTraceShadowMap;
+//dense_hash_map<ADDRINT, void *> gBlockShadowMap;
+// hash_map<ADDRINT, void *> gBlockShadowMap;
 //Lele: we don't use StartAddr of a trace as key, instead, we use ContextNode's address as key, to store an array, doing the same thing: ---mapping the slots index of each write instruction in a function to its corresponding IP. In order to be compatible with the legacy TraceNode, we use one tracenode to store the array, with StartAddr equal to the ContextNodes' address.
-unordered_map<ADDRINT, void *> gTraceShadowMap;
+unordered_map<ADDRINT, void *> gBlockShadowMap;
 unordered_map<ADDRINT, bool> gTraceShadowMapDone;
 unordered_map<ADDRINT, unordered_map<ADDRINT, bool> *> gTraceShadowMapIps;
 TraceNode * gCurrentBBlock;
@@ -1145,7 +1145,7 @@ inline VOID GoUpCallChain(){
 //         // // give space to account for nSlots which we record later once we know nWrites
 //         // ADDRINT * pNumWrites = ipShadow;
 //         // ipShadow ++;
-//         // gTraceShadowMap[traceAddr] = ipShadow ;
+//         // gBlockShadowMap[traceAddr] = ipShadow ;
 
 //         //  // Record the number of child write IPs i.e., number of "slots"
 //         // *pNumWrites = slot;
@@ -1196,8 +1196,8 @@ inline VOID GoUpCallChain(){
 //         newChild->parent = gCurrentContext;
 //         printf("\tNew Child: set address\n");
 //         newChild->address = callerIp;
-//         printf("get currentTraceShadowIp from gTraceShadowMap[callerIp]\n");
-//     	target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[callerIp];
+//         printf("get currentTraceShadowIp from gBlockShadowMap[callerIp]\n");
+//     	target_ulong * currentTraceShadowIP = (target_ulong *) gBlockShadowMap[callerIp];
 //         printf("get recordedSlots from currentTraceShadowIP[-1] %p\n", currentTraceShadowIP);
 //         target_ulong recordedSlots = currentTraceShadowIP[-1]; // present one behind
 //         if(recordedSlots){
@@ -1270,7 +1270,7 @@ VOID InitContextTree(){
     gCurrentContext = gContextTreeVector[0].rootContext;
     gRootContext = gContextTreeVector[0].rootContext;
 
-    printf("initialize gTraceShadowMap and gTraceShadowMapIps\n");
+    printf("initialize gBlockShadowMap and gTraceShadowMapIps\n");
         //uint32_t traceSize = TRACE_Size(trace);    
     uint32_t traceSize = 0x0;    //lele: TODO: determine the size of function
     ADDRINT * ipShadow = (ADDRINT * )malloc( (2 + traceSize) * sizeof(ADDRINT)); // +1 to hold the number of slots as a metadata
@@ -1291,7 +1291,7 @@ VOID InitContextTree(){
     // Record the number of child write IPs i.e., number of "slots"
     *pNumWrites = slot;
 
-    gTraceShadowMap[traceAddr] = ipShadow ;
+    gBlockShadowMap[traceAddr] = ipShadow ;
 
     //lele: gTraceShadowMapIps;
     printf("BUG HERE\n");
@@ -1309,7 +1309,7 @@ VOID InitContextTree(){
 
 
 
-    printf("done. initialize gTraceShadowMap and gTraceShadowMapIps\n");
+    printf("done. initialize gBlockShadowMap and gTraceShadowMapIps\n");
    
 #else // no IP_AND_CCT
     gCurrentContext = gRootContext = new ContextNode();
@@ -2489,8 +2489,8 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
         // first, get the shadowMap and its current total slots counts;
         printf("%s: get currentTraceShadowMap for current tb: 0x" TARGET_FMT_lx "\n", 
             __FUNCTION__, gCurrentBBlock->address);
-        target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[gCurrentBBlock->address];
-        // printf("%s: get TraceShadowIP array from gTraceShadowMap[gCurrentBBlock->address] %p\n", 
+        target_ulong * currentTraceShadowIP = (target_ulong *) gBlockShadowMap[gCurrentBBlock->address];
+        // printf("%s: get TraceShadowIP array from gBlockShadowMap[gCurrentBBlock->address] %p\n", 
         //     __FUNCTION__,currentTraceShadowIP);
         if (! currentTraceShadowIP){
             printf("%s: ERROR: no shadowMap created for tb->pc: " TARGET_FMT_lx "\n",
@@ -2499,7 +2499,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
         target_ulong recordedSlots = currentTraceShadowIP[-1]; // present one behind
         printf("%s: get recordedSlots %d\n", __FUNCTION__,(int)recordedSlots);
 
-        // second, update slot pc in gTraceShadowMap.
+        // second, update slot pc in gBlockShadowMap.
         // For each Basic block, only update once.
         // Also, if gTraceShadowMapDone is true for that basic block, then Trace->childIPs should also be set during 
         //  initialization.
@@ -2518,7 +2518,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             printf("%s: check to update TraceShadowMap when no current pc is stored \n", __FUNCTION__);
 
             if ((*gTraceShadowMapIps[gCurrentBBlock->address])[pc]){
-                printf("%s: gTraceShadowMap already has this pc: 0x" TARGET_FMT_lx ", no need to update\n",__FUNCTION__, pc);
+                printf("%s: gBlockShadowMap already has this pc: 0x" TARGET_FMT_lx ", no need to update\n",__FUNCTION__, pc);
                 needUpdate=false;
             }
         }
@@ -2532,10 +2532,10 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             //  1, at at the instrumentBeforeBlockExe: 
             //      initialize as 0 in coutinuous mode.
             //      or allocate all IPs as tb->size (Non-continuous)
-            //  2, fill it during mem_callback, at the same time when we fill gTraceShadowMap
+            //  2, fill it during mem_callback, at the same time when we fill gBlockShadowMap
             //       - Allocate one slot in gPreAllocatedContextBuffer one by one during mem_callback.
             //  --> in this way, we could use the &gCurrentIpVector[slot] (or &(gCurrentBBlock->childIPs[slot])) to report as dead context.
-            //  This way, the gCurrentBBlock->childIPs will be filled in the same pace with gTraceShadowMap.
+            //  This way, the gCurrentBBlock->childIPs will be filled in the same pace with gBlockShadowMap.
             //
             // Update gTrace->childIPs and -> nSlots by this new slot
             if (gCurrentBBlock->childIPs == 0){
@@ -2578,7 +2578,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
 
 
-        //target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[gCurrentContext->address];
+        //target_ulong * currentTraceShadowIP = (target_ulong *) gBlockShadowMap[gCurrentContext->address];
         //printf("set recordedSlots of currentTraceShadowIP[-1] %p to %u\n", currentTraceShadowIP, gCurrentSlot);
         //target_ulong recordedSlots = currentTraceShadowIP[-1]; // 
         //currentTraceShadowIP[-1] = gCurrentSlot; // 
@@ -3009,7 +3009,7 @@ inline target_ulong GetMeasurementBaseCount(){
 				break;
 		}
         
-		ADDRINT *ip = (ADDRINT *) gTraceShadowMap[traceNode->address] ;
+		ADDRINT *ip = (ADDRINT *) gBlockShadowMap[traceNode->address] ;
 		return ip[slotNo];
 	}
     
@@ -3520,7 +3520,7 @@ instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
         goto done;
     }
 
-    //iterate all instructions inside this block, store it in gTraceShadowMap.
+    //iterate all instructions inside this block, store it in gBlockShadowMap.
     cs_insn *tmp;
     printf("%s: a block disasembled: pc=%p\n",__FUNCTION__, (void *)(uintptr_t)pc);
     for (tmp=insn; tmp <= end; tmp ++){
@@ -3545,7 +3545,7 @@ instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
     // ADDRINT * pNumWrites = ipShadow;
     // ipShadow ++;
     
-    // gTraceShadowMap[traceAddr] = ipShadow ;
+    // gBlockShadowMap[traceAddr] = ipShadow ;
     // for( BBL bbl = TRACE_BblHead(trace); BBL_Valid(bbl); bbl = BBL_Next(bbl) ){
     // 	uint32_t inst1ByteSize = 0;
     //     uint32_t inst2ByteSize = 0;
@@ -3628,7 +3628,7 @@ instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
     }
 
 done:
-    //printf("don't free insn, store it in gTraceShadowMap");
+    //printf("don't free insn, store it in gBlockShadowMap");
     //printf("");
     //cs_free(insn, count);
 done2:
@@ -3637,22 +3637,22 @@ done2:
 }
 
 /*
-InitializeTraceShadowMap()
-    // create the gTraceShadowMap for each newly translated basic block, or newly executed basic block.
-    //  - only one pair stored in gTraceShadowMap for one basic block with tb->pc as key.
+InitializeBlockShadowMap()
+    // create the gBlockShadowMap for each newly translated basic block, or newly executed basic block.
+    //  - only one pair stored in gBlockShadowMap for one basic block with tb->pc as key.
     //  - initialized here but filled at mem_callback during block exe
     //  - might be filled during different iterations of block exe, since for same block, block exe could have different mem behaviors.
-    //    --> we use gTraceShadowMapIps to track whether we have an IP in the gTraceShadowMap, if we have, no need to update gTraceShadowMap, if not, we'll update it.
-    //    --> So we don't use gTraceShadowMapDone to indicate whether we need to udpate gTraceShadowMap anymore. We only use this to trigger the checking of gTraceShadowMapIps.
+    //    --> we use gTraceShadowMapIps to track whether we have an IP in the gBlockShadowMap, if we have, no need to update gBlockShadowMap, if not, we'll update it.
+    //    --> So we don't use gTraceShadowMapDone to indicate whether we need to udpate gBlockShadowMap anymore. We only use this to trigger the checking of gTraceShadowMapIps.
 
     //  - for a new Translation of the previously translated block, we will compare its size with the older translated version, store the larger size as the final.
 */
-inline void InitializeTraceShadowMap(CPUState *cpu, TranslationBlock *tb){
+inline void InitializeBlockShadowMap(CPUState *cpu, TranslationBlock *tb){
 
     bool needUpdate=false;
     bool replaced=false;
 
-    target_ulong * traceShadowIP = (target_ulong *) gTraceShadowMap[tb->pc];
+    target_ulong * traceShadowIP = (target_ulong *) gBlockShadowMap[tb->pc];
 
     // if traceShadowIP exists, this means we already have one created before.
     // implying it has been translated before.
@@ -3661,7 +3661,7 @@ inline void InitializeTraceShadowMap(CPUState *cpu, TranslationBlock *tb){
         printf("%s: an re-translated basic block, now check its size\n",__FUNCTION__);
 
         target_ulong blockSize = traceShadowIP[-2]; // present one behind
-        printf("%s: get block size  %d, from gTraceShadowMap[0x" TARGET_FMT_lx "][-2]\n",
+        printf("%s: get block size  %d, from gBlockShadowMap[0x" TARGET_FMT_lx "][-2]\n",
             __FUNCTION__, (int)blockSize, tb->pc);
 
         if (tb->size > blockSize){
@@ -3690,14 +3690,14 @@ inline void InitializeTraceShadowMap(CPUState *cpu, TranslationBlock *tb){
             free(traceShadowIP);
         }
         // #############################################
-        // create and initial gTraceShadowMap()
+        // create and initial gBlockShadowMap()
         //Refer: PopulateIPReverseMapAndAccountTraceInstructions()
         // - PopulateIPReverseMapAndAccountTraceInstructions(): 
         //     - Instruction() -> ManageCallingContext() on every Instruction in 
         //         - GoUpCallChain
         //     - build ipShadow before code run. (Allocated here but filled during run. (mem_callback, have size and R/W)
         //     - get write size and insert statement InstructionContributionOfBBL2Byte to count total write size.(mem_callback, have size and R/W)
-        printf("%s: create and initial gTraceShadowMap for a new basic block: tb->pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+        printf("%s: create and initial gBlockShadowMap for a new basic block: tb->pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
 
         uint32_t traceSize = tb->size;    
         ADDRINT * ipShadow = (ADDRINT * )malloc( (2 + traceSize) * sizeof(ADDRINT)); // +1 to hold the number of slots as a metadata
@@ -3713,7 +3713,7 @@ inline void InitializeTraceShadowMap(CPUState *cpu, TranslationBlock *tb){
         ipShadow ++;
         *pNumWrites = slot;
 
-        gTraceShadowMap[traceAddr] = ipShadow ;
+        gBlockShadowMap[traceAddr] = ipShadow ;
         // Now ipShadow[-1] is NumWrites; ipShadow[-2] is TraceSize.
 
 
@@ -3723,7 +3723,7 @@ inline void InitializeTraceShadowMap(CPUState *cpu, TranslationBlock *tb){
         (*mapIps)[traceAddr]=false;
         gTraceShadowMapIps[traceAddr] = mapIps;
 
-        printf("%s: set gTraceShadowMap[0x" TARGET_FMT_lx "] as false for this block\n", __FUNCTION__, tb->pc);
+        printf("%s: set gBlockShadowMap[0x" TARGET_FMT_lx "] as false for this block\n", __FUNCTION__, tb->pc);
 
     }
 
@@ -3740,7 +3740,7 @@ after_block_translate: called after the translation of each basic block
     Signature:
         int (*after_block_translate)(CPUState *env, TranslationBlock *tb);
 
-// after block translate, get instructions in each basic block, then store in gTraceShadowMap
+// after block translate, get instructions in each basic block, then store in gBlockShadowMap
 //
 //
 // Lele: borrow from trace_insthist
@@ -3754,7 +3754,7 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     // we here keep the lastest translation, how to keep consistent????
     printf("%s: for each block, translations could be different. why? \n", __FUNCTION__);
     printf("%s: for same translation, mem_callback could be different. why? \n", __FUNCTION__);
-    printf("%s: gTraceShadowMap might be not usefull across all the blocks???? how to resolve? \n", __FUNCTION__);
+    printf("%s: gBlockShadowMap might be not usefull across all the blocks???? how to resolve? \n", __FUNCTION__);
 
     //Lele: check asid.
     target_ulong asid_cur = panda_current_asid(cpu);
@@ -3830,9 +3830,9 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
         printf("UNKNOWN instruction\n");
     }
 
-    printf("%s: update gTraceShadowMap when necessary, for tb->pc: " TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+    printf("%s: update gBlockShadowMap when necessary, for tb->pc: " TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
 
-    InitializeTraceShadowMap(cpu, tb);
+    InitializeBlockShadowMap(cpu, tb);
 
     return 1;
 }
@@ -3857,14 +3857,14 @@ before_block_exec: called before execution of every basic block
 // 1. Look up the current trace under the CCT node creating new if if needed.
 // 2. Update global iterators and curXXXX pointers.
 
-//Lele:  split gTraceShadowMap creating and TraceNode creating:
+//Lele:  split gBlockShadowMap creating and TraceNode creating:
     
-//         - a new TraceNode didn't require a new gTraceShadowMap of a basic block:
-//         A basic block should have only one area stored in gTraceShadowMap, but could have multiple
+//         - a new TraceNode didn't require a new gBlockShadowMap of a basic block:
+//         A basic block should have only one area stored in gBlockShadowMap, but could have multiple
 //         TraceNodes stored under different ContextNode.
     
 //         - instrumentBeforeBlockExe(): According flag gTraceShadowMapDone[tb->pc] to determine whether
-//         There is already a gTraceShadowMap built for a basic block;
+//         There is already a gBlockShadowMap built for a basic block;
 
 
 //inline void instrumentBeforeBlockExe(ADDRINT currentIp){
@@ -3911,17 +3911,17 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
         newChild->address = currentIp;
         printf("\tNew Child: set address as 0x" TARGET_FMT_lx " \n", currentIp);
 
-    	target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[currentIp];
-        printf("get currentTraceShadow  %p, from gTraceShadowMap[currentIp]\n", currentTraceShadowIP);
+    	target_ulong * currentTraceShadowIP = (target_ulong *) gBlockShadowMap[currentIp];
+        printf("get currentTraceShadow  %p, from gBlockShadowMap[currentIp]\n", currentTraceShadowIP);
 
         target_ulong recordedSlots = 0; // present one behind
         if (currentTraceShadowIP){
             recordedSlots = currentTraceShadowIP[-1]; // present one behind
         }else{
             // a block not translated but appear in before_block_exe:
-            // also create gTraceShadowMap for it.
-            printf("%s: update gTraceShadowMap when necessary, for tb->pc: " TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
-            InitializeTraceShadowMap(cpu, tb);
+            // also create gBlockShadowMap for it.
+            printf("%s: update gBlockShadowMap when necessary, for tb->pc: " TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+            InitializeBlockShadowMap(cpu, tb);
         }
 
         // create newChild->childIPs and initialize them according to Basic block size.
@@ -3929,10 +3929,10 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
         if(recordedSlots >0 ){
 
              if (gTraceShadowMapDone[tb->pc]){
-                // Lele: don't use the old gTraceShadowMap,
+                // Lele: don't use the old gBlockShadowMap,
                 //  - the old TraceShadowMap will be checked and updated during mem_callback
                 //  - this is because for same translated block, different execution iterations will have different mem ops.
-                //printf("%s: old gTraceShadowMap is not used: tb->pc=0x" TARGET_FMT_lx ".\n", __FUNCTION__, tb->pc);
+                //printf("%s: old gBlockShadowMap is not used: tb->pc=0x" TARGET_FMT_lx ".\n", __FUNCTION__, tb->pc);
             }
                 
         } else {
@@ -3957,7 +3957,7 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
         gCurrentContext->childBlocks[currentIp] = newChild;
         gCurrentBBlock = newChild;
 
-        // lele: now no need to check ==0 when we reuse a basic block's gTraceShadowMap.
+        // lele: now no need to check ==0 when we reuse a basic block's gBlockShadowMap.
         // printf("%s, check gCurrentBBlock->childIPs == 0\n", __FUNCTION__);
         // if ( ! gCurrentBBlock->childIPs == 0 ) {
         //     printf("%s: ERROR: gCurrentBBlock->childIPs should be 0 here\n", __FUNCTION__);
@@ -3980,16 +3980,16 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 
 //  UpdateTraceIPs:
 //  lele: now after block executed, we should have traceShadowMap built fully. Then we could use this to update Trace IPs. One TraceNode for a new block.
-//  In Deadspy: gTraceShadowMap is built during instrumentation. and used here in the instrumentation code.
-//  However, in Panda: we built gTraceShadowMap only when there is a mem write detected in mem_callback.
-//  So , gTraceShadowMap should be built fully after the exe of the block.
+//  In Deadspy: gBlockShadowMap(gTraceShadowMap) is built during instrumentation. and used here in the instrumentation code.
+//  However, in Panda: we built gBlockShadowMap only when there is a mem write detected in mem_callback.
+//  So , gBlockShadowMap should be built fully after the exe of the block.
 //  So, we need to update TraceNode after block execution.
 // Lele: updated: 
 // UpdateTraceIPs is splited into two steps:
 //  1, allocate all IPs as tb->size at the instrumentBeforeBlockExe
-//  2, fill it during mem_callback, at the same time when we fill gTraceShadowMap
+//  2, fill it during mem_callback, at the same time when we fill gBlockShadowMap
 //  --> in this way, we could use the &gCurrentIpVector[i] (or &(gCurrentBBlock->childIPs[i])) to report as dead context.
-//  This way, the gCurrentBBlock->childIPs will be filled in the same pace with gTraceShadowMap.
+//  This way, the gCurrentBBlock->childIPs will be filled in the same pace with gBlockShadowMap.
 //
 //inline void instrumentBeforeBlockExe(ADDRINT currentIp){
 // inline void UpdateTraceIPs(CPUState *cpu, TranslationBlock *tb){
@@ -4002,15 +4002,15 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
       
 //         TraceNode * newChild = gCurrentBBlock ;
 
-//     	target_ulong * currentTraceShadowIP = (target_ulong *) gTraceShadowMap[currentIp];
-//         printf("get currentTraceShadowIp  %p, from gTraceShadowMap[currentIp]\n", currentTraceShadowIP);
+//     	target_ulong * currentTraceShadowIP = (target_ulong *) gBlockShadowMap[currentIp];
+//         printf("get currentTraceShadowIp  %p, from gBlockShadowMap[currentIp]\n", currentTraceShadowIP);
 
 //         target_ulong recordedSlots = 0; // present one behind
 //         if (currentTraceShadowIP){
 //             recordedSlots = currentTraceShadowIP[-1]; // present one behind
 //             printf("get recordedSlots=" TARGET_FMT_lu ", from currentTraceShadowIP[-1]\n", recordedSlots);
 //         }else{
-//             printf("%s: ERROR: no gTraceShadowMap for 0x" TARGET_FMT_lx "\n", __FUNCTION__, currentIp);
+//             printf("%s: ERROR: no gBlockShadowMap for 0x" TARGET_FMT_lx "\n", __FUNCTION__, currentIp);
 //             exit(-1);
 //         }
 //         if(recordedSlots >0 ){
@@ -4179,16 +4179,16 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
 
     
     //  lele: should update Trace IPs after block executed.
-    //  In Deadspy: gTraceShadowMap is built during instrumentation. and used here in the instrumentation code.
-    //  However, in Panda: we built gTraceShadowMap only when there is a mem write detected in mem_callback.
-    //  So , gTraceShadowMap should be built fully after the exe of the block.
+    //  In Deadspy: gBlockShadowMap(gTraceShadowMap) is built during instrumentation. and used here in the instrumentation code.
+    //  However, in Panda: we built gBlockShadowMap only when there is a mem write detected in mem_callback.
+    //  So , gBlockShadowMap should be built fully after the exe of the block.
     //  So, we need to update TraceNode after block execution.
 
     // Refer: InstrumentTrace() TODO
     //InstrumentTraceEntry() -> UpdateDataOnFunctionEntry() -> GoDownCallChain(cpu,tb);
     if (gNewBasicBlock){ // only update ChildIPs for one time for each Basic Block.
         gNewBasicBlock=false;
-        printf("%s: mark gTraceShadowMap[0x" TARGET_FMT_lx "] as done for this block\n", __FUNCTION__, tb->pc);
+        printf("%s: mark gBlockShadowMap[0x" TARGET_FMT_lx "] as done for this block\n", __FUNCTION__, tb->pc);
         gTraceShadowMapDone[tb->pc]=true;
     }
 
@@ -4235,7 +4235,7 @@ void init_deadspy(const char * prefix){
 #endif //end defined(CONTINUOUS_DEADINFO)        
     // 0 can never be a ADDRINT key of a trace        
 #ifdef IP_AND_CCT
-    //gTraceShadowMap.set_empty_key(0);
+    //gBlockShadowMap.set_empty_key(0);
 #endif //end   IP_AND_CCT   
     
     // Create output file 
