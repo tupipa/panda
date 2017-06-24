@@ -2560,10 +2560,11 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
                 GetNextIPVecBuffer(1);
             }
 
-            gCurrentTraceBlock->childIPs[recordedSlots] = gCurrentTraceBlock;
+            //in every mem_callback, Update the TraceBlock's slot index with current Slot, this should be independent with the slot number in gTraceShadowMap.
+            gCurrentTraceBlock->childIPs[slot] = gCurrentTraceBlock;
             gCurrentTraceBlock->nSlots++; 
-            printf("%s: add one Slot in gCurrentTraceBlock &gCurrentTraceBlock->childIPs[%d]: %p\n", 
-                __FUNCTION__, (int)recordedSlots, &gCurrentTraceBlock->childIPs[recordedSlots]);
+            printf("%s: add one Slot in gCurrentTraceBlock &gCurrentTraceBlock->childIPs[%d]: %p; total Slots in trace: %d\n", 
+                __FUNCTION__, (int)slot, &gCurrentTraceBlock->childIPs[slot], (int)gCurrentTraceBlock->nSlots);
 
             //also check IPVecBuffer:
             printf("%s: checking gPreAllocatedContextBuffer[gCurPreAllocatedContextBufferIndex-1]\n",__FUNCTION__);
@@ -2571,19 +2572,25 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
                 printf("%s: ERROR: gPreAllocatedContextBuffer[gCurPreAllocatedContextBufferIndex-1] != gCurrentTraceBlock",
                     __FUNCTION__);
             }
-            printf("%s: checking gCurrentIpVector[recordedSlots]\n",__FUNCTION__);
-            if (gCurrentIpVector[recordedSlots] != gCurrentTraceBlock){
-                printf("%s: ERROR: gCurrentIpVector[recordedSlots] != gCurrentTraceBlock",
+            printf("%s: checking gCurrentIpVector[slot]\n",__FUNCTION__);
+            if (gCurrentIpVector[slot] != gCurrentTraceBlock){
+                printf("%s: ERROR: gCurrentIpVector[slot] != gCurrentTraceBlock",
                     __FUNCTION__);
             }
 
         }
 
         // check IpVector Slot
+        if(gCurrentIpVector != gCurrentTraceBlock->childIPs){
+            printf("%s: gCorrentIpVector(%p) should always equal to gCurrentTraceBlock->childIPs(%p)\n", __FUNCTION__, gCurrentIpVector, gCurrentTraceBlock->childIPs);
+            exit(-1);
+        }
         if(!gCurrentIpVector){
             printf("%s: ERROR: gCurrentIpVector is nil\n", __FUNCTION__);
+            exit(-1);
         }else if(!gCurrentIpVector[slot]){
-            printf("%s: ERROR: IpVector[%d] is nil\n", __FUNCTION__, (int)slot);
+            printf("%s: ERROR: IpVector %p[%d] is nil\n", __FUNCTION__,gCurrentIpVector, (int)slot);
+            exit(-1);
         }else{
             printf("%s: IpVector[%d] is good\n", __FUNCTION__, (int)slot);
         }
