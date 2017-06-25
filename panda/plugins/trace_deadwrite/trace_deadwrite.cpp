@@ -2653,6 +2653,11 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             gCurrentTraceBlock->nSlots++; 
             printf("%s: add one Slot in gCurrentTraceBlock &gCurrentTraceBlock->childIPs[%d]: %p; total Slots in trace: %d, block size: %d\n", 
                 __FUNCTION__, (int)slot, &gCurrentTraceBlock->childIPs[slot], (int)gCurrentTraceBlock->nSlots, blockSize);
+            if(gCurrentTraceBlock->nSlots > blockSize){
+                printf("%s: ERROR: nSlots in gCurrentTraceBlock is larger than blockSize \n", __FUNCTION__);
+                printf("%s: This will probably overlap the following block's buffer in IpVecBuffer\n", __FUNCTION__);
+                exit(-1);
+            }
 
             //also check IPVecBuffer:
             // printf("%s: checking gPreAllocatedContextBuffer[gCurPreAllocatedContextBufferIndex-1]\n",__FUNCTION__);
@@ -3866,9 +3871,9 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     
     // for each block, different translations could be different. 
     // we here keep the lastest translation, how to keep consistent????
-    printf("%s: for each block, translations could be different. why? \n", __FUNCTION__);
-    printf("%s: for same translation, mem_callback could be different. why? \n", __FUNCTION__);
-    printf("%s: gBlockShadowMap might be not usefull across all the blocks???? how to resolve? \n", __FUNCTION__);
+    // printf("%s: for each block, translations could be different. why? \n", __FUNCTION__);
+    // printf("%s: for same translation, mem_callback could be different. why? \n", __FUNCTION__);
+    // printf("%s: gBlockShadowMap might be not usefull across all the blocks???? how to resolve? \n", __FUNCTION__);
 
     //Lele: check asid.
     target_ulong asid_cur = panda_current_asid(cpu);
