@@ -79,6 +79,21 @@ This plugin traces deadwrites, and print them to file
     ==========================
 
 TODO:
+
+Jun 24: in order to avoid the situation:
+    // where for same basic block, execution in different times could have different write pcs.   
+    // Solution 1 (current): tracking whether we have stored a write pc in the ShadowMap for that block.
+    //  - use a subMap for each basic block, gTraceShadowMapIps[tb->pc]=< target_ulong IP, int slot >. If tb->pc has pc has its IP stored in ShadowMap, we set the int value as positive number as its slot index..
+    //  - for gTraceNode->childIPs, whenever we need to report the deadInfo with the IP's slot index, we get the slot from gTraceShadowMapIps
+    //  
+    // Solution 2 (not implemented yet) : inside each basic block, assign a static slot for every PC.
+    //  - only one slot will be assigned for one pc;
+    //  - every different basic block has it's own map;
+    //  - slot can be assigned at the time we found the basic block: either after translation, or before execution, or during execution, but not after execution.; 
+    //  - slots should be checked after execution;
+    //  - In order to get the slot number quickly by its pc, we add a subMap for each basic block: gTraceShadowMapIps[tb->pc] = < IP, slot >
+
+
     debug modes:
         - no multi thread, with IP and CCT enabled
         - multi thread enable.
@@ -4125,17 +4140,6 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
 
     instrumentBeforeBlockExe(cpu, tb);
 
-    // TODO: in order to avoid the situation:
-    // where for same basic block, execution in different times could have different write pcs.    
-    // Now TODO: add gTmpBlockIpShadow as an temperal shadowMap:
-    // gBlockShadowMap:
-    //  - after translation, only initialize gBlockShadowMap[pc]
-    //  - during block execution(mem_callback), don't update gBlockShadowMap[pc].
-    //  - before block execution, initialize gBlockShadowMap[pc] only if pc is not there;
-    // gTmpBlockIpShadow:
-    //  - before block execution, initialize it
-    //  - during mem_callback, store all mem_writes <slot, pc> in gTmpBlockIpShadow
-    //  - after block execution, compare gBlockShadowMap[pc] with gTmpBlockIpShadow, merge them with increasing sorted pc, and maximum tb size.
 
     return 1;
 }
