@@ -823,15 +823,17 @@ inline void ** GetNextIPVecBuffer(uint32_t size){
     assert( gCurPreAllocatedContextBufferIndex  < (PRE_ALLOCATED_BUFFER_SIZE)/(sizeof(void **)));
     return ret;
 }
-// Lele: for a gCurrentTraceBlock, the size of its childIPs could be changing during the execution.
-// this function can adjust the size of IPVecBuffer that has already allocated to the gCurrentTraceBlock previously.
-inline void ** AdjustIPVecBuffer(BlockNode ** currentTraceBlock, uint32_t size){
-    void ** ret = (void **) currentTraceBlock;
-    uint64_t oldIndex = (uint64_t) (ret - gPreAllocatedContextBuffer);
-    gCurPreAllocatedContextBufferIndex = oldIndex + size;
-    assert( gCurPreAllocatedContextBufferIndex  < (PRE_ALLOCATED_BUFFER_SIZE)/(sizeof(void **)));
-    return ret;
-}
+// // Lele: for a gCurrentTraceBlock, the size of its childIPs could be changing during the execution.
+// // this function can adjust the size of IPVecBuffer that has already allocated to the gCurrentTraceBlock previously.
+//  -->> Lele: not in use because it might overlap with the buffer of other TraceNodes'
+//
+// inline void ** AdjustIPVecBuffer(BlockNode ** currentTraceBlock, uint32_t size){
+//     void ** ret = (void **) currentTraceBlock;
+//     uint64_t oldIndex = (uint64_t) (ret - gPreAllocatedContextBuffer);
+//     gCurPreAllocatedContextBufferIndex = oldIndex + size;
+//     assert( gCurPreAllocatedContextBufferIndex  < (PRE_ALLOCATED_BUFFER_SIZE)/(sizeof(void **)));
+//     return ret;
+// }
 #endif //end CONTINUOUS_DEADINFO
 
 
@@ -2548,7 +2550,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             //printf("%s: check to update TraceShadowMap if no current pc is stored \n", __FUNCTION__);
             unordered_map <ADDRINT, int> :: iterator mapIptoSlots = (*gBlockShadowIPtoSlot[gCurrentTraceBlock->address]).find(pc);
 
-            if (mapIptoSlots == (*gBlockShadowIPtoSlot[gCurrentTraceBlock->address]).end()){
+            if (mapIptoSlots == (*gBlockShadowIPtoSlot[gCurrentTraceBlock->address]).end() || mapIptoSlots ->second == -1){
                 printf("%s: WARNING::::::::::::::::::::::::::::::::::::\n in an old block, but gBlockShadowMap[0x" 
                     TARGET_FMT_lx "] has no pc: 0x" TARGET_FMT_lx ", need add it.\n",
                     __FUNCTION__, gCurrentTraceBlock->address, pc);
@@ -2589,7 +2591,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             currentBlockShadowMap[slot] = pc;
             (*gBlockShadowIPtoSlot[gCurrentTraceBlock->address])[pc]= slot;
             currentBlockShadowMap[-1] ++;
-            printf("%s: a new pc slot added for a new block->pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentTraceBlock->address);
+            printf("%s: a new pc slot [%d]:IP=0x " TARGET_FMT_lx "  added for a new block->pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, (int)slot, pc, gCurrentTraceBlock->address);
             if (!gNewBlockNode){
                 // check this to make sure we'll also update gCurrentTraceBlock->childIPs
                 printf("%s: ERROR: should be a new TraceBlockNode, since this is a new block in gTraceShadowMap\n", __FUNCTION__);
@@ -2622,34 +2624,42 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             //  This way, the gCurrentTraceBlock->childIPs will be filled in the same pace with gBlockShadowMap.
             //
             // Update gTrace->childIPs and -> nSlots by this new slot
+           
             if (gCurrentTraceBlock->childIPs == 0){
-                // for first slot, also set childIPs.
-                printf("%s: now in first R/W of a new trace\n", __FUNCTION__);
-                gCurrentTraceBlock->childIPs = (BlockNode **)GetNextIPVecBuffer(1);
+                // for first slot, also set childIPs. 
+                if (gNewBlockNode){
+                    printf("%s: now in first R/W of a new trace\n", __FUNCTION__);
+                }else{
+                    printf("%s: WARNING: first R/W of an old trace\n", __FUNCTION__);
+                }
+                // gCurrentTraceBlock->childIPs = (BlockNode **)GetNextIPVecBuffer(1);
 
-                printf("%s: reset gCurrentTraceIpVector pointing to %p, for tb->pc: 0x" TARGET_FMT_lx "\n",
-                    __FUNCTION__, gCurrentTraceBlock->childIPs, gCurrentTraceBlock->address);
-                gCurrentTraceIpVector = gCurrentTraceBlock->childIPs;
+                // printf("%s: reset gCurrentTraceIpVector pointing to %p, for tb->pc: 0x" TARGET_FMT_lx "\n",
+                    // __FUNCTION__, gCurrentTraceBlock->childIPs, gCurrentTraceBlock->address);
+                // gCurrentTraceIpVector = gCurrentTraceBlock->childIPs;
 
             }else{
+
+                printf("%s: not the first R/W of a new trace\n", __FUNCTION__);
+
                 // if not first slot, call this to update IP index.
                 // 
-                printf("%s: not the first R/W of a new trace, just allocate one slot in IpVectBuffer\n", __FUNCTION__);
-                GetNextIPVecBuffer(1);
+                // printf("%s: not the first R/W of a new trace, just allocate one slot in IpVectBuffer\n", __FUNCTION__);
+                // GetNextIPVecBuffer(1);
             }
 
             //in every mem_callback, Update the TraceBlock's slot index with current Slot, this should be independent with the slot number in gTraceShadowMap.
-            gCurrentTraceBlock->childIPs[slot] = gCurrentTraceBlock;
+            // gCurrentTraceBlock->childIPs[slot] = gCurrentTraceBlock;
             gCurrentTraceBlock->nSlots++; 
             printf("%s: add one Slot in gCurrentTraceBlock &gCurrentTraceBlock->childIPs[%d]: %p; total Slots in trace: %d, block size: %d\n", 
                 __FUNCTION__, (int)slot, &gCurrentTraceBlock->childIPs[slot], (int)gCurrentTraceBlock->nSlots, blockSize);
 
             //also check IPVecBuffer:
-            printf("%s: checking gPreAllocatedContextBuffer[gCurPreAllocatedContextBufferIndex-1]\n",__FUNCTION__);
-            if (gPreAllocatedContextBuffer[gCurPreAllocatedContextBufferIndex-1] != gCurrentTraceBlock){
-                printf("%s: ERROR: gPreAllocatedContextBuffer[gCurPreAllocatedContextBufferIndex-1] != gCurrentTraceBlock",
-                    __FUNCTION__);
-            }
+            // printf("%s: checking gPreAllocatedContextBuffer[gCurPreAllocatedContextBufferIndex-1]\n",__FUNCTION__);
+            // if (gPreAllocatedContextBuffer[gCurPreAllocatedContextBufferIndex-1] != gCurrentTraceBlock){
+            //     printf("%s: ERROR: gPreAllocatedContextBuffer[gCurPreAllocatedContextBufferIndex-1] != gCurrentTraceBlock",
+            //         __FUNCTION__);
+            // }
             printf("%s: checking gCurrentTraceIpVector[slot]\n",__FUNCTION__);
             if (gCurrentTraceIpVector[slot] != gCurrentTraceBlock){
                 printf("%s: ERROR: gCurrentTraceIpVector[slot] != gCurrentTraceBlock",
@@ -4017,36 +4027,32 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 
         // create newChild->childIPs and initialize them according to Basic block size.
 
-        if(recordedSlots >0 ){
-
-             if (gBlockShadowMapDone[tb->pc]){
-                // Lele: don't use the old gBlockShadowMap,
-                //  - the old TraceShadowMap will be checked and updated during mem_callback
-                //  - this is because for same translated block, different execution iterations will have different mem ops.
-                //printf("%s: old gBlockShadowMap is not used: tb->pc=0x" TARGET_FMT_lx ".\n", __FUNCTION__, tb->pc);
-            }
-                
-        } else {
-
-            // printf("%s: Initialize gCurrentTraceBlock->childIPs with max size tb->size...\n", __FUNCTION__);
-
-            // printf("%s: TODO: might be improved with only nSlots allocated as deadspy\n",__FUNCTION__);
-
 #ifdef CONTINUOUS_DEADINFO
-            // if CONTINUOUS_DEADINFO is set, then all ip vecs come from a fixed 4GB buffer
-            //  printf("Continuous Info: GetNextIPVecBuffer...\n");
-            // newChild->childIPs  = (BlockNode **)GetNextIPVecBuffer(1);
-            // initialize as 0, get from IPVecBuffer one by one during mem_callback
-            printf("%s: Continuous Info: initialize childIPs as 0\n", __FUNCTION__);
-            newChild->childIPs = 0;
+        // if CONTINUOUS_DEADINFO is set, then all ip vecs come from a fixed 4GB buffer
+        printf("%s: Continuous Info: GetNextIPVecBuffer, with size of tb size: %d...\n", 
+            __FUNCTION__, tb->size);
+        newChild->childIPs  = (BlockNode **)GetNextIPVecBuffer(tb->size);
+        // initialize as 0, get from IPVecBuffer one by one during mem_callback
+        // printf("%s: Continuous Info: initialize childIPs as 0\n", __FUNCTION__);
+        // newChild->childIPs = 0;
 #else            //no CONTINUOUS_DEADINFO
-            printf("Non-Continuous Info: malloc new BlockNode**\n");
-            newChild->childIPs = (BlockNode **) malloc( (tb->size) * sizeof(BlockNode **) );
+        printf("Non-Continuous Info: malloc new BlockNode**\n");
+        newChild->childIPs = (BlockNode **) malloc( (tb->size) * sizeof(BlockNode **) );
 #endif //end CONTINUOUS_DEADINFO
-            newChild->nSlots = 0;
-        }    
+
+        for(uint32_t i = 0 ; i < tb->size ; i++) {
+            newChild->childIPs[i] = newChild;
+        }
+        // reset nSlots to 0, used to tracking how many write PCs in this TraceBlockNode.
+        newChild->nSlots = 0;
+
         gCurrentContext->childBlocks[currentIp] = newChild;
         gCurrentTraceBlock = newChild;
+
+        printf("%s: reset gCurrentTraceIpVector pointing to %p, for tb->pc: 0x" TARGET_FMT_lx "\n",
+            __FUNCTION__, gCurrentTraceBlock->childIPs, gCurrentTraceBlock->address);
+
+        gCurrentTraceIpVector = gCurrentTraceBlock->childIPs;
 
         // lele: now no need to check ==0 when we reuse a basic block's gBlockShadowMap.
         // printf("%s, check gCurrentTraceBlock->childIPs == 0\n", __FUNCTION__);
@@ -4057,9 +4063,9 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 
         // printf("%s: enter a trace, reset gCurrentSlot\n", __FUNCTION__);
         // gCurrentSlot = 0;
-        printf("%s: set gCurrentTraceIpVector pointed to %p, for tb->pc: 0x" TARGET_FMT_lx "\n", 
-            __FUNCTION__, gCurrentTraceBlock->childIPs, tb->pc);
-        gCurrentTraceIpVector = gCurrentTraceBlock->childIPs; // 0 if new basic block, non-zero if reused basic block.
+        // printf("%s: set gCurrentTraceIpVector pointed to %p, for tb->pc: 0x" TARGET_FMT_lx "\n", 
+        //     __FUNCTION__, gCurrentTraceBlock->childIPs, tb->pc);
+        // gCurrentTraceIpVector = gCurrentTraceBlock->childIPs; // 0 if new basic block, non-zero if reused basic block.
         //lele: set slot index
         // gCurrentSlot = gCurrentTraceBlock->nSlots;
     }    
