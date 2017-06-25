@@ -2531,7 +2531,8 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
 
         if(needUpdate){
-            currentBlockShadowMap[slot] = pc;
+            // currentBlockShadowMap[slot] = pc;
+            currentBlockShadowMap[recordedSlots] = pc;
             (*gTraceShadowMapIps[gCurrentTraceBlock->address])[pc]=true;
             currentBlockShadowMap[-1] ++;
         }
