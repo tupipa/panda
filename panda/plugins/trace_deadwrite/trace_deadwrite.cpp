@@ -2568,7 +2568,6 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 		        slot = recordedSlots;
 
                 gCurrentSlot = slot + 1;
-                gCurrentTraceBlock->nSlots = slot + 1;
 
                 currentBlockShadowMap[slot] = pc;
                 (*gBlockShadowIPtoSlot[gCurrentTraceBlock->address])[pc] = slot;
