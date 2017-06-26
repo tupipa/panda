@@ -2485,7 +2485,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 #endif //end MULTI_THREADED        
     
 
-    // Iterate over each memory operand of the instruction and add Analysis routine to check for dead writes.
+    // DeadSpy: Iterate over each memory operand of the instruction and add Analysis routine to check for dead writes.
     // We correctly handle instructions that do both read and write.
     // lele: no need to ana operands since it's already mem R/W.
     //
@@ -3619,9 +3619,9 @@ instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
     //iterate all instructions inside this block, store it in gBlockShadowMap.
     cs_insn *tmp;
     printf("%s: a block disasembled: pc=%p\n",__FUNCTION__, (void *)(uintptr_t)pc);
-    for (tmp=insn; tmp <= end; tmp ++){
-        printf("%s: insn: <addr,size,mnemonic,op_str> = <%p, %d, %s, %s>\n",__FUNCTION__,(void *)(uintptr_t)tmp->address,tmp->size,tmp->mnemonic, tmp->op_str);
-    }
+    // for (tmp=insn; tmp <= end; tmp ++){
+    //     printf("%s: insn: <addr,size,mnemonic,op_str> = <%p, %d, %s, %s>\n",__FUNCTION__,(void *)(uintptr_t)tmp->address,tmp->size,tmp->mnemonic, tmp->op_str);
+    // }
 
     if (pc != insn->address){
         printf("block address is not equal to its first intruction's address!!!\n");
@@ -3921,7 +3921,9 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     }
 
 
-    printf("\n%s: ---------------- a new targeted block --------------------\n", __FUNCTION__);
+    // printf("\n%s: ---------------- a new targeted block --------------------\n", __FUNCTION__);
+    
+    printf("\n%s: a new targeted block, tb->pc = 0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
     
     // Refer: trace_insthist: after_block_translate
 
