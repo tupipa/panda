@@ -3200,9 +3200,9 @@ void ExtractDeadMap(){
         fprintf(gTraceFile, "\nTotal Instr =  " TARGET_FMT_lu "", measurementBaseCount);
         printf("%s: total instr:  " TARGET_FMT_lu "\n", __FUNCTION__, measurementBaseCount);
         // make sure DeadMap is not empty:
-        size_type mapSize = DeadMap.size();
-        printf("%s: size of DeadMap: %d\n", __FUNCTION__, mapSize);
-        fprintf(gTraceFile, "\nsize of DeadMap: %d\n", mapSize);
+        uint64_t mapSize = DeadMap.size();
+        printf("%s: size of DeadMap: %lu\n", __FUNCTION__, mapSize);
+        fprintf(gTraceFile, "\nsize of DeadMap: %lu\n", mapSize);
 
         fflush(gTraceFile);
 
