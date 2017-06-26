@@ -70,7 +70,7 @@ This plugin traces deadwrites, and print them to file
                 - Record2ByteMemRead(), 2, 4, 8, 10, 16, RecordLargeMemWrite()
 
             - print deadinfo:
-                - ImageUnload()
+                - ImageUnload() -> ExtractDeadMap
                 - Fini()
         - Update gCurrentTraceIpVector, the array store all IPs for mem WRITE under the current ContextNode
             - on each new mem W detected, 
@@ -728,7 +728,7 @@ struct CallStack {
 // uint8_t tofind[MAX_STRINGS][MAX_STRLEN];
 // uint32_t strlens[MAX_STRINGS];
 // int num_strings = 0;
-int n_callers = 16;
+// int n_callers = 16;
 
 
 // ######################################################
@@ -3191,14 +3191,24 @@ inline target_ulong GetMeasurementBaseCount(){
     
     
     // On each Unload of a loaded image, the accummulated deadness information is dumped
-    VOID ImageUnload() {
+    // VOID ImageUnload() {
+void ExtractDeadMap(){
         printf("now in func %s. \n", __FUNCTION__);
         // Update gTotalInstCount first 
         target_ulong measurementBaseCount =  GetMeasurementBaseCount(); 
         
         fprintf(gTraceFile, "\nTotal Instr =  " TARGET_FMT_lu "", measurementBaseCount);
         printf("%s: total instr:  " TARGET_FMT_lu "\n", __FUNCTION__, measurementBaseCount);
+        // make sure DeadMap is not empty:
+        size_type mapSize = DeadMap.size();
+        printf("%s: size of DeadMap: %d\n", __FUNCTION__, mapSize);
+        fprintf(gTraceFile, "\nsize of DeadMap: %d\n", mapSize);
+
         fflush(gTraceFile);
+
+        if (mapSize < 1){
+            return;
+        }
         
 #if defined(CONTINUOUS_DEADINFO)
         //sparse_hash_map<uint64_t, uint64_t>::iterator mapIt = DeadMap.begin();
@@ -3341,7 +3351,8 @@ inline target_ulong GetMeasurementBaseCount(){
     
 #else //no IP_AND_CCT
     // On each Unload of a loaded image, the accummulated deadness information is dumped (JUST the CCT case, no IP)
-    VOID ImageUnload() {
+    // VOID ImageUnload() {
+void ExtractDeadMap(){
         // fprintf(gTraceFile, "\nUnloading %s", IMG_Name(img).c_str());
         fprintf(gTraceFile, "\nUnloading");
         //static bool done = false;
@@ -4268,10 +4279,10 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
 
 
 void report_deadspy(void * self){
-    //lele: ported from deadspy: ImageUnload and Fini
+    //lele: ported from deadspy: ExtractDeadMap and Fini
     // 
-    printf("%s: ImageUnload()\n", __FUNCTION__);
-    ImageUnload(); //lele: necessary?
+    //printf("%s: ExtractDeadMap()\n", __FUNCTION__);
+    ExtractDeadMap(); //lele: necessary?
     //
     printf("%s: Fini()\n", __FUNCTION__);
     Fini();
@@ -4399,6 +4410,12 @@ bool init_plugin(void *self) {
 
     //step 2.1: args: asid
     // const char *arg_str = panda_parse_string_opt(args, "asid", "", "a single asid to search for");
+    // size_t arg_len = strlen(arg_str);
+    // if (arg_len > 0) {
+    //     //memcpy(tofind[num_strings], arg_str, arg_len);
+    //     //strlens[num_strings] = arg_len;
+    //     //num_strings++;
+    // }
 
     target_ulong asid = panda_parse_ulong_opt(args, "asid", -1, "a single asid to search for");
 
@@ -4417,18 +4434,13 @@ bool init_plugin(void *self) {
         gTraceOne=true;
         gCurrentASID = asid;
     }
+    printf("%s: target asid: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
     
 
-    size_t arg_len = strlen(arg_str);
-    if (arg_len > 0) {
-        //memcpy(tofind[num_strings], arg_str, arg_len);
-        //strlens[num_strings] = arg_len;
-        //num_strings++;
-    }
     //step 2.2: args: max callers printed
     // n_callers = panda_parse_uint64_opt(args, "callers", 16, "depth of callstack for matches");
-    n_callers = CALLERS_PER_INS;
-    if (n_callers > MAX_CALLERS) n_callers = MAX_CALLERS;
+    // n_callers = CALLERS_PER_INS;
+    // if (n_callers > MAX_CALLERS) n_callers = MAX_CALLERS;
 
     //step 2.3: args: log file name prefix
     // deleted, simple hardcoded the prefix
