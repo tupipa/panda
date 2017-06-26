@@ -4001,17 +4001,24 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 
     	target_ulong * currentBlockShadowMap = (target_ulong *) gBlockShadowMap[currentIp];
         printf("get currentTraceShadow  %p, from gBlockShadowMap[currentIp]\n", currentBlockShadowMap);
+        int shadowMapSize = (int)currentBlockShadowMap[-2];
 
         // target_ulong recordedSlots = 0; // present one behind
         if (currentBlockShadowMap){ //Lele: TODO: use find() in the gBlockShadowMap.
-            printf("%s: gBlockShadowMap already created for tb->pc: " TARGET_FMT_lx "\n",
-            __FUNCTION__, tb->pc);
+            printf("%s: gBlockShadowMap already created for tb->pc: " TARGET_FMT_lx ", tb size: %d, shadowMap size: %d\n",
+            __FUNCTION__, tb->pc, tb->size, shadowMapSize);
+            if (tb->size != shadowMapSize){
+                printf("%s: ERROR: shadowMap size should be equal with block size\n", __FUNCTION__);
+                printf("%s: WARNING: now check to update shadowBlock if tb size is bigger than shadowMap\n", __FUNCTION__);
+                InitializeBlockShadowMap(cpu, tb);
+            }
+
             // recordedSlots = currentBlockShadowMap[-1]; // present one behind
         }else{
             // a block not translated but appear in before_block_exe:
             // also create gBlockShadowMap for it.
-            printf("%s: creating gBlockShadowMap for a non-translated block tb->pc: " TARGET_FMT_lx "\n",
-            __FUNCTION__, tb->pc);
+            printf("%s: WARNING: creating gBlockShadowMap for a non-translated block tb->pc: " TARGET_FMT_lx ", size: %d\n",
+            __FUNCTION__, tb->pc, tb->size);
             InitializeBlockShadowMap(cpu, tb);
         }
 
