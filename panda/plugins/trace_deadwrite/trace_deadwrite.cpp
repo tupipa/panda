@@ -3776,15 +3776,7 @@ inline void InitializeBlockShadowMap(CPUState *cpu, TranslationBlock *tb){
         // set new basic block flag; used in after block exe to set gShadowMap as done.
         gNewBasicBlock=true;
 
-        // free the old TraceShadowMap if need replace
-        if (replaced){
-            printf("%s: free the old TraceShadowMap[" TARGET_FMT_lx "]\n", __FUNCTION__, tb->pc);
-            traceShadowIP --;
-            traceShadowIP --;
-            free(traceShadowIP);
-            printf("%s: reset gBlockShadowMapDone[" TARGET_FMT_lx "]\n", __FUNCTION__, tb->pc);
-            gBlockShadowMapDone[tb->pc]=false;
-        }
+       
         // #############################################
         // create and initial gBlockShadowMap()
         //Refer: PopulateIPReverseMapAndAccountTraceInstructions()
@@ -3808,6 +3800,25 @@ inline void InitializeBlockShadowMap(CPUState *cpu, TranslationBlock *tb){
         ADDRINT * pNumWrites = ipShadow;
         ipShadow ++;
         *pNumWrites = slot;
+
+        // copy and free the old TraceShadowMap if need replace
+        if (replaced){
+            printf("%s: copy and free the old TraceShadowMap[" TARGET_FMT_lx "]\n", __FUNCTION__, tb->pc);
+            int copy_slots = (int)traceShadowIP [-1];
+
+            *pNumWrites = copy_slots;
+
+            int i;
+            for (i=0; i< copy_slots; i++){
+                ipShadow[i]=traceShadowIP[i];
+            }
+            
+            traceShadowIP --;
+            traceShadowIP --;
+            free(traceShadowIP);
+            printf("%s: reset gBlockShadowMapDone[" TARGET_FMT_lx "]\n", __FUNCTION__, tb->pc);
+            gBlockShadowMapDone[tb->pc]=false;
+        }
 
         gBlockShadowMap[traceAddr] = ipShadow ;
         // Now ipShadow[-1] is NumWrites; ipShadow[-2] is TraceSize.
