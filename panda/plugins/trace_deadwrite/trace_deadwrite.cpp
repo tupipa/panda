@@ -4402,8 +4402,8 @@ bool init_plugin(void *self) {
     panda_do_flush_tb();
     printf("do_flush_tb enabled\n");
     // tb chaining disable
-    // panda_disable_tb_chaining();
-    // printf("panda basic block chaining disabled\n");
+    panda_disable_tb_chaining();
+    printf("panda basic block chaining disabled\n");
 
 
     // Need this to get EIP with our callbacks
