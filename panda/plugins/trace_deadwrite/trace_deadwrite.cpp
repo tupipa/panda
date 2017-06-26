@@ -679,7 +679,7 @@ ADDRINT gCurrentASID=0x0; //only valide if traceOne is true;
 
 // gIgnoredASIDs < asid1, asid2, .. >:
 //  - store ignored asids, as well as the basic block of this asid's last occurance.
-unordered_set<ADDRINT> gIgnoredASIDs;
+unordered_set<target_ulong> gIgnoredASIDs;
 
 
 uint32_t gContextTreeIndex;
@@ -2338,7 +2338,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     //printf("curASID: " TARGET_FMT_lx "\n", callstack.asid);
     if (gTraceOne){
         if (asid_cur != gCurrentASID){
-            //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
+            //printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             gIgnoredASIDs.insert(asid_cur);
             return 1;
         } else{
@@ -3475,8 +3475,8 @@ VOID Fini() {
 VOID printIgnoredASIDs(){
     // Iterate Over the Unordered Set and display it
     printf("%s: ignored ASIDs:\n", __FUNCTION__);
-	for (ADDRINT s : gIgnoredASIDs)
-		printf("\t0x" TARGET_FMT_lx "\n", s);
+	for (target_ulong asid_ : gIgnoredASIDs)
+		printf("\t0x" TARGET_FMT_lx "\n", asid_);
 }
 // done last step: printing
 
@@ -4417,16 +4417,16 @@ bool init_plugin(void *self) {
     //     //num_strings++;
     // }
 
-    target_ulong asid = panda_parse_ulong_opt(args, "asid", -1, "a single asid to search for");
+    target_ulong asid = panda_parse_ulong_opt(args, "asid", 0 , "a single asid to search for");
 
-    if (asid == -1){
+    if (asid == 0){
         // no ASID parameter given, set the default behavior as following:
-
+        printf("%s: asid given as 0, or not given , or invalid, now use default value 0\n",__FUNCTION__);
         //gCurrentASID = 0x0; 
         //gTraceKernel=true;
         //gTraceApp=true;
         gTraceOne=true;
-        gCurrentASID = 0x0;
+        gCurrentASID = 0;
         //gCurrentASID = 0x000000001fb14000;
         //gCurrentASID = 0x0;
     }else{
