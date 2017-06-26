@@ -1283,12 +1283,6 @@ inline VOID GoUpCallChain(){
 
 // Initialized the fields of the root node of all context trees
 VOID InitContextTree(){
-    //gCurrentASID = 0x0; 
-    //gTraceKernel=true;
-    //gTraceApp=true;
-    gTraceOne=true;
-    gCurrentASID = 0x000000001fb14000;
-    //gCurrentASID = 0x0;
      
 #ifdef IP_AND_CCT
     // MAX 10 context trees
@@ -3467,9 +3461,9 @@ VOID Fini() {
     fclose(gTraceFile);
 }
 
-VOID printIgoredASIDs(){
+VOID printIgnoredASIDs(){
     // Iterate Over the Unordered Set and display it
-    printf("%s: ignored ASIDs:\n");
+    printf("%s: ignored ASIDs:\n", __FUNCTION__);
 	for (ADDRINT s : gIgnoredASIDs)
 		printf("\t0x" TARGET_FMT_lx "\n", s);
 }
@@ -4404,7 +4398,27 @@ bool init_plugin(void *self) {
     panda_arg_list *args = panda_get_args("trace_deadwrite");
 
     //step 2.1: args: asid
-    const char *arg_str = panda_parse_string_opt(args, "asid", "", "a single asid to search for");
+    // const char *arg_str = panda_parse_string_opt(args, "asid", "", "a single asid to search for");
+
+    target_ulong asid = panda_parse_ulong_opt(args, "asid", -1, "a single asid to search for");
+
+    if (asid == -1){
+        // no ASID parameter given, set the default behavior as following:
+
+        //gCurrentASID = 0x0; 
+        //gTraceKernel=true;
+        //gTraceApp=true;
+        gTraceOne=true;
+        gCurrentASID = 0x0;
+        //gCurrentASID = 0x000000001fb14000;
+        //gCurrentASID = 0x0;
+    }else{
+        // set target asid as input asid.
+        gTraceOne=true;
+        gCurrentASID = asid;
+    }
+    
+
     size_t arg_len = strlen(arg_str);
     if (arg_len > 0) {
         //memcpy(tofind[num_strings], arg_str, arg_len);
