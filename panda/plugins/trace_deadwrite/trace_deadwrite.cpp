@@ -3874,8 +3874,7 @@ after_block_translate: called after the translation of each basic block
 */
 int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
 
-    printf("\n---------------- a new block --------------------\n");
-    printf("--- Now in %s: pc=0x" TARGET_FMT_lx "\n",__FUNCTION__ , tb->pc);
+    // printf("\n############### Now in %s: pc=0x" TARGET_FMT_lx "\n",__FUNCTION__ , tb->pc);
     
     // for each block, different translations could be different. 
     // we here keep the lastest translation, how to keep consistent????
@@ -3887,7 +3886,7 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     target_ulong asid_cur = panda_current_asid(cpu);
     if (gTraceOne){
         if (asid_cur != gCurrentASID){
-            printf("%s: ignore ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+            // printf("%s: ignore ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             return 1;
         } else{
             printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
@@ -3912,6 +3911,8 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     }
 
 
+    printf("\n%s: ---------------- a new targeted block --------------------\n", __FUNCTION__);
+    
     // Refer: trace_insthist: after_block_translate
 
     // Refer: callstack_instr: after_block_translate(CPUState *cpu, TranslationBlock *tb)
@@ -4144,13 +4145,13 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
 
     //Lele: if last block initiated a call, then set gInitiatedCall as true. 
     //  Then next block would be inside a new function call.
-    printf("--- Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
+    //printf("########### Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
 
     //Lele: check asid.
     target_ulong asid_cur = panda_current_asid(cpu);
     if (gTraceOne){
         if (asid_cur != gCurrentASID){
-            printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+            // printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             return 1;
         } else{
             printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
@@ -4227,13 +4228,13 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
 
     // Lele: after block executed. PC would point to the new function if tb has a call instruction at last.
     //
-    printf("--- Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+    //printf("########### Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
 
     //Lele: check asid.
     target_ulong asid_cur = panda_current_asid(cpu);
     if (gTraceOne){
         if (asid_cur != gCurrentASID){
-            printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+            // printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             return 1;
         } else{
             printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
