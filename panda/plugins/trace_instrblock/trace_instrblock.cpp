@@ -31,6 +31,9 @@ void uninit_plugin(void *);
 #define WINDOW_SIZE 100
 
 csh handle;
+csh cs_handle_32;
+csh cs_handle_64;
+
 cs_insn *insn;
 bool init_capstone_done = false;
 target_ulong asid;
@@ -60,21 +63,47 @@ uint64_t pool_size=0;
 //uint64_t window_insns = 0;
 //uint64_t bbcount = 0;
 
+// init_capstone, REFER: 
+//	instr_type disas_block in callstack_instr
+
 void init_capstone(CPUState *cpu) {
-    cs_arch arch;
-    cs_mode mode;
-    CPUArchState* env = (CPUArchState *) cpu->env_ptr;
-#ifdef TARGET_I386
-    arch = CS_ARCH_X86;
-    mode = env->hflags & HF_LMA_MASK ? CS_MODE_64 : CS_MODE_32;
+
+
+#if defined(TARGET_I386)
+    if (cs_open(CS_ARCH_X86, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
+#if defined(TARGET_X86_64)
+    if (cs_open(CS_ARCH_X86, CS_MODE_64, &cs_handle_64) != CS_ERR_OK)
+#endif
 #elif defined(TARGET_ARM)
-    arch = CS_ARCH_ARM;
-    mode = env->thumb ? CS_MODE_THUMB : CS_MODE_ARM;
+    if (cs_open(CS_ARCH_ARM, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
+#elif defined(TARGET_PPC)
+    if (cs_open(CS_ARCH_PPC, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
+#endif
+    	return false;
+
+
+#if defined(TARGET_I386)
+    CPUArchState* env = (CPUArchState *) cpu->env_ptr;
+    handle = (env->hflags & HF_LMA_MASK) ? cs_handle_64 : cs_handle_32;
+#elif defined(TARGET_ARM) || defined(TARGET_PPC)
+    handle = cs_handle_32;
 #endif
 
-    if (cs_open(arch, mode, &handle) != CS_ERR_OK) {
-        printf("Error initializing capstone\n");
-    }
+//     cs_arch arch;
+//     cs_mode mode;
+//     CPUArchState* env = (CPUArchState *) cpu->env_ptr;
+// #ifdef TARGET_I386
+//     arch = CS_ARCH_X86;
+//     mode = env->hflags & HF_LMA_MASK ? CS_MODE_64 : CS_MODE_32;
+// #elif defined(TARGET_ARM)
+//     arch = CS_ARCH_ARM;
+//     mode = env->thumb ? CS_MODE_THUMB : CS_MODE_ARM;
+// #endif
+
+//     if (cs_open(arch, mode, &handle) != CS_ERR_OK) {
+//         printf("Error initializing capstone\n");
+//     }
+
     init_capstone_done = true;
 }
 
