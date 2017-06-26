@@ -126,6 +126,7 @@ PANDAENDCOMMENT */
 //Lele: for deadspy
 //#include <ext/hash_map>
 #include <tr1/unordered_map>
+#include <unordered_set>
 #include <sys/types.h>
 #include <stdlib.h>
 #include <list>
@@ -675,6 +676,11 @@ bool gTraceKernel=false; //trace all kernel processes; asid=0
 bool gTraceApp=false; // trace all other asids !=0;
 bool gTraceOne = false; //trace only one given ASID, kernel=0, or other asids. If this is true, the 'traceKernel' and 'traceApp' is invalide; If ASID not given, default is 0.
 ADDRINT gCurrentASID=0x0; //only valide if traceOne is true;
+
+// gIgnoredASIDs < asid1, asid2, .. >:
+//  - store ignored asids, as well as the basic block of this asid's last occurance.
+unordered_set<ADDRINT> gIgnoredASIDs;
+
 
 uint32_t gContextTreeIndex;
 
@@ -2339,6 +2345,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     if (gTraceOne){
         if (asid_cur != gCurrentASID){
             //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
+            gIgnoredASIDs.insert(asid_cur);
             return 1;
         } else{
             printf("%s: trace one ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
@@ -2346,6 +2353,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     }else if (gTraceKernel){
         if (asid_cur != 0x0 ){
             //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
+            gIgnoredASIDs.insert(asid_cur);
             return 1;
         } else{
             printf("\n Kernel mem op\n");
@@ -2353,6 +2361,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     }else if (gTraceApp){
         if (asid_cur == 0x0 ){
             //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
+            gIgnoredASIDs.insert(asid_cur);
             return 1;
         } else{
             printf("\n App mem op, ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
@@ -3458,56 +3467,12 @@ VOID Fini() {
     fclose(gTraceFile);
 }
 
-void report_deadspy(void * self){
-    //lele: ported from deadspy: ImageUnload and Fini
-    // 
-    printf("%s: ImageUnload()\n", __FUNCTION__);
-    ImageUnload(); //lele: necessary?
-    //
-    printf("%s: Fini()\n", __FUNCTION__);
-    Fini();
+VOID printIgoredASIDs(){
+    // Iterate Over the Unordered Set and display it
+    printf("%s: ignored ASIDs:\n");
+	for (ADDRINT s : gIgnoredASIDs)
+		printf("\t0x" TARGET_FMT_lx "\n", s);
 }
-
-void clear_insn(){
-    unordered_map<target_ulong, cs_insn *>::iterator insnIt;
-    for (insnIt = tb_insns.begin(); insnIt != tb_insns.end(); insnIt ++ ){
-        int count = tb_insns_count[insnIt -> first];
-        cs_insn * insn = insnIt->second;
-        cs_free(insn, count);
-    }
-}
-void uninit_plugin(void *self) {
-
-    printf("%s: report deadspy\n", __FUNCTION__);
-    report_deadspy(self);
-    clear_insn();
-    // std::map<prog_point,match_strings>::iterator it;
-
-    // for(it = matches.begin(); it != matches.end(); it++) {
-    //     // Print prog point
-
-    //     // Most recent callers are returned first, so print them
-    //     // out in reverse order
-    //     CallStack &f = matchstacks[it->first];
-    //     for (int i = f.n-1; i >= 0; i--) {
-    //         fprintf(gTraceFile, TARGET_FMT_lx " ", f.callers[i]);
-    //     }
-    //     fprintf(gTraceFile, TARGET_FMT_lx " ", f.pc);
-    //     fprintf(gTraceFile, TARGET_FMT_lx " ", f.asid);
-
-    //     // Print strings that matched and how many times
-    //     for(int i = 0; i < num_strings; i++)
-    //         fprintf(gTraceFile, " %d", it->second.val[i]);
-    //     fprintf(gTraceFile, "\n");
-    // }
-
-    // printf("\nlog writtent to %s\n", trace_file_kernel);
-    // printf("\nlog writtent to %s\n", trace_file_user);
-
-    // fclose(gTraceFile);
-    // fclose(gTraceFile_user);
-}
-
 // done last step: printing
 
 //#########################
@@ -3887,6 +3852,7 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     if (gTraceOne){
         if (asid_cur != gCurrentASID){
             // printf("%s: ignore ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+            gIgnoredASIDs.insert(asid_cur);
             return 1;
         } else{
             printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
@@ -3894,6 +3860,7 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     }else if (gTraceKernel){
         if (asid_cur != 0x0 ){
             printf("%s: ignore non-kernel ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+            gIgnoredASIDs.insert(asid_cur);
             return 1;
         } else{
             printf("\n%s: kernel block\n", __FUNCTION__);
@@ -3901,6 +3868,7 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     }else if (gTraceApp){
         if (asid_cur == 0x0 ){
             printf("%s: ignore kernel ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+            gIgnoredASIDs.insert(asid_cur);
             return 1;
         } else{
             printf("\n%s: App block, ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
@@ -4152,6 +4120,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     if (gTraceOne){
         if (asid_cur != gCurrentASID){
             // printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+            gIgnoredASIDs.insert(asid_cur);
             return 1;
         } else{
             printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
@@ -4159,6 +4128,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     }else if (gTraceKernel){
         if (asid_cur != 0x0 ){
             printf("%s: ignore non-kernel ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+            gIgnoredASIDs.insert(asid_cur);
             return 1;
         } else{
             printf("\n kernel block\n");
@@ -4166,6 +4136,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     }else if (gTraceApp){
         if (asid_cur == 0x0 ){
             printf("%s: ignore kernel ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+            gIgnoredASIDs.insert(asid_cur);
             return 1;
         } else{
             printf("\nApp block, ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
@@ -4235,6 +4206,7 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     if (gTraceOne){
         if (asid_cur != gCurrentASID){
             // printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+            gIgnoredASIDs.insert(asid_cur);
             return 1;
         } else{
             printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
@@ -4242,6 +4214,7 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     }else if (gTraceKernel){
         if (asid_cur != 0x0 ){
             printf("%s: ignore non-kernel ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+            gIgnoredASIDs.insert(asid_cur);
             return 1;
         } else{
             printf("\n kernel block\n");
@@ -4249,6 +4222,7 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     }else if (gTraceApp){
         if (asid_cur == 0x0 ){
             printf("%s: ignore kernel ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+            gIgnoredASIDs.insert(asid_cur);
             return 1;
         } else{
             printf("\nApp block, ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
@@ -4298,6 +4272,61 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     return 1;
 }
 
+
+void report_deadspy(void * self){
+    //lele: ported from deadspy: ImageUnload and Fini
+    // 
+    printf("%s: ImageUnload()\n", __FUNCTION__);
+    ImageUnload(); //lele: necessary?
+    //
+    printf("%s: Fini()\n", __FUNCTION__);
+    Fini();
+}
+
+void clear_insn(){
+    unordered_map<target_ulong, cs_insn *>::iterator insnIt;
+    for (insnIt = tb_insns.begin(); insnIt != tb_insns.end(); insnIt ++ ){
+        int count = tb_insns_count[insnIt -> first];
+        cs_insn * insn = insnIt->second;
+        cs_free(insn, count);
+    }
+}
+// TODO void clear gBlockShadowMap and gBlockShadowIPtoSlots
+// TODO void clear
+void uninit_plugin(void *self) {
+
+    printf("%s: report deadspy\n", __FUNCTION__);
+    report_deadspy(self);
+    clear_insn();
+
+    printIgnoredASIDs();
+
+    // std::map<prog_point,match_strings>::iterator it;
+
+    // for(it = matches.begin(); it != matches.end(); it++) {
+    //     // Print prog point
+
+    //     // Most recent callers are returned first, so print them
+    //     // out in reverse order
+    //     CallStack &f = matchstacks[it->first];
+    //     for (int i = f.n-1; i >= 0; i--) {
+    //         fprintf(gTraceFile, TARGET_FMT_lx " ", f.callers[i]);
+    //     }
+    //     fprintf(gTraceFile, TARGET_FMT_lx " ", f.pc);
+    //     fprintf(gTraceFile, TARGET_FMT_lx " ", f.asid);
+
+    //     // Print strings that matched and how many times
+    //     for(int i = 0; i < num_strings; i++)
+    //         fprintf(gTraceFile, " %d", it->second.val[i]);
+    //     fprintf(gTraceFile, "\n");
+    // }
+
+    // printf("\nlog writtent to %s\n", trace_file_kernel);
+    // printf("\nlog writtent to %s\n", trace_file_user);
+
+    // fclose(gTraceFile);
+    // fclose(gTraceFile_user);
+}
 
 
 
