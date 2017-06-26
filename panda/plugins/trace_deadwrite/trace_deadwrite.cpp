@@ -2565,6 +2565,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
                 //check if we have enough space left
                 if ((int)recordedSlots >= blockSize){
                     printf("%s: ERROR: number of write pcs is larger then block size, this shouldn't happen \n", __FUNCTION__);
+                    printf("%s: the size of ShadowMap and block Size is checked before_block_exe. If this still happen, this instruction might have bypassed the callback of before_block_exe.\n", __FUNCTION__);
                     exit(-1);
                     //might replace gBlockShadowMap for this block?
                 }
