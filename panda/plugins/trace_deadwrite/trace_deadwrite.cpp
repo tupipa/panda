@@ -3085,14 +3085,14 @@ inline target_ulong GetMeasurementBaseCount(){
         target_ulong measurementBaseCount =  GetTotalNByteWrites(1) + 2 * GetTotalNByteWrites(2) + 4 * GetTotalNByteWrites(4) + 8 * GetTotalNByteWrites(8) + 10 * GetTotalNByteWrites(10)+ 16 * GetTotalNByteWrites(16) + GetTotalNByteWrites(-1);
 #else //no MULTI_THREADED        
         printf("NO MULTI_THREADED: computing base count.\n");
-        printf("1: " TARGET_FMT_lx ";2: " TARGET_FMT_lx ";4 " TARGET_FMT_lx ";8: " TARGET_FMT_lx ";10: " TARGET_FMT_lx ";16: " TARGET_FMT_lx ";large: " TARGET_FMT_lx "\n",
+        printf("1: " TARGET_FMT_lu ";2: " TARGET_FMT_lu ";4 " TARGET_FMT_lu ";8: " TARGET_FMT_lu ";10: " TARGET_FMT_lu ";16: " TARGET_FMT_lu ";large: " TARGET_FMT_lu "\n",
           g1ByteWriteInstrCount, g2ByteWriteInstrCount,
           g4ByteWriteInstrCount, g8ByteWriteInstrCount,
           g10ByteWriteInstrCount,g16ByteWriteInstrCount,
           gLargeByteWriteInstrCount);
         target_ulong measurementBaseCount =  g1ByteWriteInstrCount + 2 * g2ByteWriteInstrCount + 4 * g4ByteWriteInstrCount + 8 * g8ByteWriteInstrCount + 10 * g10ByteWriteInstrCount + 16 * g16ByteWriteInstrCount + gLargeByteWriteInstrCount;
 #endif  //end MULTI_THREADED
-        printf("%s, base count  " TARGET_FMT_lx "\n",__FUNCTION__, measurementBaseCount);
+        printf("%s: base count  " TARGET_FMT_lu "\n",__FUNCTION__, measurementBaseCount);
         return measurementBaseCount;        
     }
 
@@ -3100,22 +3100,22 @@ inline target_ulong GetMeasurementBaseCount(){
     inline void PrintEachSizeWrite(){
         printf("now in func: %s\n", __FUNCTION__);
 #ifdef MULTI_THREADED
-        fprintf(gTraceFile,"\n1: " TARGET_FMT_lx "",GetTotalNByteWrites(1));
-        fprintf(gTraceFile,"\n2: " TARGET_FMT_lx "",GetTotalNByteWrites(2));
-        fprintf(gTraceFile,"\n4: " TARGET_FMT_lx "",GetTotalNByteWrites(4));
-        fprintf(gTraceFile,"\n8: " TARGET_FMT_lx "",GetTotalNByteWrites(8));
-        fprintf(gTraceFile,"\n10: " TARGET_FMT_lx "",GetTotalNByteWrites(10));
-        fprintf(gTraceFile,"\n16: " TARGET_FMT_lx "",GetTotalNByteWrites(16));
-        fprintf(gTraceFile,"\nother: " TARGET_FMT_lx "",GetTotalNByteWrites(-1));
+        fprintf(gTraceFile,"\n1: " TARGET_FMT_lu "",GetTotalNByteWrites(1));
+        fprintf(gTraceFile,"\n2: " TARGET_FMT_lu "",GetTotalNByteWrites(2));
+        fprintf(gTraceFile,"\n4: " TARGET_FMT_lu "",GetTotalNByteWrites(4));
+        fprintf(gTraceFile,"\n8: " TARGET_FMT_lu "",GetTotalNByteWrites(8));
+        fprintf(gTraceFile,"\n10: " TARGET_FMT_lu "",GetTotalNByteWrites(10));
+        fprintf(gTraceFile,"\n16: " TARGET_FMT_lu "",GetTotalNByteWrites(16));
+        fprintf(gTraceFile,"\nother: " TARGET_FMT_lu "",GetTotalNByteWrites(-1));
         
 #else  //no MULTI_THREADED        
-        fprintf(gTraceFile,"\n1: " TARGET_FMT_lx "",g1ByteWriteInstrCount);
-        fprintf(gTraceFile,"\n2: " TARGET_FMT_lx "",g2ByteWriteInstrCount);
-        fprintf(gTraceFile,"\n4: " TARGET_FMT_lx "",g4ByteWriteInstrCount);
-        fprintf(gTraceFile,"\n8: " TARGET_FMT_lx "",g8ByteWriteInstrCount);
-        fprintf(gTraceFile,"\n10: " TARGET_FMT_lx "",g10ByteWriteInstrCount);
-        fprintf(gTraceFile,"\n16: " TARGET_FMT_lx "",g16ByteWriteInstrCount);
-        fprintf(gTraceFile,"\nother: " TARGET_FMT_lx "",gLargeByteWriteInstrCount);
+        fprintf(gTraceFile,"\n1: " TARGET_FMT_lu "",g1ByteWriteInstrCount);
+        fprintf(gTraceFile,"\n2: " TARGET_FMT_lu "",g2ByteWriteInstrCount);
+        fprintf(gTraceFile,"\n4: " TARGET_FMT_lu "",g4ByteWriteInstrCount);
+        fprintf(gTraceFile,"\n8: " TARGET_FMT_lu "",g8ByteWriteInstrCount);
+        fprintf(gTraceFile,"\n10: " TARGET_FMT_lu "",g10ByteWriteInstrCount);
+        fprintf(gTraceFile,"\n16: " TARGET_FMT_lu "",g16ByteWriteInstrCount);
+        fprintf(gTraceFile,"\nother: " TARGET_FMT_lu "",gLargeByteWriteInstrCount);
 #endif //end MULTI_THREADED
         printf("func: %s: done\n", __FUNCTION__);
     }
@@ -3166,7 +3166,7 @@ inline target_ulong GetMeasurementBaseCount(){
     // Prints the complete calling context including the line nunbers and the context's contribution, given a DeadInfo 
     inline VOID PrintIPAndCallingContexts(const DeadInfoForPresentation & di, target_ulong measurementBaseCount){
         printf("now in func: %s\n", __FUNCTION__);
-        fprintf(gTraceFile,"\n " TARGET_FMT_lx " = %e",di.count, di.count * 100.0 / measurementBaseCount);
+        fprintf(gTraceFile,"\n " TARGET_FMT_lu " = %e",di.count, di.count * 100.0 / measurementBaseCount);
         fprintf(gTraceFile,"\n-------------------------------------------------------\n");
 #ifdef MERGE_SAME_LINES
         fprintf(gTraceFile,"\n%s",di.pMergedDeadInfo->line1.c_str());                                    
@@ -3324,7 +3324,7 @@ void ExtractDeadMap(){
             } else {
                 // print only dead count
 #ifdef PRINT_ALL_CTXT
-                fprintf(gTraceFile,"\nCTXT_DEAD_CNT: " TARGET_FMT_lx " = %e",dipIter->count, dipIter->count * 100.0 / measurementBaseCount);
+                fprintf(gTraceFile,"\nCTXT_DEAD_CNT: " TARGET_FMT_lu " = %e",dipIter->count, dipIter->count * 100.0 / measurementBaseCount);
 #endif                //end PRINT_ALL_CTXT
             }
             
@@ -3370,8 +3370,8 @@ void ExtractDeadMap(){
         
         // get  measurementBaseCount first 
         target_ulong measurementBaseCount =  GetMeasurementBaseCount();         
-        fprintf(gTraceFile, "\nTotal Instr =  " TARGET_FMT_lx "", measurementBaseCount);
-        printf("get total Instr:  " TARGET_FMT_lx "\n", measurementBaseCount);
+        fprintf(gTraceFile, "\nTotal Instr =  " TARGET_FMT_lu "", measurementBaseCount);
+        printf("get total Instr:  " TARGET_FMT_lu "\n", measurementBaseCount);
         fflush(gTraceFile);
         
 #if defined(CONTINUOUS_DEADINFO)
@@ -3420,7 +3420,7 @@ void ExtractDeadMap(){
             // Print just first MAX_DEAD_CONTEXTS_TO_LOG contexts
             if(deads < MAX_DEAD_CONTEXTS_TO_LOG){
                 try{
-                    fprintf(gTraceFile,"\n " TARGET_FMT_lx " = %e",it->count, it->count * 100.0 / measurementBaseCount);
+                    fprintf(gTraceFile,"\n " TARGET_FMT_lu " = %e",it->count, it->count * 100.0 / measurementBaseCount);
                     PrintCallingContexts(*it);
                 } catch (...) {
                     fprintf(gTraceFile,"\nexcept");
@@ -3428,7 +3428,7 @@ void ExtractDeadMap(){
             } else {
 #ifdef PRINT_ALL_CTXT
                 // print only dead count
-                fprintf(gTraceFile,"\nCTXT_DEAD_CNT: " TARGET_FMT_lx " = %e",it->count, it->count * 100.0 / measurementBaseCount);
+                fprintf(gTraceFile,"\nCTXT_DEAD_CNT: " TARGET_FMT_lu " = %e",it->count, it->count * 100.0 / measurementBaseCount);
 #endif //end PRINT_ALL_CTXT                
             }
             
@@ -3466,10 +3466,10 @@ VOID Fini() {
     // byte count
     target_ulong measurementBaseCount = GetMeasurementBaseCount();
     fprintf(gTraceFile, "\n#deads");
-    fprintf(gTraceFile, "\nGrandTotalWrites =  " TARGET_FMT_lx "",measurementBaseCount);
-    fprintf(gTraceFile, "\nGrandTotalDead =  " TARGET_FMT_lx " = %e%%",gTotalDead, gTotalDead * 100.0 / measurementBaseCount);
+    fprintf(gTraceFile, "\nGrandTotalWrites =  " TARGET_FMT_lu "",measurementBaseCount);
+    fprintf(gTraceFile, "\nGrandTotalDead =  " TARGET_FMT_lu " = %e%%",gTotalDead, gTotalDead * 100.0 / measurementBaseCount);
 #ifdef MULTI_THREADED        
-    fprintf(gTraceFile, "\nGrandTotalMTDead =  " TARGET_FMT_lx " = %e%%",gTotalMTDead, gTotalMTDead * 100.0 / measurementBaseCount);
+    fprintf(gTraceFile, "\nGrandTotalMTDead =  " TARGET_FMT_lu " = %e%%",gTotalMTDead, gTotalMTDead * 100.0 / measurementBaseCount);
 #endif // end MULTI_THREADED        
     fprintf(gTraceFile, "\n#eof");
     fclose(gTraceFile);
@@ -3616,9 +3616,9 @@ instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
         goto done;
     }
 
-    //iterate all instructions inside this block, store it in gBlockShadowMap.
-    cs_insn *tmp;
+    //iterate all instructions inside this block
     printf("%s: a block disasembled: pc=%p\n",__FUNCTION__, (void *)(uintptr_t)pc);
+    // cs_insn *tmp;
     // for (tmp=insn; tmp <= end; tmp ++){
     //     printf("%s: insn: <addr,size,mnemonic,op_str> = <%p, %d, %s, %s>\n",__FUNCTION__,(void *)(uintptr_t)tmp->address,tmp->size,tmp->mnemonic, tmp->op_str);
     // }
