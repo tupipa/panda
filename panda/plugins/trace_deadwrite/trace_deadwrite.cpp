@@ -4013,14 +4013,9 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
         gCurrentTraceIpVector = gCurrentTraceBlock->childIPs;
         printf("%s: reset gCurrentTraceIpVector to %p\n", __FUNCTION__, gCurrentTraceBlock->childIPs);
         
-        // TODO: check size ???
-        bool biggerOldBlock=false;
-
+        // TODO: check size
         target_ulong * oldTraceShadowIP = (target_ulong *) gBlockShadowMap[tb->pc];
-        unordered_map <ADDRINT, int > * ipToSlot = (unordered_map <ADDRINT, int > *) gBlockShadowIPtoSlot[tb->pc];
-
         target_ulong oldBlockSize = 0;
-
         // if oldTraceShadowIP exists, this means we already have one created before.
         // For old childBlock under current context, there should be always an oldTraceShadowIP.
         // If not, there would be an error.
