@@ -1106,7 +1106,7 @@ inline VOID GoUpCallChain(){
 //                     // WRONG: current Context's parent is not the last in call stack.
 //                     // //curContext is impossible to be root when there are more than one callers in stack.
 //                     if (gCurrentContext == gRootContext){
-//                         printf("Error: current context node should not be root context when there are >2 callers in stack. A new context should be created when there is 1 callers in stack.\n");
+//                         printf("ERROR: current context node should not be root context when there are >2 callers in stack. A new context should be created when there is 1 callers in stack.\n");
 //                     }
 //                     ContextNode * parContext = gCurrentContext->parent;
 //                     // parContext is impossible to be root: parent context must be last in call stack, so should not be the root.
@@ -1117,7 +1117,7 @@ inline VOID GoUpCallChain(){
 //                         gInitiatedRet = true;
 //                         printf("parent ContextIp is equal to the caller Ip, a ret detected. \n");
 //                     }else{
-//                         printf("Error: callers>=2: current Context is neither the last nor the second last in the call stack, and current Context's parent is not the last in call stack.\n");
+//                         printf("ERROR: callers>=2: current Context is neither the last nor the second last in the call stack, and current Context's parent is not the last in call stack.\n");
 //                         exit(-1);
 //                     }
 //                 }
@@ -1804,21 +1804,21 @@ VOID Record8ByteMemWrite(
         void **lastIP = (void **)(status + PAGE_SIZE +  PAGE_OFFSET((uintptr_t)addr) * sizeof(uint8_t*));
         uint64_t state = *((uint64_t*)(status +  PAGE_OFFSET((uintptr_t)addr)));   
         
-        printf("%s: current state of addr (%p): 0x%lx\n", 
-            __FUNCTION__, addr, state);
+        // printf("%s: current state of addr (%p): 0x%lx\n", 
+        //     __FUNCTION__, addr, state);
         // TODO:lele only supports 64bit here.
         if (sizeof(state) == 8 && state != EIGHT_BYTE_READ_ACTION) {
             DECLARE_HASHVAR(myhash);
             void * ipZero = lastIP[0];
-            printf("%s: lastIP[0]=%p\n", __FUNCTION__, ipZero);
+            // printf("%s: lastIP[0]=%p\n", __FUNCTION__, ipZero);
             // fast path where all bytes are dead by same context
             // TODO:lele only supports 64bit here.
             if ( sizeof(state) == 8 && state == EIGHT_BYTE_WRITE_ACTION &&
                 ipZero  == lastIP[1] && ipZero  == lastIP[2] &&
                 ipZero  == lastIP[3] && ipZero  == lastIP[4] &&
                 ipZero  == lastIP[5] && ipZero  == lastIP[6] && ipZero  == lastIP[7] ) {
-                printf("%s: dead all 8 on same oldIP\n", __FUNCTION__);
-                REPORT_DEAD(CUR_CTXT, ipZero, myhash, 8);
+                // printf("%s: dead all 8 on same oldIP\n", __FUNCTION__);
+                // REPORT_DEAD(CUR_CTXT, ipZero, myhash, 8);
                 // State is already written, so no need to dead write in a tool that detects dead writes
             } else {
                 // slow path 
@@ -1847,7 +1847,7 @@ VOID Record8ByteMemWrite(
         	*((uint64_t * )(status +  PAGE_OFFSET((uintptr_t)addr))) = EIGHT_BYTE_WRITE_ACTION;
         }
         lastIP[0] = CUR_CTXT;
-        printf("%s, record 8 bytes write to addr %p with context=%p (&gCurrentTraceIpVector[%d])\n",__FUNCTION__,addr, lastIP[0], slot);
+        // printf("%s, record 8 bytes write to addr %p with context=%p (&gCurrentTraceIpVector[%d])\n",__FUNCTION__,addr, lastIP[0], slot);
         lastIP[1] = CUR_CTXT;
         lastIP[2] = CUR_CTXT;
         lastIP[3] = CUR_CTXT;
@@ -2341,9 +2341,10 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             //printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             gIgnoredASIDs.insert(asid_cur);
             return 1;
-        } else{
-            printf("%s: trace one ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
-        }
+        } 
+        // else{
+        //     printf("%s: trace one ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
+        // }
     }else if (gTraceKernel){
         if (asid_cur != 0x0 ){
             //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
@@ -3501,7 +3502,7 @@ void init_capstone(CPUState *cpu) {
 // #endif
 
 //     if (cs_open(arch, mode, &handle) != CS_ERR_OK) {
-//         printf("Error initializing capstone\n");
+//         printf("ERROR initializing capstone\n");
 //     }
 
     #if defined(TARGET_I386)
@@ -3519,7 +3520,7 @@ void init_capstone(CPUState *cpu) {
         if (cs_open(CS_ARCH_PPC, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
     #endif
          {
-            printf("Error initializing capstone\n");
+            printf("ERROR initializing capstone\n");
             return ;
          }   
 
@@ -3592,7 +3593,7 @@ instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
                 printf("X86 Intel syntax is unsupported (opt-out at compile time)\n");
                 break;
             default: 
-                printf("error no: %d\n", err_);
+                printf("ERROR no: %d\n", err_);
         }
     }
     if (count <= 0) {
@@ -3756,14 +3757,14 @@ inline void InitializeBlockShadowMap(CPUState *cpu, TranslationBlock *tb){
     // implying it has been translated before.
     // so check its new size with the older one, replace a new Shadow if size is bigger.
     if (oldTraceShadowIP){
-        printf("%s: an old basic block, now check its size\n",__FUNCTION__);
+        // printf("%s: an old basic block, now check its size\n",__FUNCTION__);
 
         oldBlockSize = oldTraceShadowIP[-2]; // present one behind
-        printf("%s: get block size  %d, from gBlockShadowMap[0x" TARGET_FMT_lx "][-2]\n",
-            __FUNCTION__, (int)oldBlockSize, tb->pc);
+        // printf("%s: get block size  %d, from gBlockShadowMap[0x" TARGET_FMT_lx "][-2]\n",
+        //     __FUNCTION__, (int)oldBlockSize, tb->pc);
 
         if (tb->size > oldBlockSize){
-            printf("%s: old block with a bigger tb size, update TraceShadowMap for tb->pc: 0x"
+            printf("%s: WARNING: old block with a bigger tb size, update TraceShadowMap for tb->pc: 0x"
              TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
             needUpdate=true;
             replaced=true;
@@ -3790,7 +3791,7 @@ inline void InitializeBlockShadowMap(CPUState *cpu, TranslationBlock *tb){
         //         - GoUpCallChain
         //     - build ipShadow before code run. (Allocated here but filled during run. (mem_callback, have size and R/W)
         //     - get write size and insert statement InstructionContributionOfBBL2Byte to count total write size.(mem_callback, have size and R/W)
-        printf("%s: create and initial gBlockShadowMap for a new basic block: tb->pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+        // printf("%s: create and initial gBlockShadowMap for a new basic block: tb->pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
 
         uint32_t traceSize = tb->size;    
         ADDRINT * ipShadow = (ADDRINT * )malloc( (2 + traceSize) * sizeof(ADDRINT)); // +1 to hold the number of slots as a metadata
@@ -3809,7 +3810,7 @@ inline void InitializeBlockShadowMap(CPUState *cpu, TranslationBlock *tb){
         // copy and free the old BlockShadowMap if need replace
         if (replaced){
 
-            printf("%s: copy and free the old BlockShadowMap[" TARGET_FMT_lx "], according to gBlockShadowIPtoSlots[tb]\n", __FUNCTION__, tb->pc);
+            printf("%s: WARNING: replaced shadowMap: copy and free the old BlockShadowMap[" TARGET_FMT_lx "], according to gBlockShadowIPtoSlots[tb]\n", __FUNCTION__, tb->pc);
 
             int copy_slots = (int)oldTraceShadowIP [-1];
 
@@ -3829,14 +3830,15 @@ inline void InitializeBlockShadowMap(CPUState *cpu, TranslationBlock *tb){
 
             // check the num of copied slots is equal to copy_slots.
             if (i != copy_slots ){
-                printf("%s: Error: nSlots (%d) in oldTraceShadowIP is not equal with nSlots (%d) in gTraceShadowIPtoSlots, tb->pc: " TARGET_FMT_lx "\n", __FUNCTION__,copy_slots, i, tb->pc);
+                printf("%s: ERROR: nSlots (%d) in oldTraceShadowIP is not equal with nSlots (%d) in gTraceShadowIPtoSlots, tb->pc: " TARGET_FMT_lx "\n", __FUNCTION__,copy_slots, i, tb->pc);
+                exit(-1);
             }
 
             // free the oldShadowIP for the tb
             oldTraceShadowIP --;
             oldTraceShadowIP --;
             free(oldTraceShadowIP);
-            printf("%s: reset gBlockShadowMapDone[" TARGET_FMT_lx "]\n", __FUNCTION__, tb->pc);
+            // printf("%s: reset gBlockShadowMapDone[" TARGET_FMT_lx "]\n", __FUNCTION__, tb->pc);
             gBlockShadowMapDone[tb->pc]=false;
         }
 
@@ -3850,7 +3852,7 @@ inline void InitializeBlockShadowMap(CPUState *cpu, TranslationBlock *tb){
         // (*mapIps)[traceAddr]=-1;
         gBlockShadowIPtoSlot[traceAddr] = mapIps;
 
-        printf("%s: set gBlockShadowMapDone[0x" TARGET_FMT_lx "] as false for this block\n", __FUNCTION__, tb->pc);
+        // printf("%s: set gBlockShadowMapDone[0x" TARGET_FMT_lx "] as false for this block\n", __FUNCTION__, tb->pc);
         gBlockShadowMapDone[traceAddr] = false;
 
     }
@@ -3890,9 +3892,10 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
             // printf("%s: ignore ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             gIgnoredASIDs.insert(asid_cur);
             return 1;
-        } else{
-            printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
         }
+        // else{
+        //     printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
+        // }
     }else if (gTraceKernel){
         if (asid_cur != 0x0 ){
             printf("%s: ignore non-kernel ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
@@ -3988,11 +3991,11 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
 //inline void instrumentBeforeBlockExe(ADDRINT currentIp){
 inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 
-    printf("%s: tb->pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+    // printf("%s: tb->pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
 
     target_ulong currentIp=tb->pc;
 
-    printf("%s: reset gCurrentSlot as 0\n", __FUNCTION__);
+    // printf("%s: reset gCurrentSlot as 0\n", __FUNCTION__);
     gCurrentSlot = 0;
 
     // if landed due to function call, create a child context node
@@ -4007,11 +4010,11 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
         // set the current Trace to the new trace
         // set the IpVector
         gNewBlockNode = false;
-        printf("%s:Trace Node already exists\n",__FUNCTION__);
+        // printf("%s:Trace Node already exists\n",__FUNCTION__);
         gCurrentTraceBlock = gTraceIter->second;
-        printf("%s: reset gCurrentTraceBlock for existed Node\n", __FUNCTION__);
+        // printf("%s: reset gCurrentTraceBlock for existed Node\n", __FUNCTION__);
         gCurrentTraceIpVector = gCurrentTraceBlock->childIPs;
-        printf("%s: reset gCurrentTraceIpVector to %p\n", __FUNCTION__, gCurrentTraceBlock->childIPs);
+        // printf("%s: reset gCurrentTraceIpVector to %p\n", __FUNCTION__, gCurrentTraceBlock->childIPs);
         
         // TODO: check size
         target_ulong * oldTraceShadowIP = (target_ulong *) gBlockShadowMap[tb->pc];
@@ -4082,8 +4085,8 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 
 #ifdef CONTINUOUS_DEADINFO
         // if CONTINUOUS_DEADINFO is set, then all ip vecs come from a fixed 4GB buffer
-        printf("%s: Continuous Info: GetNextIPVecBuffer, with size of tb size: %d...\n", 
-            __FUNCTION__, tb->size);
+        // printf("%s: Continuous Info: GetNextIPVecBuffer, with size of tb size: %d...\n", 
+            // __FUNCTION__, tb->size);
         newChild->childIPs  = (BlockNode **)GetNextIPVecBuffer(tb->size);
         // initialize as 0, get from IPVecBuffer one by one during mem_callback
         // printf("%s: Continuous Info: initialize childIPs as 0\n", __FUNCTION__);
@@ -4174,9 +4177,10 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
             // printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             gIgnoredASIDs.insert(asid_cur);
             return 1;
-        } else{
-            printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
-        }
+        } 
+        // else{
+        //     printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
+        // }
     }else if (gTraceKernel){
         if (asid_cur != 0x0 ){
             printf("%s: ignore non-kernel ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
@@ -4260,9 +4264,10 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
             // printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             gIgnoredASIDs.insert(asid_cur);
             return 1;
-        } else{
-            printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
-        }
+        } 
+        // else{
+        //     printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
+        // }
     }else if (gTraceKernel){
         if (asid_cur != 0x0 ){
             printf("%s: ignore non-kernel ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
@@ -4301,7 +4306,7 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
         gNewBlockNode = false;
     }
     if (! gBlockShadowMapDone[tb->pc]){
-        printf("%s: mark gBlockShadowMap[0x" TARGET_FMT_lx "] as done for this block\n", __FUNCTION__, tb->pc);
+        // printf("%s: mark gBlockShadowMap[0x" TARGET_FMT_lx "] as done for this block\n", __FUNCTION__, tb->pc);
         gBlockShadowMapDone[tb->pc]=true;
     }
     // reset slot index, so that in next basic block, we count mem R/W from the begining.
@@ -4309,10 +4314,10 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
 
     instr_type tb_type = call_cache[tb->pc];
     if (tb_type == INSTR_CALL) {
-        printf("%s: call detected, set InitiatedCall flag\n", __FUNCTION__);
+        // printf("%s: call detected, set InitiatedCall flag\n", __FUNCTION__);
         gInitiatedCall=true;
     }else if (tb_type == INSTR_RET) {
-        printf("%s: return detected, set InitiatedRet flag\n", __FUNCTION__);
+        // printf("%s: return detected, set InitiatedRet flag\n", __FUNCTION__);
         gInitiatedRet=true;
     }else if (tb_type == INSTR_INT) {
         printf("%s: interrupt detected, set InitiatedINT flag\n", __FUNCTION__);
