@@ -336,8 +336,8 @@ DeadMap.insert(std::pair<uint64_t, uint64_t>(hashVar,size)); \
 }   \
 }while(0)
 
-//printf("%s:continuous: report one dead (&gCurrentTraceIpVector[%d]:%p, %p, %d, hash :0x%lx)\n", \
-      __FUNCTION__, slot, curCtxt,lastCtxt, size, hashVar);
+//printf("%s:continuous: report one dead (&gCurrentTraceIpVector[%d]:%p, %p, %d, hash :0x%lx)\n", 
+    //   __FUNCTION__, slot, curCtxt,lastCtxt, size, hashVar);
 
 #else // no defined(CONTINUOUS_DEADINFO)
 #define DECLARE_HASHVAR(name) uint64_t name
@@ -352,8 +352,8 @@ DeadMap.insert(std::pair<uint64_t, uint64_t>(hashVar,deadInfo)); \
 }   \
 }while(0)
 
-//printf("%s: no-continuous, report one dead (%p, %p, %d)\n", \
-      __FUNCTION__, curCtxt,lastCtxt, size); 
+//printf("%s: no-continuous, report one dead (%p, %p, %d)\n", 
+    //   __FUNCTION__, curCtxt,lastCtxt, size); 
 
 #endif // end defined(CONTINUOUS_DEADINFO)
 
@@ -3227,16 +3227,16 @@ void ExtractDeadMap(){
         for (; mapIt != DeadMap.end(); mapIt++) {
             MergedDeadInfo tmpMergedDeadInfo;
             uint64_t hash = mapIt->first;
-	        printf("%s: read one dead info: hash: 0x%lx\n", __FUNCTION__, hash);
+	        // printf("%s: read one dead info: hash: 0x%lx\n", __FUNCTION__, hash);
             BlockNode ** ctxt1 = (BlockNode **)(gPreAllocatedContextBuffer + (hash >> 32));
-            printf("get ctxt1: %p, ", ctxt1);
-            printf(" *ctxt1: %p\n", *ctxt1);
+            // printf("get ctxt1: %p, ", ctxt1);
+            // printf(" *ctxt1: %p\n", *ctxt1);
 	        BlockNode ** ctxt2 = (BlockNode **)(gPreAllocatedContextBuffer + (hash & 0xffffffff));
-            printf("get ctxt2: %p, *ctxt2: %p\n", ctxt2, *ctxt2);
-            printf("get ctxt2: %p, *ctxt2: %p\n", ctxt2, *ctxt2);
+            // printf("get ctxt2: %p, *ctxt2: %p\n", ctxt2, *ctxt2);
+            // printf("get ctxt2: %p, *ctxt2: %p\n", ctxt2, *ctxt2);
             
             tmpMergedDeadInfo.context1 = (*ctxt1)->parent;
-	    printf("get context1: %p\n", tmpMergedDeadInfo.context1);
+	        printf("get context1: %p\n", tmpMergedDeadInfo.context1);
             tmpMergedDeadInfo.context2 = (*ctxt2)->parent;
             printf("get context2: %p\n", tmpMergedDeadInfo.context2);
 
@@ -3288,7 +3288,7 @@ void ExtractDeadMap(){
         DeadMap.clear();
 #endif  // end defined(CONTINUOUS_DEADINFO)        
         
-        printf("%s, DeadMap cleared; get mergedDeadInfoMap. now compute DeadInfoForPresentation list\n", __FUNCTION__);
+        printf("%s, DeadMap cleared; got mergedDeadInfoMap. now compute DeadInfoForPresentation list\n", __FUNCTION__);
         map<MergedDeadInfo,uint64_t>::iterator it = mergedDeadInfoMap.begin();	
         list<DeadInfoForPresentation> deadList;
         for (; it != mergedDeadInfoMap.end(); it ++) {
