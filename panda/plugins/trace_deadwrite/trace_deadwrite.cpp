@@ -4341,12 +4341,13 @@ void report_deadspy(void * self){
 }
 
 void clear_insn(){
-    unordered_map<target_ulong, cs_insn *>::iterator insnIt;
-    for (insnIt = tb_insns.begin(); insnIt != tb_insns.end(); insnIt ++ ){
-        int count = tb_insns_count[insnIt -> first];
-        cs_insn * insn = insnIt->second;
-        cs_free(insn, count);
-    }
+    // unordered_map<target_ulong, cs_insn *>::iterator insnIt;
+    // for (insnIt = tb_insns.begin(); insnIt != tb_insns.end(); insnIt ++ ){
+    //     int count = tb_insns_count[insnIt -> first];
+    //     cs_insn * insn = insnIt->second;
+    //     cs_free(insn, count);
+    // }
+    
 }
 // TODO void clear gBlockShadowMap and gBlockShadowIPtoSlots
 // TODO void clear
