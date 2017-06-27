@@ -438,8 +438,8 @@ bool init_capstone_done = false;
 
 // target_ulong asid;
 // PC => number of instructions in the TB
-unordered_map<target_ulong,int> tb_insns_count;
-unordered_map<target_ulong,cs_insn *> tb_insns;
+// unordered_map<target_ulong,int> tb_insns_count;
+// unordered_map<target_ulong,cs_insn *> tb_insns;
 
 unordered_map<target_ulong, instr_type> call_cache;  //
 
@@ -3563,8 +3563,8 @@ instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
     cs_insn *end;
     size_t count = cs_disasm(handle, buf, size, pc, 0, &insn);
 
-    tb_insns_count[pc] = count;
-    tb_insns[pc]=insn;
+    // tb_insns_count[pc] = count;
+    // tb_insns[pc]=insn;
 
     cs_err err_= cs_errno(handle);
     if (err_ != CS_ERR_OK){
@@ -3726,7 +3726,7 @@ instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
 done:
     //printf("don't free insn, store it in gBlockShadowMap");
     //printf("");
-    //cs_free(insn, count);
+    cs_free(insn, count);
 done2:
     free(buf);
     return res;
