@@ -3342,6 +3342,7 @@ void ExtractDeadMap(){
         mergedDeadInfoMap.clear();
         deadList.clear();
         printf("%s: mergedDeadInfoMap and deadList cleared.\n", __FUNCTION__);
+        printf("%s: size of DeadMap: %lu\n", __FUNCTION__, mapSize);
         //PIN_UnlockClient();
 
         printf("%s: Done.\n", __FUNCTION__);
