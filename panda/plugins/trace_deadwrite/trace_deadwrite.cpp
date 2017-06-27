@@ -334,9 +334,10 @@ DeadMap.insert(std::pair<uint64_t, uint64_t>(hashVar,size)); \
 } else {    \
 (gDeadMapIt->second) += size;    \
 }   \
-printf("%s:continuous: report one dead (&gCurrentTraceIpVector[%d]:%p, %p, %d, hash :0x%lx)\n", \
-      __FUNCTION__, slot, curCtxt,lastCtxt, size, hashVar); \
 }while(0)
+
+//printf("%s:continuous: report one dead (&gCurrentTraceIpVector[%d]:%p, %p, %d, hash :0x%lx)\n", \
+      __FUNCTION__, slot, curCtxt,lastCtxt, size, hashVar);
 
 #else // no defined(CONTINUOUS_DEADINFO)
 #define DECLARE_HASHVAR(name) uint64_t name
@@ -349,16 +350,18 @@ DeadMap.insert(std::pair<uint64_t, uint64_t>(hashVar,deadInfo)); \
 } else {    \
 (gDeadMapIt->second.count) += size;    \
 }   \
-printf("%s: no-continuous, report one dead (%p, %p, %d)\n", \
-      __FUNCTION__, curCtxt,lastCtxt, size); \
 }while(0)
+
+//printf("%s: no-continuous, report one dead (%p, %p, %d)\n", \
+      __FUNCTION__, curCtxt,lastCtxt, size); 
 
 #endif // end defined(CONTINUOUS_DEADINFO)
 
 #define REPORT_IF_DEAD(mask, curCtxt, lastCtxt, hashVar) do {if (state & (mask)){ \
-printf("\t dead mask: %p\n", (void*)(uintptr_t)mask); \
 REPORT_DEAD(curCtxt, lastCtxt,hashVar, 1);\
 }}while(0)
+
+//printf("\t dead mask: %p\n", (void*)(uintptr_t)mask);
 
 
 #ifdef TESTING_BYTES
@@ -859,14 +862,14 @@ inline void ** GetNextIPVecBuffer(uint32_t size){
 
         if (gInitiatedCall){
             // normal function call, so unset gInitiatedCall
-            printf("%s:get a new function call !\n", __FUNCTION__);
+            // printf("%s:get a new function call !\n", __FUNCTION__);
             gInitiatedCall = false;
             // Let GoDownCallChain do the work needed to setup pointers for child nodes.
             GoDownCallChain(cpu,tb);
 
             //TODO: check if tb->pc is equal with currentIp
-            printf("%s: go down to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
-            printf("%s: go down to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
+            // printf("%s: go down to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
+            // printf("%s: go down to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
         
         }else{
             printf("ERROR: call function entry, but call flag is not true\n");
@@ -886,13 +889,13 @@ inline void ** GetNextIPVecBuffer(uint32_t size){
 
 //VOID GoDownCallChain(ADDRINT callee){
 VOID GoDownCallChain(CPUState *cpu, TranslationBlock *tb){
-    printf("%s: go down chain, tb->pc = 0x" TARGET_FMT_lx "\n",__FUNCTION__, tb->pc);
+    // printf("%s: go down chain, tb->pc = 0x" TARGET_FMT_lx "\n",__FUNCTION__, tb->pc);
     target_ulong callee=tb->pc;
     if( ( gContextIter = (gCurrentContext->childContexts).find(callee)) != gCurrentContext->childContexts.end()) {
-        printf("%s: down to existed context node; bb addr: 0x" TARGET_FMT_lx "\n", __FUNCTION__, callee);
+        // printf("%s: down to existed context node; bb addr: 0x" TARGET_FMT_lx "\n", __FUNCTION__, callee);
         gCurrentContext = gContextIter->second;
     } else {
-        printf("%s: new context node; bb addr: 0x" TARGET_FMT_lx "\n",__FUNCTION__, callee);
+        // printf("%s: new context node; bb addr: 0x" TARGET_FMT_lx "\n",__FUNCTION__, callee);
         ContextNode * newChild =  new ContextNode();
         newChild->parent = gCurrentContext;
         newChild->address = callee;
@@ -923,7 +926,7 @@ inline VOID GoUpCallChain(){
     gCurrentContext = gCurrentContext->parent;
 #endif    //end IP_AND_CCT
 
-    printf("%s: up to parent context: bb addr: 0x" TARGET_FMT_lx "\n",__FUNCTION__, gCurrentContext->address);
+    // printf("%s: up to parent context: bb addr: 0x" TARGET_FMT_lx "\n",__FUNCTION__, gCurrentContext->address);
     
 }
 #else // MULTI_THREADED
@@ -3613,7 +3616,7 @@ instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
     }
 
     //iterate all instructions inside this block
-    printf("%s: a block disasembled: pc=%p\n",__FUNCTION__, (void *)(uintptr_t)pc);
+    // printf("%s: a block disasembled: pc=%p\n",__FUNCTION__, (void *)(uintptr_t)pc);
     // cs_insn *tmp;
     // for (tmp=insn; tmp <= end; tmp ++){
     //     printf("%s: insn: <addr,size,mnemonic,op_str> = <%p, %d, %s, %s>\n",__FUNCTION__,(void *)(uintptr_t)tmp->address,tmp->size,tmp->mnemonic, tmp->op_str);
@@ -3705,13 +3708,13 @@ instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
   
     if (cs_insn_group(handle, end, CS_GRP_CALL)) {
         res = INSTR_CALL;
-        printf("%s: detect a call\n", __FUNCTION__);
+        // printf("%s: detect a call\n", __FUNCTION__);
     } else if (cs_insn_group(handle, end, CS_GRP_RET)) {
         res = INSTR_RET;
-        printf("%s: detect a ret\n", __FUNCTION__);
+        // printf("%s: detect a ret\n", __FUNCTION__);
     } else if (cs_insn_group(handle, end, CS_GRP_INT)){
         res = INSTR_INT;
-        printf("%s: detect a interrupt\n", __FUNCTION__);
+        // printf("%s: detect a interrupt\n", __FUNCTION__);
     } else if (cs_insn_group(handle, end, CS_GRP_IRET)){
         res = INSTR_IRET;
         printf("%s: detect a interrupt return\n", __FUNCTION__);
@@ -3921,7 +3924,7 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
 
     // printf("\n%s: ---------------- a new targeted block --------------------\n", __FUNCTION__);
     
-    printf("\n%s: a new targeted block, tb->pc = 0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+    // printf("\n%s: a new targeted block, tb->pc = 0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
     
     // Refer: trace_insthist: after_block_translate
 
@@ -3941,7 +3944,7 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
         uint32_t flags;
         // This retrieves the pc in an architecture-neutral way
         cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
-        printf("%s: get a function call: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
+        // printf("%s: get a function call: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
         //gInitiatedCall=true;
     }else if (tb_type == INSTR_RET) {
         // track the function that gets called
@@ -3949,14 +3952,14 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
         uint32_t flags;
         // This retrieves the pc in an architecture-neutral way
         cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
-        printf("%s: get a function ret: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
+        // printf("%s: get a function ret: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
     }else if (tb_type == INSTR_INT) {
         // track the function that gets called
         target_ulong pc, cs_base;
         uint32_t flags;
         // This retrieves the pc in an architecture-neutral way
         cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
-        printf("%s: get a interrupt call: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
+        // printf("%s: get a interrupt call: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
     }else if (tb_type == INSTR_IRET) {
         // track the function that gets called
         target_ulong pc, cs_base;
@@ -3964,11 +3967,12 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
         // This retrieves the pc in an architecture-neutral way
         cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
         printf("%s: get a interrupt ret: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
-    }else {
-        printf("UNKNOWN instruction\n");
     }
+    // else {
+    //     printf("UNKNOWN instruction\n");
+    // }
 
-    printf("%s: update gBlockShadowMap when necessary, for tb->pc: " TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+    // printf("%s: update gBlockShadowMap when necessary, for tb->pc: " TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
 
     InitializeBlockShadowMap(cpu, tb);
 
@@ -4074,8 +4078,9 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
         }else{
             // a block not translated but appear in before_block_exe:
             // also create gBlockShadowMap for it.
-            printf("%s: WARNING: creating gBlockShadowMap for a non-translated block tb->pc: " TARGET_FMT_lx ", size: %d\n",
-            __FUNCTION__, tb->pc, tb->size);
+            // TODO: WARNING: commented out, way too much for this case.
+            // printf("%s: WARNING: creating gBlockShadowMap for a non-translated block tb->pc: " TARGET_FMT_lx ", size: %d\n",
+            // __FUNCTION__, tb->pc, tb->size);
             
             InitializeBlockShadowMap(cpu, tb);
             
@@ -4212,32 +4217,32 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     // }else 
     if(gInitiatedRet){
 
-        printf("%s:get a new function ret.\n", __FUNCTION__);
+        // printf("%s:get a new function ret.\n", __FUNCTION__);
         gInitiatedRet=false;
         GoUpCallChain();
         //TODO: check if tb->pc is equal with currentIp
-        printf("%s: go up to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
-        printf("%s: go up to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
+        // printf("%s: go up to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
+        // printf("%s: go up to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
     }else if(gInitiatedIRET){
 
-        printf("%s:get a new interrupt ret.\n", __FUNCTION__);
+        // printf("%s:get a new interrupt ret.\n", __FUNCTION__);
         gInitiatedIRET=false;
         GoUpCallChain();
         //TODO: check if tb->pc is equal with currentIp
-        printf("%s: go up to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
-        printf("%s: go up to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
+        // printf("%s: go up to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
+        // printf("%s: go up to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
 
     }else if(gInitiatedCall){
         //Refer: UpdateDataOnFunctionEntry(cpu, tb); // it will reset   gInitiatedCall      
         // normal function call, so unset gInitiatedCall
-        printf("%s:get a new function call !\n", __FUNCTION__);
+        // printf("%s:get a new function call !\n", __FUNCTION__);
         gInitiatedCall = false;
 
         // Let GoDownCallChain do the work needed to setup pointers for child nodes.
         GoDownCallChain(cpu,tb);
         //TODO: check if tb->pc is equal with currentIp
-        printf("%s: go down to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
-        printf("%s: go down to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
+        // printf("%s: go down to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
+        // printf("%s: go down to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
         
     }
 
