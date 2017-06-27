@@ -2499,15 +2499,15 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
         // UINT32 refSize = INS_MemoryOperandSize(ins, memOp);
 
     target_ulong refSize = size;
-    if (! is_write){
-        printf("%s: record read pc: %p, addr: %p (%d bytes).\n",
-            __FUNCTION__, (void*)(uintptr_t)pc , (void *)(uintptr_t)addr, (int)size);
-    }else{
-    // if (is_write){
+    // if (! is_write){
+    //     printf("%s: record read pc: %p, addr: %p (%d bytes).\n",
+    //         __FUNCTION__, (void*)(uintptr_t)pc , (void *)(uintptr_t)addr, (int)size);
+    // }else{
+    if (is_write){
         bool needUpdateTraceBlock=false;
 
-        printf("%s: record write pc: %p, addr: %p (%d bytes).\n",
-            __FUNCTION__, (void*)(uintptr_t)pc, (void *)(uintptr_t)addr, (int)size);
+        // printf("%s: record write pc: %p, addr: %p (%d bytes).\n",
+        //     __FUNCTION__, (void*)(uintptr_t)pc, (void *)(uintptr_t)addr, (int)size);
 
         // uint32_t slot = gCurrentTraceBlock->nSlots;
 
