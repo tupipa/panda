@@ -535,6 +535,16 @@ struct ContextNode {
 
 
 #ifdef IP_AND_CCT
+struct FileLine{
+    string fileName;
+    string lineNum;
+	bool operator==(const FileLine  & x) const{
+		if ( this->fileName == x.fileName && this->lineNum == x.lineNum)
+            return true;
+		return false;
+	}
+};
+
 struct MergedDeadInfo{
 	ContextNode * context1;
 	ContextNode * context2;
@@ -663,6 +673,7 @@ ADDRINT * gTmpBlockIpShadow;
 
 unordered_map<ADDRINT, bool> gBlockShadowMapDone;
 unordered_map<ADDRINT, unordered_map<ADDRINT, int> *> gBlockShadowIPtoSlot;
+unordered_map<ADDRINT, unordered_map<ADDRINT, FileLine *> *> gAsidPCtoFileLine;
 BlockNode * gCurrentTraceBlock;
 uint32_t gCurrentSlot;
 
@@ -2316,6 +2327,44 @@ inline VOID ReleaseLock(){
 #endif // end MULTI_THREADED
 
 
+void getLineInfo(CPUState *cpu, target_ulong pc, target_ulong addr, bool isWrite){
+    SrcInfo info;
+    // if NOT in source code, just return
+    int rc = pri_get_pc_source_info(cpu, pc, &info);
+    // We are not in dwarf info
+    if (rc == -1){
+        return 0;
+    }
+    // We are in the first byte of a .plt function
+    if (rc == 1) {
+        return 0;
+    }
+    printf("==%s %ld==\n", info.filename, info.line_number);
+    struct args args = {cpu, NULL, 0};
+    pri_funct_livevar_iter(cpu, pc, (liveVarCB) pfun, (void *) &args);
+    char *symbol_name = pri_get_vma_symbol(cpu, pc, addr);
+    if (!symbol_name){
+        // symbol was not found for particular addr
+        if (isWrite) {
+            printf ("Virt mem write at 0x%x - (NONE)\n", addr);
+        }
+        else {
+            printf ("Virt mem read at 0x%x - (NONE)\n", addr);
+        }
+        return 0;
+    }
+    else {
+        if (isWrite) {
+            printf ("Virt mem write at 0x%x - \"%s\"\n", addr, symbol_name);
+        }
+        else {
+            printf ("Virt mem read at 0x%x - \"%s\"\n", addr, symbol_name);
+        }
+    }
+    return 0;
+}
+
+
 // this creates BOTH the global for this callback fn (on_ssm_func)
 // and the function used by other plugins to register a fn (add_on_ssm)
 //PPP_CB_BOILERPLATE(on_trace_mem_asid)
@@ -2369,6 +2418,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
         printf("\n All: Mem op for ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
     }
 
+    getLineInfo(env, pc, addr, is_write);
 //    string_pos &sp = text_tracker[p];
 
 //     if(p.cr3 == 0){
@@ -3142,7 +3192,7 @@ inline target_ulong GetMeasurementBaseCount(){
     
     void  panda_GetSourceLocation(ADDRINT ip,int32_t *line, string *file){
         //Lele: given IP, return the line number and file
-        printf("TODO: %s: not implemented yet\n", __FUNCTION__);
+        //printf("TODO: %s: not implemented yet\n", __FUNCTION__);
         *line = 0;
         *file = "---file_info_not_implemented---";
     }
@@ -3171,7 +3221,7 @@ inline target_ulong GetMeasurementBaseCount(){
 #else // no MERGE_SAME_LINES
         string file;
         int32_t line;
-        printf("get source location\n");
+        //printf("get source location\n");
         panda_GetSourceLocation( di.pMergedDeadInfo->ip1,  &line,&file);
         fprintf(gTraceFile,"\n%p:%s:%u",(void *)(uintptr_t)(di.pMergedDeadInfo->ip1),file.c_str(),line);                                    
 #endif //end MERGE_SAME_LINES        
@@ -3236,9 +3286,9 @@ void ExtractDeadMap(){
             // printf("get ctxt2: %p, *ctxt2: %p\n", ctxt2, *ctxt2);
             
             tmpMergedDeadInfo.context1 = (*ctxt1)->parent;
-	        printf("get context1: %p\n", tmpMergedDeadInfo.context1);
+	        // printf("get context1: %p\n", tmpMergedDeadInfo.context1);
             tmpMergedDeadInfo.context2 = (*ctxt2)->parent;
-            printf("get context2: %p\n", tmpMergedDeadInfo.context2);
+            // printf("get context2: %p\n", tmpMergedDeadInfo.context2);
 
 #ifdef MERGE_SAME_LINES
             tmpMergedDeadInfo.line1 = GetLineFromInfo(ctxt1);
