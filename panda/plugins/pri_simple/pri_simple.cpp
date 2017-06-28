@@ -22,7 +22,7 @@ extern "C" {
     int get_loglevel() ;
     void set_loglevel(int new_loglevel);
 
-    //void on_line_change(CPUState *cpu, target_ulong pc, const char *file_Name, const char *funct_name, unsigned long long lno);
+    void on_line_change(CPUState *cpu, target_ulong pc, const char *file_Name, const char *funct_name, unsigned long long lno);
 }
 struct args {
     CPUState *cpu;
@@ -60,14 +60,17 @@ void pfun(void *var_ty_void, const char *var_nm, LocType loc_t, target_ulong loc
             break;
     }
 }
+
 void on_line_change(CPUState *cpu, target_ulong pc, const char *file_Name, const char *funct_name, unsigned long long lno){
     struct args args = {cpu, file_Name, lno};
     printf("[%s] %s(), ln: %4lld, pc @ 0x%x\n",file_Name, funct_name,lno,pc);
     pri_funct_livevar_iter(cpu, pc, (liveVarCB) pfun, (void *) &args);
 }
-void on_fn_start(CPUState *cpu, target_ulong pc, const char *file_Name, const char *funct_name, unsigned long long lno){
-    struct args args = {cpu, file_Name, lno};
-    printf("fn-start: %s() [%s], ln: %4lld, pc @ 0x%x\n",funct_name,file_Name,lno,pc);
+//void on_fn_start(CPUState *cpu, target_ulong pc, const char *file_Name, const char *funct_name, unsigned long long lno){
+void on_fn_start(CPUState *cpu, target_ulong pc, const char *file_Name, const char *funct_name){
+    struct args args = {cpu, file_Name};
+    //printf("fn-start: %s() [%s], ln: %4lld, pc @ 0x%x\n",funct_name,file_Name,lno,pc);
+    printf("fn-start: %s() [%s], pc @ 0x%x\n",funct_name,file_Name,pc);
     pri_funct_livevar_iter(cpu, pc, (liveVarCB) pfun, (void *) &args);
 }
 
@@ -128,7 +131,7 @@ bool init_plugin(void *self) {
     panda_require("pri_dwarf");
     assert(init_pri_dwarf_api());
 
-    //PPP_REG_CB("pri", on_before_line_change, on_line_change);
+    PPP_REG_CB("pri", on_before_line_change, on_line_change);
     //PPP_REG_CB("pri", on_fn_start, on_fn_start);
     {
         panda_cb pcb;
