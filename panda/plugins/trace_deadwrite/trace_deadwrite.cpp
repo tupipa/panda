@@ -2340,6 +2340,9 @@ void getLineInfo(CPUState *cpu, target_ulong pc, target_ulong addr, bool isWrite
         return 0;
     }
     printf("==%s %ld==\n", info.filename, info.line_number);
+
+    unordered_map<ADDRINT, unordered_map<ADDRINT, FileLine *> *>::iterator gAsidPCtoFileLine.find(gCurrentASID);
+
     struct args args = {cpu, NULL, 0};
     pri_funct_livevar_iter(cpu, pc, (liveVarCB) pfun, (void *) &args);
     char *symbol_name = pri_get_vma_symbol(cpu, pc, addr);
