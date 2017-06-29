@@ -109,8 +109,6 @@ PANDAENDCOMMENT */
 // This needs to be defined before anything is included in order to get
 // the PRIx64 macro
 
-//#if defined(TARGET_X86_64)
-
 #define __STDC_FORMAT_MACROS
 
 #include <cstdio>
@@ -200,11 +198,11 @@ extern "C" {
     int get_loglevel() ;
     void set_loglevel(int new_loglevel);
 
-    void on_line_change(CPUState *cpu, target_ulong pc, const char *file_Name, const char *funct_name, unsigned long long lno);
+    // void on_line_change(CPUState *cpu, target_ulong pc, const char *file_Name, const char *funct_name, unsigned long long lno);
 }
 
-// #include "callstack_instr/callstack_instr.h"
-// #include "callstack_instr/callstack_instr_ext.h"
+#include "callstack_instr/callstack_instr.h"
+#include "callstack_instr/callstack_instr_ext.h"
 
 // using namespace __gnu_cxx;
 
@@ -954,10 +952,11 @@ inline VOID GoUpCallChain(){
         printf("%s: WARNING: RootContext got a return\n", __FUNCTION__);
         printf("%s: don't change context node.\n",__FUNCTION__);
         return;
-    }else if (gCurrentContext->parent == gRootContext) {
-        // gInitiatedCall = true;//lele: why?
-        printf("lele: ret to root context node\n");
     }
+    // else if (gCurrentContext->parent == gRootContext) {
+    //     // gInitiatedCall = true;//lele: why?
+    //     printf("lele: ret to root context node\n");
+    // }
     gCurrentContext = gCurrentContext->parent;
     
     // RET & CALL end a trace hence the target should trigger a new trace entry for us ... pray pray.
@@ -2399,18 +2398,18 @@ inline VOID ReleaseLock(){
         - line/file info are stored in gAsidPCtoFileLine
         - will check if pc exists before add.
 */
-void getLineInfo(CPUState *cpu, target_ulong pc, target_ulong addr, bool isWrite){
+void getLineInfo(CPUState *cpu, target_ulong pc, target_ulong addr, bool isWrite, target_ulong asid_cur){
     SrcInfo info;
     // if NOT in source code, just return
-    printf("Now in %s now call: %p\n", __FUNCTION__, &pri_get_pc_source_info);
-    printf("Now in %s &info: %p\n", __FUNCTION__, &info);
+    // printf("Now in %s now call: %p\n", __FUNCTION__, &pri_get_pc_source_info);
+    // printf("Now in %s &info: %p\n", __FUNCTION__, &info);
 
     int rc = pri_get_pc_source_info(cpu, pc, &info);
-    printf("%s: done call: %p\n", __FUNCTION__, &pri_get_pc_source_info);
+    // printf("%s: done call: %p\n", __FUNCTION__, &pri_get_pc_source_info);
 
     // We are not in dwarf info
     if (rc == -1){
-        printf("%s: we are not in dwarf info\n", __FUNCTION__);
+        // printf("%s: we are not in dwarf info\n", __FUNCTION__);
         return;
     }
     // We are in the first byte of a .plt function
@@ -2419,11 +2418,10 @@ void getLineInfo(CPUState *cpu, target_ulong pc, target_ulong addr, bool isWrite
         return;
     }
 
-    target_ulong asid_cur = panda_current_asid(cpu);
-    printf("%s: file: %s, line: %lu==, asid: 0x" TARGET_FMT_lx "\n", 
-        __FUNCTION__, info.filename, info.line_number, asid_cur);
+    // printf("%s: file: %s, line: %lu==, asid: 0x" TARGET_FMT_lx "\n", 
+    //     __FUNCTION__, info.filename, info.line_number, asid_cur);
 
-    exit(-1);
+    // exit(-1);
 
     std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(gCurrentASID);
 
@@ -2498,9 +2496,10 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     //prog_point p = {};
     //get_prog_point(env, &p);
 
-    getLineInfo(env, pc, addr, is_write);
 
     target_ulong asid_cur = panda_current_asid(env);
+
+    getLineInfo(env, pc, addr, is_write, asid_cur);
 
     // target_ulong asid_cur = 0;
 
@@ -2543,8 +2542,8 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
         printf("\n All: Mem op for ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
     }
 
-    getLineInfo(env, pc, addr, is_write);
-    return 0;
+    // getLineInfo(env, pc, addr, is_write);
+    // return 0;
 //    string_pos &sp = text_tracker[p];
 
 //     if(p.cr3 == 0){
@@ -4582,19 +4581,22 @@ bool init_plugin(void *self) {
 
     //lele: step 1. Sys init
 
+    panda_arg_list *args;
+
 //#################################################
 // ADD support of pri_dwarf. get Line Number and Source File Name by PC.
     // only support i386
     // Refer: pri_simple, pri_dwarf
 // #if defined(TARGET_I386) && !defined(TARGET_X86_64)
-    //panda_arg_list *args = panda_get_args("pri_taint");
+#if defined(TARGET_I386)
+    args = panda_get_args("pri_taint");
     panda_require("pri");
     assert(init_pri_api());
     panda_require("pri_dwarf");
     assert(init_pri_dwarf_api());
 
-    //PPP_REG_CB("pri", on_before_line_change, on_line_change);
-    // //PPP_REG_CB("pri", on_fn_start, on_fn_start);
+    // PPP_REG_CB("pri", on_before_line_change, on_line_change);
+    //PPP_REG_CB("pri", on_fn_start, on_fn_start);
     // {
     //     panda_cb pcb;
     //     pcb.virt_mem_before_write = virt_mem_write;
@@ -4602,76 +4604,73 @@ bool init_plugin(void *self) {
     //     pcb.virt_mem_after_read = virt_mem_read;
     //     panda_register_callback(self,PANDA_CB_VIRT_MEM_AFTER_READ,pcb);
     // }
-// #endif
+#endif
+// END support of pri_dwarf.
+//######################################################
     
     panda_cb pcb;
 
-    // panda_require("callstack_instr");
+    panda_require("callstack_instr");
 
 
 
-    // //lele: step 2, parse args
+    //lele: step 2, parse args
 
-    // panda_arg_list *args = panda_get_args("trace_deadwrite");
+    args = panda_get_args("trace_deadwrite");
 
-    // //step 2.1: args: asid
-    // // const char *arg_str = panda_parse_string_opt(args, "asid", "", "a single asid to search for");
-    // // size_t arg_len = strlen(arg_str);
-    // // if (arg_len > 0) {
-    // //     //memcpy(tofind[num_strings], arg_str, arg_len);
-    // //     //strlens[num_strings] = arg_len;
-    // //     //num_strings++;
-    // // }
-
-    // target_ulong asid = panda_parse_ulong_opt(args, "asid", 0 , "a single asid to search for");
-
-    // if (asid == 0){
-    //     // no ASID parameter given, set the default behavior as following:
-    //     printf("%s: asid given as 0, or not given , or invalid, now use default value 0\n",__FUNCTION__);
-    //     //gCurrentASID = 0x0; 
-    //     //gTraceKernel=true;
-    //     //gTraceApp=true;
-    //     gTraceOne=true;
-    //     gCurrentASID = 0;
-    //     //gCurrentASID = 0x000000001fb14000;
-    //     //gCurrentASID = 0x0;
-    // }else{
-    //     // set target asid as input asid.
-    //     gTraceOne=true;
-    //     gCurrentASID = asid;
+    //step 2.1: args: asid
+    // const char *arg_str = panda_parse_string_opt(args, "asid", "", "a single asid to search for");
+    // size_t arg_len = strlen(arg_str);
+    // if (arg_len > 0) {
+    //     //memcpy(tofind[num_strings], arg_str, arg_len);
+    //     //strlens[num_strings] = arg_len;
+    //     //num_strings++;
     // }
-    // printf("%s: target asid: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
+
+    target_ulong asid = panda_parse_ulong_opt(args, "asid", 0 , "a single asid to search for");
+
+    if (asid == 0){
+        // no ASID parameter given, set the default behavior as following:
+        printf("%s: asid given as 0, or not given , or invalid, now use default value 0\n",__FUNCTION__);
+        //gCurrentASID = 0x0; 
+        //gTraceKernel=true;
+        //gTraceApp=true;
+        gTraceOne=true;
+        gCurrentASID = 0;
+        //gCurrentASID = 0x000000001fb14000;
+        //gCurrentASID = 0x0;
+    }else{
+        // set target asid as input asid.
+        gTraceOne=true;
+        gCurrentASID = asid;
+    }
+    printf("%s: target asid: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
     
 
-    // //step 2.2: args: max callers printed
-    // // n_callers = panda_parse_uint64_opt(args, "callers", 16, "depth of callstack for matches");
-    // // n_callers = CALLERS_PER_INS;
-    // // if (n_callers > MAX_CALLERS) n_callers = MAX_CALLERS;
-
-    // //step 2.3: args: log file name prefix
-    // // deleted, simple hardcoded the prefix
+    //step 2.2: args: log file name prefix
+    // deleted, simple hardcoded the prefix
 
 
-    // //lele: init_deadspy: open log file handlers, print first lines
+    //lele: init_deadspy: open log file handlers, print first lines
 
-    // const char *prefix="trace_deadwrite_test";
-    // init_deadspy(prefix);
+    const char *prefix="trace_deadwrite_test";
+    init_deadspy(prefix);
 
-    // //lele: step 4: sys int: set callstack plugins, enable precise pc, memcb, and set callback functions.
-    // // if(!init_callstack_instr_api()) return false;
+    //lele: step 3: sys int: set callstack plugins, enable precise pc, memcb, and set callback functions.
+    if(!init_callstack_instr_api()) return false;
 
 
-    // panda_do_flush_tb();
-    // printf("do_flush_tb enabled\n");
-    // //tb chaining disable
-    // panda_disable_tb_chaining();
-    // printf("panda basic block chaining disabled\n");
+    panda_do_flush_tb();
+    printf("do_flush_tb enabled\n");
+    //tb chaining disable
+    panda_disable_tb_chaining();
+    printf("panda basic block chaining disabled\n");
 
 
     // Need this to get EIP with our callbacks
-    // panda_enable_precise_pc();
-    // // Enable memory logging
-    // panda_enable_memcb();
+    panda_enable_precise_pc();
+    // Enable memory logging
+    panda_enable_memcb();
 
     pcb.virt_mem_before_write = mem_write_callback;
     panda_register_callback(self, PANDA_CB_VIRT_MEM_BEFORE_WRITE, pcb);
@@ -4724,8 +4723,8 @@ bool init_plugin(void *self) {
         Signature:
             int (*after_block_translate)(CPUState *env, TranslationBlock *tb);
     */
-    // pcb.after_block_translate = after_block_translate;
-    // panda_register_callback(self, PANDA_CB_AFTER_BLOCK_TRANSLATE, pcb);
+    pcb.after_block_translate = after_block_translate;
+    panda_register_callback(self, PANDA_CB_AFTER_BLOCK_TRANSLATE, pcb);
 
     /*
     before_block_exec: called before execution of every basic block
@@ -4737,8 +4736,8 @@ bool init_plugin(void *self) {
         Signature:
             int (*before_block_exec)(CPUState *env, TranslationBlock *tb);
     */
-    // pcb.before_block_exec = before_block_exec;
-    // panda_register_callback(self, PANDA_CB_BEFORE_BLOCK_EXEC, pcb);
+    pcb.before_block_exec = before_block_exec;
+    panda_register_callback(self, PANDA_CB_BEFORE_BLOCK_EXEC, pcb);
 
     /*after_block_exec: called after execution of every basic block
 
@@ -4751,13 +4750,10 @@ bool init_plugin(void *self) {
     Signature::
         int (*after_block_exec)(CPUState *env, TranslationBlock *tb);
     */
-    // pcb.after_block_exec = after_block_exec;
-    // panda_register_callback(self, PANDA_CB_AFTER_BLOCK_EXEC, pcb);
+    pcb.after_block_exec = after_block_exec;
+    panda_register_callback(self, PANDA_CB_AFTER_BLOCK_EXEC, pcb);
 
 
     return true;
 }
 
-
-
-//#endif //defined(TARGET_I386)

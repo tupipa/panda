@@ -78,8 +78,8 @@ extern "C" {
 int virt_mem_helper(CPUState *cpu, target_ulong pc, target_ulong addr, bool isRead) {
     SrcInfo info;
     // if NOT in source code, just return
-    printf("Now in %s now call: %p\n", __FUNCTION__, &pri_get_pc_source_info);
-    printf("Now in %s &info: %p\n", __FUNCTION__, &info);
+    // printf("Now in %s now call: %p\n", __FUNCTION__, &pri_get_pc_source_info);
+    // printf("Now in %s &info: %p\n", __FUNCTION__, &info);
     int rc = pri_get_pc_source_info(cpu, pc, &info);
     // We are not in dwarf info
     if (rc == -1){
@@ -89,6 +89,9 @@ int virt_mem_helper(CPUState *cpu, target_ulong pc, target_ulong addr, bool isRe
     if (rc == 1) {
         return 0;
     }
+    target_ulong asid_cur = panda_current_asid(cpu);
+    printf("%s: 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+
     printf("==%s %ld==\n", info.filename, info.line_number);
     exit(-1);
     // struct args args = {cpu, NULL, 0};

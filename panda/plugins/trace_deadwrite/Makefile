@@ -7,12 +7,13 @@
 LIBS+= -lcapstone
 
 #CFLAGS += -c -Wno-deprecated -Wall -Werror -Wno-unknown-pragmas  -O3 -fomit-frame-pointer -fno-stack-protector -fno-strict-aliasing -DNDEBUG -DBIGARRAY_MULTIPLIER=2 -DUSING_XED -DTARGET_IA32E -DHOST_IA32E -fPIC -DTARGET_LINUX  
+
 #CFLAGS += -c -Wno-deprecated -Wall -Wno-error -Wno-unknown-pragmas  -O3 -fomit-frame-pointer -fno-stack-protector -fno-strict-aliasing -DNDEBUG -DBIGARRAY_MULTIPLIER=2 -DUSING_XED -DTARGET_IA32E -DHOST_IA32E -fPIC -DTARGET_LINUX  
 #-DIP_AND_CCT
 
-#MYINCLUDES = -isystem$(PLUGIN_SRC_DIR)/sparsehash-master/src
-#INCLUDES = -I./sparsehash-master/src
-#CFLAGS += $(MYINCLUDES)
+MYINCLUDES = -isystem$(PLUGIN_SRC_DIR)/sparsehash-master/src
+INCLUDES = -I./sparsehash-master/src
+CFLAGS += $(MYINCLUDES)
 
 # from pri_simple
 QEMU_CXXFLAGS:=$(filter-out -Wundef,$(QEMU_CXXFLAGS))
