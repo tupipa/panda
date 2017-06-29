@@ -2100,6 +2100,9 @@ void dwarf_get_vma_symbol (CPUState *cpu, target_ulong pc, target_ulong vma, cha
     return;
 }
 void dwarf_get_pc_source_info(CPUState *cpu, target_ulong pc, SrcInfo *info, int *rc){
+
+    // printf("Now in %s\n", __FUNCTION__);
+    
     if (!correct_asid(cpu)) {
         *rc = -1;
         return;
@@ -2462,6 +2465,7 @@ bool init_plugin(void *self) {
     PPP_REG_CB("pri", on_all_livevar_iter, dwarf_all_livevar_iter);
     PPP_REG_CB("pri", on_funct_livevar_iter, dwarf_funct_livevar_iter);
     PPP_REG_CB("pri", on_global_livevar_iter, dwarf_global_livevar_iter);
+    printf("LELE: %s: pri_dwarf init finished\n", __FUNCTION__);
     return true;
 #else
     printf("Dwarf plugin not supported on this architecture\n");

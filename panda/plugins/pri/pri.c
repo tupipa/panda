@@ -48,6 +48,7 @@ void uninit_plugin(void *);
 
 // callback provided to symbol table provider
 int pri_get_pc_source_info (CPUState *cpu, target_ulong pc, SrcInfo *info) {
+    // printf("Now in %s\n", __FUNCTION__);
     int rc;
     PPP_RUN_CB(on_get_pc_source_info, cpu, pc, info, &rc);
     return rc;

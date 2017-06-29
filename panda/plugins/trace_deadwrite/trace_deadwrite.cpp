@@ -76,23 +76,23 @@ This plugin traces deadwrites, and print them to file
             - on each new mem W detected, 
 }
 
-    ==========================
-
-TODO:
-
 Jun 24: in order to avoid the situation:
     // where for same basic block, execution in different times could have different write pcs.   
     // Solution 1 (current): tracking whether we have stored a write pc in the ShadowMap for that block.
     //  - use a subMap for each basic block, gBlockShadowIPtoSlot[tb->pc]=< target_ulong IP, int slot >. If tb->pc has pc has its IP stored in ShadowMap, we set the int value as positive number as its slot index..
     //  - for gTraceNode->childIPs, whenever we need to report the deadInfo with the IP's slot index, we get the slot from gBlockShadowIPtoSlot
     //  
-    // Solution 2 (not implemented yet) : inside each basic block, assign a static slot for every PC.
+    // Solution 2 (not implemented yet, abandoned.) : inside each basic block, assign a static slot for every PC.
     //  - only one slot will be assigned for one pc;
     //  - every different basic block has it's own map;
     //  - slot can be assigned at the time we found the basic block: either after translation, or before execution, or during execution, but not after execution.; 
     //  - slots should be checked after execution;
     //  - In order to get the slot number quickly by its pc, we add a subMap for each basic block: gBlockShadowIPtoSlot[tb->pc] = < IP, slot >
 
+
+    ==========================
+
+TODO:
 
     debug modes:
         - no multi thread, with IP and CCT enabled
@@ -168,20 +168,48 @@ using google::dense_hash_map;      // namespace where class lives by default
 
 
 #include "panda/plugin.h"
+#include "panda/plugin_plugin.h"
 
 
 extern "C" {
 // #include "trace_mem.h"
 #include "trace_deadwrite.h"
+
+#include "panda/rr/rr_log.h"
+#include "panda/addr.h"
+#include "panda/plog.h"
+
+#include "pri/pri_types.h"
+#include "pri/pri_ext.h"
+#include "pri/pri.h"
+
+#include "pri_dwarf/pri_dwarf_types.h"
+#include "pri_dwarf/pri_dwarf_ext.h"
+
+    bool init_plugin(void *);
+    void uninit_plugin(void *);
+
+    void init_deadspy();
+    int mem_write_callback(CPUState *env, target_ulong pc, target_ulong addr, target_ulong size, void *buf);
+    int mem_read_callback(CPUState *env, target_ulong pc, target_ulong addr, target_ulong size, void *buf);
+
+    // prototype for the register-this-callback fn
+    //PPP_PROT_REG_CB(on_ssm);
+    //PPP_PROT_REG_CB(on_deadwrite);
+
+    int get_loglevel() ;
+    void set_loglevel(int new_loglevel);
+
+    void on_line_change(CPUState *cpu, target_ulong pc, const char *file_Name, const char *funct_name, unsigned long long lno);
 }
 
-#include "callstack_instr/callstack_instr.h"
-#include "callstack_instr/callstack_instr_ext.h"
+// #include "callstack_instr/callstack_instr.h"
+// #include "callstack_instr/callstack_instr_ext.h"
 
-using namespace __gnu_cxx;
+// using namespace __gnu_cxx;
 
-using namespace std;
-using namespace std::tr1;
+// using namespace std;
+// using namespace std::tr1;
 
 
 
@@ -441,10 +469,10 @@ bool init_capstone_done = false;
 
 // target_ulong asid;
 // PC => number of instructions in the TB
-// unordered_map<target_ulong,int> tb_insns_count;
-// unordered_map<target_ulong,cs_insn *> tb_insns;
+// std::tr1::unordered_map<target_ulong,int> tb_insns_count;
+// std::tr1::unordered_map<target_ulong,cs_insn *> tb_insns;
 
-unordered_map<target_ulong, instr_type> call_cache;  //
+std::tr1::unordered_map<target_ulong, instr_type> call_cache;  //
 
 // END: done capstone related BB disas.
 //##################################################
@@ -501,7 +529,7 @@ struct MergedDeadInfo;
 struct BlockNode;
 struct DeadInfoForPresentation;
 inline ADDRINT GetIPFromInfo(void * ptr);
-inline string GetLineFromInfo(void * ptr);
+inline std::string GetLineFromInfo(void * ptr);
 #endif // end IP_AND_CCT
 
 
@@ -535,10 +563,10 @@ struct ContextNode {
 
 
 #ifdef IP_AND_CCT
-struct FileLine{
-    string fileName;
-    string lineNum;
-	bool operator==(const FileLine  & x) const{
+struct FileLineInfo{
+    std::string fileName;
+    unsigned long lineNum;
+	bool operator==(const FileLineInfo  & x) const{
 		if ( this->fileName == x.fileName && this->lineNum == x.lineNum)
             return true;
 		return false;
@@ -549,8 +577,8 @@ struct MergedDeadInfo{
 	ContextNode * context1;
 	ContextNode * context2;
 #ifdef MERGE_SAME_LINES
-	string line1;
-	string line2;
+	std::string line1;
+	std::string line2;
 #else    // no MERGE_SAME_LINES
 	ADDRINT ip1;
 	ADDRINT ip2;
@@ -608,12 +636,12 @@ struct DeadInfo {
 
 uint8_t ** gL1PageTable[LEVEL_1_PAGE_TABLE_SIZE];
 
-//map < void *, Status > MemState;
+//std::map < void *, Status > MemState;
 #if defined(CONTINUOUS_DEADINFO)
 //hash_map<uint64_t, uint64_t> DeadMap;
 //hash_map<uint64_t, uint64_t>::iterator gDeadMapIt;
-unordered_map<uint64_t, uint64_t> DeadMap;
-unordered_map<uint64_t, uint64_t>::iterator gDeadMapIt;
+std::tr1::unordered_map<uint64_t, uint64_t> DeadMap;
+std::tr1::unordered_map<uint64_t, uint64_t>::iterator gDeadMapIt;
 
 #endif // end defined(CONTINUOUS_DEADINFO)
 
@@ -658,7 +686,7 @@ struct ContextTree{
     
     
 };
-vector<ContextTree> gContextTreeVector;
+std::vector<ContextTree> gContextTreeVector;
 #endif //end MULTI_THREADED
 
 
@@ -668,12 +696,12 @@ sparse_hash_map<ADDRINT, BlockNode *>::iterator gTraceIter;
 //dense_hash_map<ADDRINT, void *> gBlockShadowMap;
 // hash_map<ADDRINT, void *> gBlockShadowMap;
 //Lele: we don't use StartAddr of a trace as key, instead, we use ContextNode's address as key, to store an array, doing the same thing: ---mapping the slots index of each write instruction in a function to its corresponding IP. In order to be compatible with the legacy BlockNode, we use one tracenode to store the array, with StartAddr equal to the ContextNodes' address.
-unordered_map<ADDRINT, void *> gBlockShadowMap;
+std::tr1::unordered_map<ADDRINT, void *> gBlockShadowMap;
 ADDRINT * gTmpBlockIpShadow;
 
-unordered_map<ADDRINT, bool> gBlockShadowMapDone;
-unordered_map<ADDRINT, unordered_map<ADDRINT, int> *> gBlockShadowIPtoSlot;
-unordered_map<ADDRINT, unordered_map<ADDRINT, FileLine *> *> gAsidPCtoFileLine;
+std::tr1::unordered_map<ADDRINT, bool> gBlockShadowMapDone;
+std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, int> *> gBlockShadowIPtoSlot;
+std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *> gAsidPCtoFileLine;
 BlockNode * gCurrentTraceBlock;
 uint32_t gCurrentSlot;
 
@@ -689,11 +717,12 @@ ADDRINT gCurrentCallerIp;
 bool gTraceKernel=false; //trace all kernel processes; asid=0
 bool gTraceApp=false; // trace all other asids !=0;
 bool gTraceOne = false; //trace only one given ASID, kernel=0, or other asids. If this is true, the 'traceKernel' and 'traceApp' is invalide; If ASID not given, default is 0.
-ADDRINT gCurrentASID=0x0; //only valide if traceOne is true;
+ADDRINT gCurrentASID=0x0; //target ASID;
+//ADDRINT gTargetASID=0x0; //target ASID;
 
 // gIgnoredASIDs < asid1, asid2, .. >:
 //  - store ignored asids, as well as the basic block of this asid's last occurance.
-unordered_set<target_ulong> gIgnoredASIDs;
+std::unordered_set<target_ulong> gIgnoredASIDs;
 
 
 uint32_t gContextTreeIndex;
@@ -702,7 +731,7 @@ struct ContextTree{
     ContextNode * rootContext;
     ContextNode * currentContext;
 };
-vector<ContextTree> gContextTreeVector;
+std::vector<ContextTree> gContextTreeVector;
 
 VOID GoDownCallChain(ADDRINT){}
 VOID GoDownCallChain(CPUState *cpu, TranslationBlock *tb);
@@ -753,19 +782,19 @@ struct CallStack {
 
 // These need to be extern "C" so that the ABI is compatible with
 // QEMU/PANDA, which is written in C
-extern "C" {
+// extern "C" {
 
-bool init_plugin(void *);
-void init_deadspy();
-void uninit_plugin(void *);
-int mem_write_callback(CPUState *env, target_ulong pc, target_ulong addr, target_ulong size, void *buf);
-int mem_read_callback(CPUState *env, target_ulong pc, target_ulong addr, target_ulong size, void *buf);
+// bool init_plugin(void *);
+// void init_deadspy();
+// void uninit_plugin(void *);
+// int mem_write_callback(CPUState *env, target_ulong pc, target_ulong addr, target_ulong size, void *buf);
+// int mem_read_callback(CPUState *env, target_ulong pc, target_ulong addr, target_ulong size, void *buf);
 
-// prototype for the register-this-callback fn
-//PPP_PROT_REG_CB(on_ssm);
-//PPP_PROT_REG_CB(on_deadwrite);
+// // prototype for the register-this-callback fn
+// //PPP_PROT_REG_CB(on_ssm);
+// //PPP_PROT_REG_CB(on_deadwrite);
 
-}
+// }
 
 inline bool MergedDeadInfoComparer(const DeadInfoForPresentation & first, const DeadInfoForPresentation  &second);
 inline bool DeadInfoComparer(const DeadInfo &first, const DeadInfo &second);
@@ -1260,7 +1289,7 @@ inline VOID GoUpCallChain(){
 //             newChild->childIPs = (BlockNode **) malloc( (recordedSlots) * sizeof(BlockNode **) );
 // #endif //end CONTINUOUS_DEADINFO
 //             newChild->nSlots = recordedSlots;
-//             //cerr<<"\n***:"<<recordedSlots; 
+//             //std::cerr<<"\n***:"<<recordedSlots; 
 //             for(uint32_t i = 0 ; i < recordedSlots ; i++) {
 //                 newChild->childIPs[i] = newChild;
 //             }
@@ -1338,10 +1367,10 @@ VOID InitContextTree(){
 
     //lele: gBlockShadowIPtoSlot;
     // printf("BUG HERE\n");
-    // printf("%s: size of (unordered_map<ADDRINT, int>): %d\n", __FUNCTION__,(int)sizeof(unordered_map<ADDRINT, int >) );
-    unordered_map<ADDRINT, int> * mapIps = 
-        new unordered_map<ADDRINT, int>;
-        //(unordered_map<ADDRINT, bool> *) malloc (sizeof(unordered_map<ADDRINT,bool>));
+    // printf("%s: size of (std::tr1::unordered_map<ADDRINT, int>): %d\n", __FUNCTION__,(int)sizeof(std::tr1::unordered_map<ADDRINT, int >) );
+    std::tr1::unordered_map<ADDRINT, int> * mapIps = 
+        new std::tr1::unordered_map<ADDRINT, int>;
+        //(std::tr1::unordered_map<ADDRINT, bool> *) malloc (sizeof(std::tr1::unordered_map<ADDRINT,bool>));
     printf("%s: shadowMapIps allocated.\n", __FUNCTION__);
     //(*mapIps).reserve(8);
     // (*mapIps)[traceAddr] = -1;
@@ -2308,7 +2337,7 @@ VOID RecordLargeMemWrite(
 #endif      // end TESTING_BYTES
 
 void InspectMemRead(VOID * addr, UINT32 sz){
-    cerr<<"\n"<<addr<<":"<<sz;
+    std::cerr<<"\n"<<addr<<":"<<sz;
 }
 
 
@@ -2326,45 +2355,132 @@ inline VOID ReleaseLock(){
 }
 #endif // end MULTI_THREADED
 
+// //void pfun(VarType var_ty, const char *var_nm, LocType loc_t, target_ulong loc, void *in_args){
+// void pfun(void *var_ty_void, const char *var_nm, LocType loc_t, target_ulong loc, void *in_args){
+//     const char *var_ty = dwarf_type_to_string((DwarfVarType *) var_ty_void);
+//     //const char *var_ty = "";
+//     // restore args
+//     struct args *args = (struct args *) in_args;
+//     CPUState *pfun_cpu = args->cpu;
+//     CPUArchState *pfun_env = (CPUArchState*)pfun_cpu->env_ptr;
+//     //const char *src_filename = args->src_filename;
+//     //uint64_t src_linenum = args->src_linenum;
 
+//     target_ulong guest_dword;
+//     switch (loc_t){
+//         case LocReg:
+//             printf("VAR REG: %s %s in Reg %d", var_ty, var_nm, loc);
+//             printf("    => 0x%x\n", pfun_env->regs[loc]);
+//             break;
+//         case LocMem:
+//             printf("VAR MEM: %s %s @ 0x%x", var_ty, var_nm, loc);
+//             panda_virtual_memory_rw(pfun_cpu, loc, (uint8_t *)&guest_dword, sizeof(guest_dword), 0);
+//             printf("    => 0x%x\n", guest_dword);
+//             break;
+//         case LocConst:
+//             printf("VAR CONST: %s %s as 0x%x\n", var_ty, var_nm, loc);
+//             break;
+//         case LocErr:
+//             printf("VAR does not have a location we could determine. Most likely because the var is split among multiple locations\n");
+//             break;
+//     }
+// }
+
+// void on_line_change(CPUState *cpu, target_ulong pc, const char *file_Name, const char *funct_name, unsigned long long lno){
+//     struct args args = {cpu, file_Name, lno};
+//     printf("[%s] %s(), ln: %4lld, pc @ 0x%x\n",file_Name, funct_name,lno,pc);
+//     pri_funct_livevar_iter(cpu, pc, (liveVarCB) pfun, (void *) &args);
+// }
+
+/*
+    void getLineInfo:
+
+    called during mem_callback, given pc, find source code info: line number and source file name, or even debug symbols (such as variable name and value) if wanted
+        - line/file info are stored in gAsidPCtoFileLine
+        - will check if pc exists before add.
+*/
 void getLineInfo(CPUState *cpu, target_ulong pc, target_ulong addr, bool isWrite){
     SrcInfo info;
     // if NOT in source code, just return
+    printf("Now in %s now call: %p\n", __FUNCTION__, &pri_get_pc_source_info);
+
     int rc = pri_get_pc_source_info(cpu, pc, &info);
+    printf("%s: done call: %p\n", __FUNCTION__, &pri_get_pc_source_info);
+
     // We are not in dwarf info
     if (rc == -1){
-        return 0;
+        printf("%s: we are not in dwarf info\n", __FUNCTION__);
+        return;
     }
     // We are in the first byte of a .plt function
     if (rc == 1) {
-        return 0;
+        printf("%s: we are in the first byte of a .plt function\n", __FUNCTION__);
+        return;
     }
-    printf("==%s %ld==\n", info.filename, info.line_number);
 
-    unordered_map<ADDRINT, unordered_map<ADDRINT, FileLine *> *>::iterator gAsidPCtoFileLine.find(gCurrentASID);
+    target_ulong asid_cur = panda_current_asid(cpu);
+    printf("%s: file: %s, line: %lu==, asid: 0x" TARGET_FMT_lx "\n", 
+        __FUNCTION__, info.filename, info.line_number, asid_cur);
 
-    struct args args = {cpu, NULL, 0};
-    pri_funct_livevar_iter(cpu, pc, (liveVarCB) pfun, (void *) &args);
-    char *symbol_name = pri_get_vma_symbol(cpu, pc, addr);
-    if (!symbol_name){
-        // symbol was not found for particular addr
-        if (isWrite) {
-            printf ("Virt mem write at 0x%x - (NONE)\n", addr);
-        }
-        else {
-            printf ("Virt mem read at 0x%x - (NONE)\n", addr);
-        }
-        return 0;
+    std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(gCurrentASID);
+
+    std::tr1::unordered_map<ADDRINT, FileLineInfo *> *asidMap;
+
+    if (asidMapIt == gAsidPCtoFileLine.end()){
+        // no map for this asid yet, create one
+        asidMap = new std::tr1::unordered_map<ADDRINT, FileLineInfo *>;
+        gAsidPCtoFileLine[gCurrentASID] = asidMap;
+    }else{
+        asidMap = gAsidPCtoFileLine[gCurrentASID];
     }
-    else {
-        if (isWrite) {
-            printf ("Virt mem write at 0x%x - \"%s\"\n", addr, symbol_name);
+
+    std::tr1::unordered_map<ADDRINT, FileLineInfo *>::iterator lineForPcIt = (*asidMap).find(pc);
+    FileLineInfo *lineForPc;
+    if (lineForPcIt == (*asidMap).end()){
+        // no line info for pc, create one
+        lineForPc= new FileLineInfo;
+        std::string fileN(info.filename);
+        lineForPc->fileName = fileN;
+        lineForPc->lineNum = info.line_number;
+        (*asidMap)[pc] = lineForPc;
+    }else{
+        // line info exists, check whether changes
+        lineForPc = (*asidMap)[pc];
+        FileLineInfo newLineInfo;
+        newLineInfo.lineNum=info.line_number;
+        newLineInfo.fileName=std::string(info.filename);
+
+        if(! (newLineInfo == *lineForPc)){
+            printf("%s: ERROR: file/line info inconsistent for pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, pc);
+            printf("%s: \t old name: %s, new name: %s\n", __FUNCTION__, lineForPc->fileName.c_str(), newLineInfo.fileName.c_str());
+            printf("%s: \t old line: %lu, new line: %lu\n", __FUNCTION__, lineForPc->lineNum, newLineInfo.lineNum);
+            exit(-1);
         }
-        else {
-            printf ("Virt mem read at 0x%x - \"%s\"\n", addr, symbol_name);
-        }
+       
     }
-    return 0;
+
+    // struct args args = {cpu, NULL, 0};
+    // pri_funct_livevar_iter(cpu, pc, (liveVarCB) pfun, (void *) &args);
+    // char *symbol_name = pri_get_vma_symbol(cpu, pc, addr);
+    // if (!symbol_name){
+    //     // symbol was not found for particular addr
+    //     if (isWrite) {
+    //         printf ("Virt mem write at 0x%x - (NONE)\n", addr);
+    //     }
+    //     else {
+    //         printf ("Virt mem read at 0x%x - (NONE)\n", addr);
+    //     }
+    //     return 0;
+    // }
+    // else {
+    //     if (isWrite) {
+    //         printf ("Virt mem write at 0x%x - \"%s\"\n", addr, symbol_name);
+    //     }
+    //     else {
+    //         printf ("Virt mem read at 0x%x - \"%s\"\n", addr, symbol_name);
+    //     }
+    // }
+    // return 0;
 }
 
 
@@ -2381,7 +2497,11 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     //prog_point p = {};
     //get_prog_point(env, &p);
 
-    target_ulong asid_cur = panda_current_asid(env);
+    // target_ulong asid_cur = panda_current_asid(env);
+
+    target_ulong asid_cur = 0;
+
+    //getLineInfo(env, pc, addr, is_write);
     // if (p.cr3 != asid_cur){
     //     //printf("ERROR: panda_current_asid is not equal with p.cr3 (p.cr3: %p, cur_asid: %p)\n", (void *)(uintptr_t)p.cr3, (void *)(uintptr_t)asid_cur );
     //     //exit(-1);
@@ -2422,6 +2542,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     }
 
     getLineInfo(env, pc, addr, is_write);
+    return 0;
 //    string_pos &sp = text_tracker[p];
 
 //     if(p.cr3 == 0){
@@ -2607,7 +2728,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
         //      - gBlockShadowIPtoSlot[tb->pc][IP] >=0  if pc in gBlockShadowMap
 
             //printf("%s: check to update TraceShadowMap if no current pc is stored \n", __FUNCTION__);
-            unordered_map <ADDRINT, int> :: iterator mapIptoSlots = (*gBlockShadowIPtoSlot[gCurrentTraceBlock->address]).find(pc);
+            std::tr1::unordered_map <ADDRINT, int> :: iterator mapIptoSlots = (*gBlockShadowIPtoSlot[gCurrentTraceBlock->address]).find(pc);
 
         // 2.2: update pc and slot index when no pc stored;
 
@@ -3013,8 +3134,8 @@ int mem_write_callback(CPUState *env, target_ulong pc, target_ulong addr,
         if(curContext){
             if(IsValidIP(curContext->address)){
                 //lele: TODO: check func name, 'mem_set'
-                // string fun = PIN_UndecorateSymbolName(RTN_FindNameByAddress(curContext->address),UNDECORATION_COMPLETE);
-                // string sub = "memset";
+                // std::string fun = PIN_UndecorateSymbolName(RTN_FindNameByAddress(curContext->address),UNDECORATION_COMPLETE);
+                // std::string sub = "memset";
                 // if(fun == ".plt"){
                 //     if(setjmp(env) == 0) {
                         
@@ -3025,7 +3146,7 @@ int mem_write_callback(CPUState *env, target_ulong pc, target_ulong addr,
                 //             target_ulong nextInst = (target_ulong) curContext->address + 6;
                 //             ADDRINT loc = *((target_ulong *)(nextInst + *offset));
                 //             if(IsValidIP(loc)){
-                //                 string s = PIN_UndecorateSymbolName(RTN_FindNameByAddress(loc),UNDECORATION_COMPLETE);
+                //                 std::string s = PIN_UndecorateSymbolName(RTN_FindNameByAddress(loc),UNDECORATION_COMPLETE);
                 //                 retVal = EndsWith(s, sub);
                 //             }
                 //         } 
@@ -3070,15 +3191,15 @@ int mem_write_callback(CPUState *env, target_ulong pc, target_ulong addr,
 #ifdef GATHER_STATS
     inline void PrintStats(
 #ifdef IP_AND_CCT
-                           list<DeadInfoForPresentation> & deadList,
+                           std::list<DeadInfoForPresentation> & deadList,
 #else // no IP_AND_CCT
-                           list<DeadInfo> & deadList,
+                           std::list<DeadInfo> & deadList,
 #endif  // end IP_AND_CCT
                            target_ulong deads){
 #ifdef IP_AND_CCT        
-        list<DeadInfoForPresentation>::iterator it = deadList.begin();
+        std::list<DeadInfoForPresentation>::iterator it = deadList.begin();
 #else //no IP_AND_CCT        
-        list<DeadInfo>::iterator it = deadList.begin();
+        std::list<DeadInfo>::iterator it = deadList.begin();
 #endif //end IP_AND_CCT        
         target_ulong bothMemsetContribution = 0;
         target_ulong bothMemsetContexts = 0;
@@ -3193,18 +3314,44 @@ inline target_ulong GetMeasurementBaseCount(){
 		return ip[slotNo];
 	}
     
-    void  panda_GetSourceLocation(ADDRINT ip,int32_t *line, string *file){
+    void  panda_GetSourceLocation(ADDRINT ip, unsigned long *line, std::string *file){
         //Lele: given IP, return the line number and file
         //printf("TODO: %s: not implemented yet\n", __FUNCTION__);
-        *line = 0;
-        *file = "---file_info_not_implemented---";
+            
+        std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(gCurrentASID);
+
+        std::tr1::unordered_map<ADDRINT, FileLineInfo *> *asidMap;
+
+        if (asidMapIt == gAsidPCtoFileLine.end()){
+            // no map for this asid , warning;
+            printf("%s: ERROR: no asidMap for asid 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
+            exit(-1);
+        }else{
+            asidMap = gAsidPCtoFileLine[gCurrentASID];
+        }
+
+        std::tr1::unordered_map<ADDRINT, FileLineInfo *>::iterator lineForPcIt = (*asidMap).find(ip);
+        FileLineInfo *lineForPc;
+        if (lineForPcIt == (*asidMap).end()){
+            // no line info for pc, warning;
+            printf("%s: WARNING: no line/file info for ip 0x" TARGET_FMT_lx "\n", __FUNCTION__, ip);
+            // exit(-1);
+            *line = 0;
+            *file = "file_not_found.txt";
+        }else{
+            // line info exists, check whether changes
+            lineForPc = (*asidMap)[ip];
+            *line = lineForPc->lineNum;
+            *file = lineForPc->fileName;
+        }
+
     }
 
     // Given a pointer (i.e. slot) within a trace node, returns the Line number corresponding to that slot
-	inline string GetLineFromInfo(void * ptr){
+	inline std::string GetLineFromInfo(void * ptr){
 		ADDRINT ip = GetIPFromInfo(ptr);
-        string file;
-        int32_t line;
+        std::string file;
+        unsigned long line;
         //PIN_GetSourceLocation(ip, NULL, &line,&file);
         panda_GetSourceLocation(ip, &line,&file);
 		std::ostringstream retVal;
@@ -3222,11 +3369,11 @@ inline target_ulong GetMeasurementBaseCount(){
 #ifdef MERGE_SAME_LINES
         fprintf(gTraceFile,"\n%s",di.pMergedDeadInfo->line1.c_str());                                    
 #else // no MERGE_SAME_LINES
-        string file;
-        int32_t line;
+        std::string file;
+        unsigned long line;
         //printf("get source location\n");
         panda_GetSourceLocation( di.pMergedDeadInfo->ip1,  &line,&file);
-        fprintf(gTraceFile,"\n%p:%s:%u",(void *)(uintptr_t)(di.pMergedDeadInfo->ip1),file.c_str(),line);                                    
+        fprintf(gTraceFile,"\n%p:%s:%lu",(void *)(uintptr_t)(di.pMergedDeadInfo->ip1),file.c_str(),line);                                    
 #endif //end MERGE_SAME_LINES        
         PrintFullCallingContext(di.pMergedDeadInfo->context1);
         fprintf(gTraceFile,"\n***********************\n");
@@ -3234,7 +3381,7 @@ inline target_ulong GetMeasurementBaseCount(){
         fprintf(gTraceFile,"\n%s",di.pMergedDeadInfo->line2.c_str());                                    
 #else //no MERGE_SAME_LINES        
         panda_GetSourceLocation( di.pMergedDeadInfo->ip2,  &line,&file);
-        fprintf(gTraceFile,"\n%p:%s:%u",(void *)(uintptr_t)(di.pMergedDeadInfo->ip2),file.c_str(),line);
+        fprintf(gTraceFile,"\n%p:%s:%lu",(void *)(uintptr_t)(di.pMergedDeadInfo->ip2),file.c_str(),line);
 #endif //end MERGE_SAME_LINES        
         PrintFullCallingContext(di.pMergedDeadInfo->context2);
         fprintf(gTraceFile,"\n-------------------------------------------------------\n");
@@ -3266,13 +3413,13 @@ void ExtractDeadMap(){
         
 #if defined(CONTINUOUS_DEADINFO)
         //sparse_hash_map<uint64_t, uint64_t>::iterator mapIt = DeadMap.begin();
-        unordered_map<uint64_t, uint64_t>::iterator mapIt = DeadMap.begin();
+        std::tr1::unordered_map<uint64_t, uint64_t>::iterator mapIt = DeadMap.begin();
         //dense_hash_map<uint64_t, uint64_t>::iterator mapIt = DeadMap.begin();
 #else //no defined(CONTINUOUS_DEADINFO)        
         dense_hash_map<uint64_t, DeadInfo>::iterator mapIt = DeadMap.begin();
-        //unordered_map<uint64_t, DeadInfo>::iterator mapIt = DeadMap.begin();
+        //std::tr1::unordered_map<uint64_t, DeadInfo>::iterator mapIt = DeadMap.begin();
 #endif //end defined(CONTINUOUS_DEADINFO)        
-        map<MergedDeadInfo,uint64_t> mergedDeadInfoMap;
+        std::map<MergedDeadInfo,uint64_t> mergedDeadInfoMap;
         
         printf("%s: get Header of the DeadMap: 0x%lx \n",__FUNCTION__,mapIt->first);
 #if defined(CONTINUOUS_DEADINFO)
@@ -3300,7 +3447,7 @@ void ExtractDeadMap(){
             tmpMergedDeadInfo.ip1 = GetIPFromInfo(ctxt1);
             tmpMergedDeadInfo.ip2 = GetIPFromInfo(ctxt2);
 #endif //end MERGE_SAME_LINES            
-            map<MergedDeadInfo,uint64_t>::iterator tmpIt;
+            std::map<MergedDeadInfo,uint64_t>::iterator tmpIt;
             if( (tmpIt = mergedDeadInfoMap.find(tmpMergedDeadInfo)) == mergedDeadInfoMap.end()) {
                 mergedDeadInfoMap[tmpMergedDeadInfo] = mapIt->second;
             } else {
@@ -3309,7 +3456,7 @@ void ExtractDeadMap(){
             }
         }
         
-	    // clear dead map now
+	    // clear dead std::map now
         DeadMap.clear();
         
         
@@ -3328,7 +3475,7 @@ void ExtractDeadMap(){
             tmpMergedDeadInfo.ip1 = GetIPFromInfo(mapIt->second.firstIP);
             tmpMergedDeadInfo.ip2 = GetIPFromInfo(mapIt->second.secondIP);
 #endif //end MERGE_SAME_LINES            
-            map<MergedDeadInfo,uint64_t>::iterator tmpIt;
+            std::map<MergedDeadInfo,uint64_t>::iterator tmpIt;
             if( (tmpIt = mergedDeadInfoMap.find(tmpMergedDeadInfo)) == mergedDeadInfoMap.end()) {
                 mergedDeadInfoMap[tmpMergedDeadInfo] = mapIt->second.count;
             } else {
@@ -3342,8 +3489,8 @@ void ExtractDeadMap(){
 #endif  // end defined(CONTINUOUS_DEADINFO)        
         
         printf("%s, DeadMap cleared; got mergedDeadInfoMap. now compute DeadInfoForPresentation list\n", __FUNCTION__);
-        map<MergedDeadInfo,uint64_t>::iterator it = mergedDeadInfoMap.begin();	
-        list<DeadInfoForPresentation> deadList;
+        std::map<MergedDeadInfo,uint64_t>::iterator it = mergedDeadInfoMap.begin();	
+        std::list<DeadInfoForPresentation> deadList;
         for (; it != mergedDeadInfoMap.end(); it ++) {
             DeadInfoForPresentation deadInfoForPresentation;
             deadInfoForPresentation.pMergedDeadInfo = &(it->first);
@@ -3358,7 +3505,7 @@ void ExtractDeadMap(){
         
         printf("%s, analysis and print deadlist to file\n", __FUNCTION__);
 
-        list<DeadInfoForPresentation>::iterator dipIter = deadList.begin();
+        std::list<DeadInfoForPresentation>::iterator dipIter = deadList.begin();
         //PIN_LockClient();
         target_ulong deads = 0;
         for (; dipIter != deadList.end(); dipIter++) {
@@ -3427,14 +3574,14 @@ void ExtractDeadMap(){
         fflush(gTraceFile);
         
 #if defined(CONTINUOUS_DEADINFO)
-        unordered_map<uint64_t, uint64_t>::iterator mapIt;
+        std::tr1::unordered_map<uint64_t, uint64_t>::iterator mapIt;
         //dense_hash_map<uint64_t, uint64_t>::iterator mapIt;
         //sparse_hash_map<uint64_t, uint64_t>::iterator mapIt;
 #else // no defined(CONTINUOUS_DEADINFO)        
         dense_hash_map<uint64_t, DeadInfo>::iterator mapIt;
-        //unordered_map<uint64_t, DeadInfo>::iterator mapIt;
+        //std::tr1::unordered_map<uint64_t, DeadInfo>::iterator mapIt;
 #endif  //end defined(CONTINUOUS_DEADINFO)        
-        list<DeadInfo> deadList;
+        std::list<DeadInfo> deadList;
         
         
 #if defined(CONTINUOUS_DEADINFO)
@@ -3456,7 +3603,7 @@ void ExtractDeadMap(){
         DeadMap.clear();
 #endif  // end defined(CONTINUOUS_DEADINFO)        
         deadList.sort(DeadInfoComparer);
-        list<DeadInfo>::iterator it = deadList.begin();
+        std::list<DeadInfo>::iterator it = deadList.begin();
         PIN_LockClient();
         target_ulong deads = 0;
         for (; it != deadList.end(); it++) {
@@ -3806,7 +3953,7 @@ inline void InitializeBlockShadowMap(CPUState *cpu, TranslationBlock *tb){
     bool replaced=false;
 
     target_ulong * oldTraceShadowIP = (target_ulong *) gBlockShadowMap[tb->pc];
-    unordered_map <ADDRINT, int > * ipToSlot = (unordered_map <ADDRINT, int > *) gBlockShadowIPtoSlot[tb->pc];
+    std::tr1::unordered_map <ADDRINT, int > * ipToSlot = (std::tr1::unordered_map <ADDRINT, int > *) gBlockShadowIPtoSlot[tb->pc];
 
     target_ulong oldBlockSize = 0;
 
@@ -3873,7 +4020,7 @@ inline void InitializeBlockShadowMap(CPUState *cpu, TranslationBlock *tb){
 
             *pNumWrites = copy_slots;
 
-            unordered_map <ADDRINT, int > ::iterator pcSlotIt = (* ipToSlot).begin();
+            std::tr1::unordered_map <ADDRINT, int > ::iterator pcSlotIt = (* ipToSlot).begin();
 
             // we copy according to gBlockShadowIPtoSlots[tb], so that we keep the slot index for a PC not to be changed. If slot index changes for an old write PC, the old TraceNode relies on this will be invalidated.
 
@@ -3904,8 +4051,8 @@ inline void InitializeBlockShadowMap(CPUState *cpu, TranslationBlock *tb){
 
 
         //lele: gBlockShadowIPtoSlot;
-        unordered_map<ADDRINT,int> * mapIps = new unordered_map<ADDRINT,int> ;
-            //(unordered_map<ADDRINT, bool> *) malloc (sizeof(unordered_map<ADDRINT,bool>));
+        std::tr1::unordered_map<ADDRINT,int> * mapIps = new std::tr1::unordered_map<ADDRINT,int> ;
+            //(std::tr1::unordered_map<ADDRINT, bool> *) malloc (sizeof(std::tr1::unordered_map<ADDRINT,bool>));
         // (*mapIps)[traceAddr]=-1;
         gBlockShadowIPtoSlot[traceAddr] = mapIps;
 
@@ -4400,7 +4547,7 @@ void report_deadspy(void * self){
 }
 
 void clear_insn(){
-    // unordered_map<target_ulong, cs_insn *>::iterator insnIt;
+    // std::tr1::unordered_map<target_ulong, cs_insn *>::iterator insnIt;
     // for (insnIt = tb_insns.begin(); insnIt != tb_insns.end(); insnIt ++ ){
     //     int count = tb_insns_count[insnIt -> first];
     //     cs_insn * insn = insnIt->second;
@@ -4493,7 +4640,7 @@ void init_deadspy(const char * prefix){
 
     
 #ifdef GATHER_STATS
-    string statFileName(trace_file_kernel);
+    std::string statFileName(trace_file_kernel);
     statFileName += ".stats";
     statsFile = fopen(statFileName.c_str() , "w");
     fprintf(statsFile,"\n");
@@ -4512,76 +4659,99 @@ bool init_plugin(void *self) {
 
     //lele: step 1. Sys init
 
+//#################################################
+// ADD support of pri_dwarf. get Line Number and Source File Name by PC.
+    // only support i386
+    // Refer: pri_simple, pri_dwarf
+// #if defined(TARGET_I386) && !defined(TARGET_X86_64)
+    //panda_arg_list *args = panda_get_args("pri_taint");
+    panda_require("pri");
+    assert(init_pri_api());
+    panda_require("pri_dwarf");
+    assert(init_pri_dwarf_api());
+
+    //PPP_REG_CB("pri", on_before_line_change, on_line_change);
+    // //PPP_REG_CB("pri", on_fn_start, on_fn_start);
+    // {
+    //     panda_cb pcb;
+    //     pcb.virt_mem_before_write = virt_mem_write;
+    //     panda_register_callback(self,PANDA_CB_VIRT_MEM_BEFORE_WRITE,pcb);
+    //     pcb.virt_mem_after_read = virt_mem_read;
+    //     panda_register_callback(self,PANDA_CB_VIRT_MEM_AFTER_READ,pcb);
+    // }
+// #endif
+    
     panda_cb pcb;
 
-    panda_require("callstack_instr");
+    // panda_require("callstack_instr");
 
-    //lele: step 2, parse args
 
-    panda_arg_list *args = panda_get_args("trace_deadwrite");
 
-    //step 2.1: args: asid
-    // const char *arg_str = panda_parse_string_opt(args, "asid", "", "a single asid to search for");
-    // size_t arg_len = strlen(arg_str);
-    // if (arg_len > 0) {
-    //     //memcpy(tofind[num_strings], arg_str, arg_len);
-    //     //strlens[num_strings] = arg_len;
-    //     //num_strings++;
+    // //lele: step 2, parse args
+
+    // panda_arg_list *args = panda_get_args("trace_deadwrite");
+
+    // //step 2.1: args: asid
+    // // const char *arg_str = panda_parse_string_opt(args, "asid", "", "a single asid to search for");
+    // // size_t arg_len = strlen(arg_str);
+    // // if (arg_len > 0) {
+    // //     //memcpy(tofind[num_strings], arg_str, arg_len);
+    // //     //strlens[num_strings] = arg_len;
+    // //     //num_strings++;
+    // // }
+
+    // target_ulong asid = panda_parse_ulong_opt(args, "asid", 0 , "a single asid to search for");
+
+    // if (asid == 0){
+    //     // no ASID parameter given, set the default behavior as following:
+    //     printf("%s: asid given as 0, or not given , or invalid, now use default value 0\n",__FUNCTION__);
+    //     //gCurrentASID = 0x0; 
+    //     //gTraceKernel=true;
+    //     //gTraceApp=true;
+    //     gTraceOne=true;
+    //     gCurrentASID = 0;
+    //     //gCurrentASID = 0x000000001fb14000;
+    //     //gCurrentASID = 0x0;
+    // }else{
+    //     // set target asid as input asid.
+    //     gTraceOne=true;
+    //     gCurrentASID = asid;
     // }
-
-    target_ulong asid = panda_parse_ulong_opt(args, "asid", 0 , "a single asid to search for");
-
-    if (asid == 0){
-        // no ASID parameter given, set the default behavior as following:
-        printf("%s: asid given as 0, or not given , or invalid, now use default value 0\n",__FUNCTION__);
-        //gCurrentASID = 0x0; 
-        //gTraceKernel=true;
-        //gTraceApp=true;
-        gTraceOne=true;
-        gCurrentASID = 0;
-        //gCurrentASID = 0x000000001fb14000;
-        //gCurrentASID = 0x0;
-    }else{
-        // set target asid as input asid.
-        gTraceOne=true;
-        gCurrentASID = asid;
-    }
-    printf("%s: target asid: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
+    // printf("%s: target asid: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
     
 
-    //step 2.2: args: max callers printed
-    // n_callers = panda_parse_uint64_opt(args, "callers", 16, "depth of callstack for matches");
-    // n_callers = CALLERS_PER_INS;
-    // if (n_callers > MAX_CALLERS) n_callers = MAX_CALLERS;
+    // //step 2.2: args: max callers printed
+    // // n_callers = panda_parse_uint64_opt(args, "callers", 16, "depth of callstack for matches");
+    // // n_callers = CALLERS_PER_INS;
+    // // if (n_callers > MAX_CALLERS) n_callers = MAX_CALLERS;
 
-    //step 2.3: args: log file name prefix
-    // deleted, simple hardcoded the prefix
-
-
-    //lele: init_deadspy: open log file handlers, print first lines
-
-    const char *prefix="trace_deadwrite_test";
-    init_deadspy(prefix);
-
-    //lele: step 4: sys int: set callstack plugins, enable precise pc, memcb, and set callback functions.
-    if(!init_callstack_instr_api()) return false;
+    // //step 2.3: args: log file name prefix
+    // // deleted, simple hardcoded the prefix
 
 
-    panda_do_flush_tb();
-    printf("do_flush_tb enabled\n");
-    // tb chaining disable
-    panda_disable_tb_chaining();
-    printf("panda basic block chaining disabled\n");
+    // //lele: init_deadspy: open log file handlers, print first lines
+
+    // const char *prefix="trace_deadwrite_test";
+    // init_deadspy(prefix);
+
+    // //lele: step 4: sys int: set callstack plugins, enable precise pc, memcb, and set callback functions.
+    // // if(!init_callstack_instr_api()) return false;
+
+
+    // panda_do_flush_tb();
+    // printf("do_flush_tb enabled\n");
+    // //tb chaining disable
+    // panda_disable_tb_chaining();
+    // printf("panda basic block chaining disabled\n");
 
 
     // Need this to get EIP with our callbacks
-    panda_enable_precise_pc();
-    // Enable memory logging
-    panda_enable_memcb();
+    // panda_enable_precise_pc();
+    // // Enable memory logging
+    // panda_enable_memcb();
 
-    
-    // pcb.virt_mem_before_write = mem_write_callback;
-    // panda_register_callback(self, PANDA_CB_VIRT_MEM_BEFORE_WRITE, pcb);
+    pcb.virt_mem_before_write = mem_write_callback;
+    panda_register_callback(self, PANDA_CB_VIRT_MEM_BEFORE_WRITE, pcb);
 
     /*
     virt_mem_after_write: called after memory is written
@@ -4599,8 +4769,8 @@ bool init_plugin(void *self) {
             int (*virt_mem_after_write)(CPUState *env, target_ulong pc, target_ulong addr, target_ulong size, void *buf);
     */
 
-    pcb.virt_mem_after_write = mem_write_callback;
-    panda_register_callback(self, PANDA_CB_VIRT_MEM_AFTER_WRITE, pcb);
+    // pcb.virt_mem_after_write = mem_write_callback;
+    // panda_register_callback(self, PANDA_CB_VIRT_MEM_AFTER_WRITE, pcb);
     
     /*
     virt_mem_after_read: called after memory is read
@@ -4631,8 +4801,8 @@ bool init_plugin(void *self) {
         Signature:
             int (*after_block_translate)(CPUState *env, TranslationBlock *tb);
     */
-    pcb.after_block_translate = after_block_translate;
-    panda_register_callback(self, PANDA_CB_AFTER_BLOCK_TRANSLATE, pcb);
+    // pcb.after_block_translate = after_block_translate;
+    // panda_register_callback(self, PANDA_CB_AFTER_BLOCK_TRANSLATE, pcb);
 
     /*
     before_block_exec: called before execution of every basic block
@@ -4644,8 +4814,8 @@ bool init_plugin(void *self) {
         Signature:
             int (*before_block_exec)(CPUState *env, TranslationBlock *tb);
     */
-    pcb.before_block_exec = before_block_exec;
-    panda_register_callback(self, PANDA_CB_BEFORE_BLOCK_EXEC, pcb);
+    // pcb.before_block_exec = before_block_exec;
+    // panda_register_callback(self, PANDA_CB_BEFORE_BLOCK_EXEC, pcb);
 
     /*after_block_exec: called after execution of every basic block
 
@@ -4658,8 +4828,8 @@ bool init_plugin(void *self) {
     Signature::
         int (*after_block_exec)(CPUState *env, TranslationBlock *tb);
     */
-    pcb.after_block_exec = after_block_exec;
-    panda_register_callback(self, PANDA_CB_AFTER_BLOCK_EXEC, pcb);
+    // pcb.after_block_exec = after_block_exec;
+    // panda_register_callback(self, PANDA_CB_AFTER_BLOCK_EXEC, pcb);
 
 
     return true;
