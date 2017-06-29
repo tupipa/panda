@@ -53,6 +53,9 @@ void init_capstone(CPUState *cpu) {
 #elif defined(TARGET_ARM)
     arch = CS_ARCH_ARM;
     mode = env->thumb ? CS_MODE_THUMB : CS_MODE_ARM;
+#elif defined(TARGET_PPC)
+    arch = CS_ARCH_PPC;
+    mode = CS_MODE_32;
 #endif
 
     if (cs_open(arch, mode, &handle) != CS_ERR_OK) {
