@@ -78,6 +78,8 @@ extern "C" {
 int virt_mem_helper(CPUState *cpu, target_ulong pc, target_ulong addr, bool isRead) {
     SrcInfo info;
     // if NOT in source code, just return
+    printf("Now in %s now call: %p\n", __FUNCTION__, &pri_get_pc_source_info);
+    printf("Now in %s &info: %p\n", __FUNCTION__, &info);
     int rc = pri_get_pc_source_info(cpu, pc, &info);
     // We are not in dwarf info
     if (rc == -1){
@@ -88,6 +90,7 @@ int virt_mem_helper(CPUState *cpu, target_ulong pc, target_ulong addr, bool isRe
         return 0;
     }
     printf("==%s %ld==\n", info.filename, info.line_number);
+    exit(-1);
     // struct args args = {cpu, NULL, 0};
     // pri_funct_livevar_iter(cpu, pc, (liveVarCB) pfun, (void *) &args);
     // char *symbol_name = pri_get_vma_symbol(cpu, pc, addr);

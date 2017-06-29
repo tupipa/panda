@@ -2403,6 +2403,7 @@ void getLineInfo(CPUState *cpu, target_ulong pc, target_ulong addr, bool isWrite
     SrcInfo info;
     // if NOT in source code, just return
     printf("Now in %s now call: %p\n", __FUNCTION__, &pri_get_pc_source_info);
+    printf("Now in %s &info: %p\n", __FUNCTION__, &info);
 
     int rc = pri_get_pc_source_info(cpu, pc, &info);
     printf("%s: done call: %p\n", __FUNCTION__, &pri_get_pc_source_info);
@@ -2421,6 +2422,8 @@ void getLineInfo(CPUState *cpu, target_ulong pc, target_ulong addr, bool isWrite
     target_ulong asid_cur = panda_current_asid(cpu);
     printf("%s: file: %s, line: %lu==, asid: 0x" TARGET_FMT_lx "\n", 
         __FUNCTION__, info.filename, info.line_number, asid_cur);
+
+    exit(-1);
 
     std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(gCurrentASID);
 
@@ -2491,17 +2494,16 @@ void getLineInfo(CPUState *cpu, target_ulong pc, target_ulong addr, bool isWrite
 // this creates the 
 
 int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
-                       target_ulong size, void *buf, bool is_write
-                       //,std::map<prog_point,string_pos> &text_tracker
-                       ){
+                       target_ulong size, void *buf, bool is_write){
     //prog_point p = {};
     //get_prog_point(env, &p);
 
-    // target_ulong asid_cur = panda_current_asid(env);
+    getLineInfo(env, pc, addr, is_write);
 
-    target_ulong asid_cur = 0;
+    target_ulong asid_cur = panda_current_asid(env);
 
-    //getLineInfo(env, pc, addr, is_write);
+    // target_ulong asid_cur = 0;
+
     // if (p.cr3 != asid_cur){
     //     //printf("ERROR: panda_current_asid is not equal with p.cr3 (p.cr3: %p, cur_asid: %p)\n", (void *)(uintptr_t)p.cr3, (void *)(uintptr_t)asid_cur );
     //     //exit(-1);
@@ -3826,86 +3828,7 @@ instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
         printf("block address is not equal to its first intruction's address!!!\n");
         exit(-1);
     }
-    // //########################################################
-    // //BEGAIN Refer: Deadspy
-    // // PopulateIPReverseMapAndAccountTraceInstructions(tb);
-    // //uint32_t traceSize = TRACE_Size(trace);    
-    // uint32_t traceSize = count;    
-    // ADDRINT * ipShadow = (ADDRINT * )malloc( (1 + traceSize) * sizeof(ADDRINT)); // +1 to hold the number of slots as a metadata
-    // //ADDRINT  traceAddr = TRACE_Address(trace);
-    // ADDRINT  traceAddr = pc;
-    // uint32_t slot = 0;
     
-    // // give space to account for nSlots which we record later once we know nWrites
-    // ADDRINT * pNumWrites = ipShadow;
-    // ipShadow ++;
-    
-    // gBlockShadowMap[traceAddr] = ipShadow ;
-    // for( BBL bbl = TRACE_BblHead(trace); BBL_Valid(bbl); bbl = BBL_Next(bbl) ){
-    // 	uint32_t inst1ByteSize = 0;
-    //     uint32_t inst2ByteSize = 0;
-    // 	uint32_t inst4ByteSize = 0;
-    // 	uint32_t inst8ByteSize = 0;
-    // 	uint32_t inst10ByteSize = 0;
-    // 	uint32_t inst16ByteSize = 0;
-    // 	uint32_t instLargeByteSize  = 0;
-        
-    //     for(INS ins = BBL_InsHead(bbl); INS_Valid(ins); ins = INS_Next(ins)){
-    //         // instrument instruction
-    //         Instruction(ins,slot);		
-    //         if(INS_IsMemoryWrite(ins)){
-    //             // put next slot in corresponding ins start location;
-    //             ipShadow[slot] = INS_Address(ins);
-    //             slot++;
-                
-    //             // get instruction info in trace                
-    //             USIZE writeSize = INS_MemoryWriteSize(ins);
-    //             switch(writeSize){
-    //                 case 1: inst1ByteSize++;
-    //                     break;
-    //                 case 2:inst2ByteSize++;
-    //                     break;
-    //                 case 4:inst4ByteSize++;
-    //                     break;
-    //                 case 8:inst8ByteSize++;
-    //                     break;
-    //                 case 10:inst10ByteSize++;
-    //                     break;
-    //                 case 16:inst16ByteSize++;
-    //                     break;
-    //                 default:
-    //                     instLargeByteSize += writeSize;
-    //                     //assert(0 && "NOT IMPLEMENTED ... SHOULD NOT SEE large writes in trace");
-    //             }
-    //         }
-    //     }
-        
-        
-    //     // Insert a call to corresponding count routines before every bbl, passing the number of instructions
-        
-    //     // Increment Inst count by trace
-    //     if (inst1ByteSize)
-    //         BBL_InsertCall(bbl,IPOINT_BEFORE, (AFUNPTR) InstructionContributionOfBBL1Byte, IARG_UINT32, inst1ByteSize, IARG_END);     
-    //     if (inst2ByteSize)
-    //         BBL_InsertCall(bbl,IPOINT_BEFORE, (AFUNPTR) InstructionContributionOfBBL2Byte, IARG_UINT32, inst2ByteSize, IARG_END);     
-    //     if (inst4ByteSize)
-    //         BBL_InsertCall(bbl,IPOINT_BEFORE, (AFUNPTR) InstructionContributionOfBBL4Byte, IARG_UINT32, inst4ByteSize, IARG_END);     
-    //     if (inst8ByteSize)
-    //         BBL_InsertCall(bbl,IPOINT_BEFORE, (AFUNPTR) InstructionContributionOfBBL8Byte, IARG_UINT32, inst8ByteSize, IARG_END);     
-    //     if (inst10ByteSize)
-    //         BBL_InsertCall(bbl,IPOINT_BEFORE, (AFUNPTR) InstructionContributionOfBBL10Byte, IARG_UINT32, inst10ByteSize, IARG_END);     
-    //     if (inst16ByteSize)
-    //         BBL_InsertCall(bbl,IPOINT_BEFORE, (AFUNPTR) InstructionContributionOfBBL16Byte, IARG_UINT32, inst16ByteSize, IARG_END);     
-    //     if (instLargeByteSize)
-    //         BBL_InsertCall(bbl,IPOINT_BEFORE, (AFUNPTR) InstructionContributionOfBBLLargeByte, IARG_UINT32, instLargeByteSize, IARG_END);     
-        
-    // }
-    
-    // // Record the number of child write IPs i.e., number of "slots"
-    // *pNumWrites = slot;
-    // // END Refer: Deadspy
-    //########################################################
-  
     if (cs_insn_group(handle, end, CS_GRP_CALL)) {
         res = INSTR_CALL;
         // printf("%s: detect a call\n", __FUNCTION__);
