@@ -30,6 +30,8 @@ PANDAENDCOMMENT */
 #include <cstring>
 #include <cerrno>
 
+#include <inttypes.h>
+
 extern "C" {
 
 #include "panda/rr/rr_log.h"
@@ -86,7 +88,8 @@ const char *proc_to_monitor = NULL;
 bool allow_just_plt = false;
 bool logCallSites = true;
 std::string bin_path;
-#if defined(TARGET_I386) && !defined(TARGET_X86_64)
+// #if defined(TARGET_I386) && !defined(TARGET_X86_64)
+#if defined(TARGET_I386) 
 // These need to be extern "C" so that the ABI is compatible with
 // QEMU/PANDA, which is written in C
 extern "C" {
@@ -1749,7 +1752,7 @@ void on_library_load(CPUState *cpu, target_ulong pc, char *guest_lib_name, targe
                            host_debug_path +
                            lib.substr(found+strlen(guest_debug_path));
     char *lib_name = strdup(host_lib.c_str());
-    printf("Trying to load symbols for %s at 0x%x.\n", lib_name, base_addr);
+    printf("Trying to load symbols for %s at 0x" TARGET_FMT_lx ".\n", lib_name, base_addr);
     printf("access(%s, F_OK): %x\n", lib_name, access(lib_name, F_OK));
     if (access(lib_name, F_OK) == -1) {
         fprintf(stderr, "Couldn't open %s; will not load symbols for it.\n", lib_name);
@@ -1801,7 +1804,7 @@ bool ensure_main_exec_initialized(CPUState *cpu) {
         //strcpy(fname, host_name.c_str());
         strcpy(fname, bin_path.c_str());
 
-        printf("[ensure_main_exec_initialized] Trying to load symbols for %s at 0x%x.\n", fname, m->base);
+        printf("[ensure_main_exec_initialized] Trying to load symbols for %s at 0x" TARGET_FMT_lx ".\n", fname, m->base);
         printf("[ensure_main_exec_initialized] access(%s, F_OK): %x\n", fname, access(fname, F_OK));
         if (access(fname, F_OK) == -1) {
             fprintf(stderr, "Couldn't open %s; will not load symbols for it.\n", fname);
@@ -1904,7 +1907,7 @@ void on_call(CPUState *cpu, target_ulong pc) {
             pri_runcb_on_fn_start(cpu, pc, NULL, it_dyn->second.c_str());
         }
         if (debug)
-            printf("CALL: Could not find line info for 0x%x\n", pc);
+            printf("CALL: Could not find line info for 0x" TARGET_FMT_lx "\n", pc);
 
         return;
     }
@@ -1957,7 +1960,7 @@ void on_ret(CPUState *cpu, target_ulong pc_func) {
             pri_runcb_on_fn_return(cpu, pc_func, NULL, it_dyn->second.c_str());
         }
         if (debug)
-            printf("RET: Could not find line info for 0x%x\n", pc_func);
+            printf("RET: Could not find line info for 0x" TARGET_FMT_lx "\n", pc_func);
         return;
     }
     cur_function = it->function_addr;
@@ -1994,13 +1997,13 @@ void __livevar_iter(CPUState *cpu,
                 if (debug) {
                     switch (loc){
                         case LocReg:
-                            printf(" [livevar_iter] VAR %s in REG %d\n", var_name.c_str(), var_loc);
+                            printf(" [livevar_iter] VAR %s in REG " TARGET_FMT_lu "\n", var_name.c_str(), var_loc);
                             break;
                         case LocMem:
-                            printf(" [livevar_iter] VAR %s in MEM 0x%x\n", var_name.c_str(), var_loc);
+                            printf(" [livevar_iter] VAR %s in MEM 0x" TARGET_FMT_lx "\n", var_name.c_str(), var_loc);
                             break;
                         case LocConst:
-                            printf(" [livevar_iter] VAR %s CONST VAL %d\n", var_name.c_str(), var_loc);
+                            printf(" [livevar_iter] VAR %s CONST VAL " TARGET_FMT_lu "\n", var_name.c_str(), var_loc);
                             break;
                         case LocErr:
                             printf(" [livevar_iter] VAR %s - Can\'t handle location information\n", var_name.c_str());
@@ -2214,17 +2217,17 @@ int exec_callback_dwarf(CPUState *cpu, target_ulong pc) {
     std::string funct_name = funcaddrs[cur_function];
     cur_line = it2->line_number;
 
-    //printf("[%s] [0x%llx]-%s(), ln: %4lld, pc @ 0x%x\n",file_name.c_str(),cur_function, funct_name.c_str(),cur_line,pc);
+    //printf("[%s] [0x%llx]-%s(), ln: %4lld, pc @ 0x" TARGET_FMT_lx "\n",file_name.c_str(),cur_function, funct_name.c_str(),cur_line,pc);
     if (funcaddrs.find(cur_function) == funcaddrs.end())
         return 0;
     if (cur_function == 0)
         return 0;
-    //printf("[%s] [0x%llx]-%s(), ln: %4lld, pc @ 0x%x\n",file_name.c_str(),cur_function, funct_name.c_str(),cur_line,pc);
+    //printf("[%s] [0x%llx]-%s(), ln: %4lld, pc @ 0x" TARGET_FMT_lx "\n",file_name.c_str(),cur_function, funct_name.c_str(),cur_line,pc);
     //__livevar_iter(env, pc, funcvars[cur_function], push_var_if_live);
     //__livevar_iter(env, pc, global_var_list, push_var_if_live);
     //__livevar_iter(env, pc, global_var_list, print_var_if_live);
     if (cur_line != prev_line){
-        //printf("[%s] %s(), ln: %4lld, pc @ 0x%x\n",file_name.c_str(), funct_name.c_str(),cur_line,pc);
+        //printf("[%s] %s(), ln: %4lld, pc @ 0x" TARGET_FMT_lx "\n",file_name.c_str(), funct_name.c_str(),cur_line,pc);
         pri_runcb_on_after_line_change (cpu, pc, prev_file_name.c_str(), prev_funct_name.c_str(), prev_line);
         pri_runcb_on_before_line_change(cpu, pc, file_name.c_str(), funct_name.c_str(), cur_line);
         PPP_RUN_CB(on_pri_dwarf_line_change, cpu, pc, file_name.c_str(), funct_name.c_str(), cur_line);
@@ -2311,7 +2314,7 @@ int osi_foo(CPUState *cpu, TranslationBlock *tb) {
         //if (np != n) return 0;
         target_ulong asid = panda_current_asid(cpu);
         if (running_procs.count(asid) == 0) {
-            printf ("adding asid=0x%x to running procs.  cmd=[%s]  task=0x%x\n", (unsigned int)  asid, p->name, (unsigned int) p->offset);
+            printf ("adding asid=0x" TARGET_FMT_lx " to running procs.  cmd=[%s]  task=0x%x\n",  asid, p->name, (unsigned int) p->offset);
         }
         running_procs[asid] = *p;
         //proc_changed = proc_diff(current_proc, p);
@@ -2353,7 +2356,8 @@ int osi_foo(CPUState *cpu, TranslationBlock *tb) {
 
 #endif
 bool init_plugin(void *self) {
-#if defined(TARGET_I386) && !defined(TARGET_X86_64)
+// #if defined(TARGET_I386) && !defined(TARGET_X86_64)
+#if defined(TARGET_I386)
     panda_arg_list *args_gen = panda_get_args("general");
     const char *asid_s = panda_parse_string_opt(args_gen, "asid", NULL, "asid of the process to follow for pri_trace");
     if (asid_s) {
@@ -2474,7 +2478,8 @@ bool init_plugin(void *self) {
 }
 
 void uninit_plugin(void *self) {
-#if defined(TARGET_I386) && !defined(TARGET_X86_64)
+// #if defined(TARGET_I386) && !defined(TARGET_X86_64)
+#if defined(TARGET_I386)
     std::sort(active_libs.begin(), active_libs.end());
     std::ofstream outfile(std::string(proc_to_monitor) + ".libs");
     for (auto l : active_libs) {
