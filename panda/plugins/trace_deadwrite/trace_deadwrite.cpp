@@ -563,6 +563,7 @@ struct ContextNode {
 #ifdef IP_AND_CCT
 struct FileLineInfo{
     std::string fileName;
+    std::string funName;
     unsigned long lineNum;
 	bool operator==(const FileLineInfo  & x) const{
 		if ( this->fileName == x.fileName && this->lineNum == x.lineNum)
@@ -927,7 +928,7 @@ inline void ** GetNextIPVecBuffer(uint32_t size){
 
 //VOID GoDownCallChain(ADDRINT callee){
 VOID GoDownCallChain(CPUState *cpu, TranslationBlock *tb){
-    // printf("%s: go down chain, tb->pc = 0x" TARGET_FMT_lx "\n",__FUNCTION__, tb->pc);
+    printf("%s: go down chain, tb->pc = 0x" TARGET_FMT_lx "\n",__FUNCTION__, tb->pc);
     target_ulong callee=tb->pc;
     if( ( gContextIter = (gCurrentContext->childContexts).find(callee)) != gCurrentContext->childContexts.end()) {
         // printf("%s: down to existed context node; bb addr: 0x" TARGET_FMT_lx "\n", __FUNCTION__, callee);
@@ -949,8 +950,7 @@ inline VOID GoUpCallChain(){
 #ifdef IP_AND_CCT
     //assert(gCurrentContext->parent && "NULL PARENT CTXT");
     if (gCurrentContext == gRootContext){
-        printf("%s: WARNING: RootContext got a return\n", __FUNCTION__);
-        printf("%s: don't change context node.\n",__FUNCTION__);
+        printf("%s: WARNING: RootContext got a return, don't change context node.\n",__FUNCTION__);
         return;
     }
     // else if (gCurrentContext->parent == gRootContext) {
@@ -2392,13 +2392,13 @@ inline VOID ReleaseLock(){
 // }
 
 /*
-    void getLineInfo:
+    void getAndSetSrcInfo:
 
     called during mem_callback, given pc, find source code info: line number and source file name, or even debug symbols (such as variable name and value) if wanted
         - line/file info are stored in gAsidPCtoFileLine
         - will check if pc exists before add.
 */
-void getLineInfo(CPUState *cpu, target_ulong pc, target_ulong addr, bool isWrite, target_ulong asid_cur){
+void getAndSetSrcInfo(CPUState *cpu, target_ulong pc, target_ulong addr, bool isWrite, target_ulong target_asid){
     SrcInfo info;
     // if NOT in source code, just return
     // printf("Now in %s now call: %p\n", __FUNCTION__, &pri_get_pc_source_info);
@@ -2414,16 +2414,16 @@ void getLineInfo(CPUState *cpu, target_ulong pc, target_ulong addr, bool isWrite
     }
     // We are in the first byte of a .plt function
     if (rc == 1) {
-        printf("%s: we are in the first byte of a .plt function\n", __FUNCTION__);
+        // printf("%s: we are in the first byte of a .plt function\n", __FUNCTION__);
         return;
     }
 
     // printf("%s: file: %s, line: %lu==, asid: 0x" TARGET_FMT_lx "\n", 
-    //     __FUNCTION__, info.filename, info.line_number, asid_cur);
+    //     __FUNCTION__, info.filename, info.line_number, target_asid);
 
     // exit(-1);
 
-    std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(gCurrentASID);
+    std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(target_asid);
 
     std::tr1::unordered_map<ADDRINT, FileLineInfo *> *asidMap;
 
@@ -2441,7 +2441,9 @@ void getLineInfo(CPUState *cpu, target_ulong pc, target_ulong addr, bool isWrite
         // no line info for pc, create one
         lineForPc= new FileLineInfo;
         std::string fileN(info.filename);
+        std::string funN(info.funct_name);
         lineForPc->fileName = fileN;
+        lineForPc->funName = funN;
         lineForPc->lineNum = info.line_number;
         (*asidMap)[pc] = lineForPc;
     }else{
@@ -2450,10 +2452,12 @@ void getLineInfo(CPUState *cpu, target_ulong pc, target_ulong addr, bool isWrite
         FileLineInfo newLineInfo;
         newLineInfo.lineNum=info.line_number;
         newLineInfo.fileName=std::string(info.filename);
+        newLineInfo.funName=std::string(info.funct_name);
 
         if(! (newLineInfo == *lineForPc)){
             printf("%s: ERROR: file/line info inconsistent for pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, pc);
-            printf("%s: \t old name: %s, new name: %s\n", __FUNCTION__, lineForPc->fileName.c_str(), newLineInfo.fileName.c_str());
+            printf("%s: \t old file name: %s, new file name: %s\n", __FUNCTION__, lineForPc->fileName.c_str(), newLineInfo.fileName.c_str());
+            printf("%s: \t old func name: %s, new func name: %s\n", __FUNCTION__, lineForPc->funName.c_str(), newLineInfo.funName.c_str());
             printf("%s: \t old line: %lu, new line: %lu\n", __FUNCTION__, lineForPc->lineNum, newLineInfo.lineNum);
             exit(-1);
         }
@@ -2499,7 +2503,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
     target_ulong asid_cur = panda_current_asid(env);
 
-    getLineInfo(env, pc, addr, is_write, asid_cur);
+    // getAndSetSrcInfo(env, pc, addr, is_write, asid_cur);
 
     // target_ulong asid_cur = 0;
 
@@ -2542,7 +2546,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
         printf("\n All: Mem op for ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
     }
 
-    // getLineInfo(env, pc, addr, is_write);
+    getAndSetSrcInfo(env, pc, addr, is_write, asid_cur);
     // return 0;
 //    string_pos &sp = text_tracker[p];
 
@@ -3097,11 +3101,33 @@ int mem_write_callback(CPUState *env, target_ulong pc, target_ulong addr,
         int depth = 0;
 
         // Dont print if the depth is more than MAX_CCT_PRINT_DEPTH since files become too large
-        while(curContext && (depth ++ < MAX_CCT_PRINT_DEPTH )){            
-            if(IsValidIP(curContext->address)){
-                fprintf(gTraceFile, "\n! " TARGET_FMT_lx, curContext->address);
-                 // Also get the full stack here
-                //lele: TODO: get the function name from the curContext->address.
+        while(curContext && (depth ++ < MAX_CCT_PRINT_DEPTH )){     
+            target_ulong con_pc = curContext->address;       
+            if(IsValidIP(con_pc)){
+                fprintf(gTraceFile, "\n!pc: 0x" TARGET_FMT_lx, con_pc);
+
+                // check whether we have func/file/line info:                  
+                std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(gCurrentASID);
+
+                std::tr1::unordered_map<ADDRINT, FileLineInfo *> *asidMap;
+                if (asidMapIt == gAsidPCtoFileLine.end()){
+                    // no map for this asid.
+                    fprintf(gTraceFile, "\tno map for asid");
+                }else{
+                    //map exists, get the map and find the file/line/func info for this pc.
+                    asidMap = gAsidPCtoFileLine[gCurrentASID];
+                    std::tr1::unordered_map<ADDRINT, FileLineInfo *>::iterator lineForPcIt = (*asidMap).find(con_pc);
+                    FileLineInfo *lineForPc;
+                    if (lineForPcIt == (*asidMap).end()){
+                        fprintf(gTraceFile, "\tno FileLineInfo for this pc");
+                    }else{
+                        lineForPc = (*asidMap)[con_pc];
+                        fprintf(gTraceFile, "\tfunc: %s, file: %s: %lu",
+                            lineForPc->funName.c_str(),
+                            lineForPc->fileName.c_str(), 
+                            lineForPc->lineNum);
+                    }
+                }
             }
 #ifndef MULTI_THREADED 
             else if (curContext == gRootContext){
@@ -3315,35 +3341,39 @@ inline target_ulong GetMeasurementBaseCount(){
 		return ip[slotNo];
 	}
     
-    void  panda_GetSourceLocation(ADDRINT ip, unsigned long *line, std::string *file){
+    void  panda_GetSourceLocation(target_ulong target_asid, ADDRINT ip, unsigned long *line, std::string *file, std::string *func){
         //Lele: given IP, return the line number and file
-        //printf("TODO: %s: not implemented yet\n", __FUNCTION__);
-            
-        std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(gCurrentASID);
+        printf("Now in %s\n", __FUNCTION__);
+        
+        std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(target_asid);
 
         std::tr1::unordered_map<ADDRINT, FileLineInfo *> *asidMap;
 
         if (asidMapIt == gAsidPCtoFileLine.end()){
             // no map for this asid , warning;
-            printf("%s: ERROR: no asidMap for asid 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
-            exit(-1);
-        }else{
-            asidMap = gAsidPCtoFileLine[gCurrentASID];
-        }
-
-        std::tr1::unordered_map<ADDRINT, FileLineInfo *>::iterator lineForPcIt = (*asidMap).find(ip);
-        FileLineInfo *lineForPc;
-        if (lineForPcIt == (*asidMap).end()){
-            // no line info for pc, warning;
-            printf("%s: WARNING: no line/file info for ip 0x" TARGET_FMT_lx "\n", __FUNCTION__, ip);
-            // exit(-1);
+            printf("%s: WARNING: no asidMap for asid 0x" TARGET_FMT_lx "\n", __FUNCTION__, target_asid);
             *line = 0;
-            *file = "file_not_found.txt";
+            *file = "debuginfo_not_available_for_asid.txt";
+            *func = "NA";
+            return;
         }else{
-            // line info exists, check whether changes
-            lineForPc = (*asidMap)[ip];
-            *line = lineForPc->lineNum;
-            *file = lineForPc->fileName;
+
+            asidMap = gAsidPCtoFileLine[target_asid];
+            std::tr1::unordered_map<ADDRINT, FileLineInfo *>::iterator lineForPcIt = (*asidMap).find(ip);
+            FileLineInfo *lineForPc;
+            if (lineForPcIt == (*asidMap).end()){
+                // no line info for pc, warning;
+                // printf("%s: WARNING: no line/file info for ip 0x" TARGET_FMT_lx "\n", __FUNCTION__, ip);
+                *line = 0;
+                *file = "file_not_available_for_pc.txt";
+                *func = "NA";
+            }else{
+                // line info exists, check whether changes
+                lineForPc = (*asidMap)[ip];
+                *line = lineForPc->lineNum;
+                *file = lineForPc->fileName;
+                *func = lineForPc->funName;
+            }
         }
 
     }
@@ -3351,10 +3381,10 @@ inline target_ulong GetMeasurementBaseCount(){
     // Given a pointer (i.e. slot) within a trace node, returns the Line number corresponding to that slot
 	inline std::string GetLineFromInfo(void * ptr){
 		ADDRINT ip = GetIPFromInfo(ptr);
-        std::string file;
+        std::string file, func;
         unsigned long line;
         //PIN_GetSourceLocation(ip, NULL, &line,&file);
-        panda_GetSourceLocation(ip, &line,&file);
+        panda_GetSourceLocation(gCurrentASID, ip, &line,&file, &func);
 		std::ostringstream retVal;
 		retVal << line;
 		return file + ":" + retVal.str();
@@ -3370,19 +3400,19 @@ inline target_ulong GetMeasurementBaseCount(){
 #ifdef MERGE_SAME_LINES
         fprintf(gTraceFile,"\n%s",di.pMergedDeadInfo->line1.c_str());                                    
 #else // no MERGE_SAME_LINES
-        std::string file;
+        std::string file, func;
         unsigned long line;
         //printf("get source location\n");
-        panda_GetSourceLocation( di.pMergedDeadInfo->ip1,  &line,&file);
-        fprintf(gTraceFile,"\n%p:%s:%lu",(void *)(uintptr_t)(di.pMergedDeadInfo->ip1),file.c_str(),line);                                    
+        panda_GetSourceLocation(gCurrentASID, di.pMergedDeadInfo->ip1,  &line,&file, &func);
+        fprintf(gTraceFile,"\n%p:%s:%lu: %s",(void *)(uintptr_t)(di.pMergedDeadInfo->ip1),file.c_str(),line, func.c_str());                                    
 #endif //end MERGE_SAME_LINES        
         PrintFullCallingContext(di.pMergedDeadInfo->context1);
         fprintf(gTraceFile,"\n***********************\n");
 #ifdef MERGE_SAME_LINES
         fprintf(gTraceFile,"\n%s",di.pMergedDeadInfo->line2.c_str());                                    
 #else //no MERGE_SAME_LINES        
-        panda_GetSourceLocation( di.pMergedDeadInfo->ip2,  &line,&file);
-        fprintf(gTraceFile,"\n%p:%s:%lu",(void *)(uintptr_t)(di.pMergedDeadInfo->ip2),file.c_str(),line);
+        panda_GetSourceLocation(gCurrentASID, di.pMergedDeadInfo->ip2,  &line,&file, &func);
+        fprintf(gTraceFile,"\n%p:%s:%lu: %s",(void *)(uintptr_t)(di.pMergedDeadInfo->ip2),file.c_str(),line, func.c_str());
 #endif //end MERGE_SAME_LINES        
         PrintFullCallingContext(di.pMergedDeadInfo->context2);
         fprintf(gTraceFile,"\n-------------------------------------------------------\n");
