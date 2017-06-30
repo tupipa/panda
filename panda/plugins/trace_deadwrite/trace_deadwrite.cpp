@@ -168,6 +168,8 @@ using google::dense_hash_map;      // namespace where class lives by default
 #include "panda/plugin.h"
 #include "panda/plugin_plugin.h"
 
+#include "util/runcmd.h"
+#include <sstream>  // used to split strings.
 
 extern "C" {
 // #include "trace_mem.h"
@@ -565,6 +567,8 @@ struct FileLineInfo{
     std::string fileName;
     std::string funName;
     unsigned long lineNum;
+    std::string extraInfo;
+
 	bool operator==(const FileLineInfo  & x) const{
 		if ( this->fileName == x.fileName && this->lineNum == x.lineNum)
             return true;
@@ -701,6 +705,11 @@ ADDRINT * gTmpBlockIpShadow;
 std::tr1::unordered_map<ADDRINT, bool> gBlockShadowMapDone;
 std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, int> *> gBlockShadowIPtoSlot;
 std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *> gAsidPCtoFileLine;
+
+//store debug file for each asid.
+std::tr1::unordered_map<ADDRINT, std::string *> gAllDebugFiles;
+std::string gCurrentTargetDebugFile;
+
 BlockNode * gCurrentTraceBlock;
 uint32_t gCurrentSlot;
 
@@ -2391,6 +2400,53 @@ inline VOID ReleaseLock(){
 //     pri_funct_livevar_iter(cpu, pc, (liveVarCB) pfun, (void *) &args);
 // }
 
+int addr2line(std::string *debugfile, target_ulong addr, FileLineInfo * lineInfo){
+    
+    // convert line number to string
+    std::stringstream stream;
+    stream << std::hex << addr;
+    std::string str_addr( stream.str());
+
+    std::string cmd;
+    cmd = "addr2line -f -p -e " + *debugfile + " " + str_addr;
+    std::cout << cmd << std::endl;
+
+    string rawLineInfo = runcmd(cmd);
+
+    if (rawLineInfo.rfind("??:0") == std::string:npos){
+        // printf("No result from addr2line\n");
+        return -1;
+
+    }else{
+
+        printf("get addr2line result: %s, now parse it\n", rawLineInfo.c_str());
+        //TODO. parse and store it as FileLineInfo struct.
+        size_t pos = rawLineInfo.find(" ");
+        lineInfo->funName = rawLineInfo.substring(0,pos); //store fun name.
+
+        std::string tmp = rawLineInfo.substring(pos+1); // ignore 
+        
+        //find second space, must be after 'at'
+        pos = tmp.find(" ");
+        tmp = rawLineInfo.substring(pos+1); //ignore 'at'
+
+        pos = tmp.find(":");
+        lineInfo->fileName = tmp.substring(0, pos);
+        tmp = rawLineInfo.substring(pos+1); //ignore file name.
+
+        pos = tmp.find(" ");
+        lineInfo->lineNum = tmp.substring(0, pos);
+
+        if (pos != std::string::npos){
+            tmp = rawLineInfo.substring(pos); //ignore line Num.
+            lineInfo->extraInfo = tmp;
+        }else{
+            lineInfo->extraInfo = ""
+        }
+    }
+    return 0;
+}
+
 /*
     void getAndSetSrcInfo:
 
@@ -2403,7 +2459,21 @@ void getAndSetSrcInfo(CPUState *cpu, target_ulong pc, target_ulong addr, bool is
     // if NOT in source code, just return
     // printf("Now in %s now call: %p\n", __FUNCTION__, &pri_get_pc_source_info);
     // printf("Now in %s &info: %p\n", __FUNCTION__, &info);
+    FileLineInfo lineInfo;
 
+    // if (gAllDebugFiles.find(target_asid) == gAllDebugFiles.end()){
+    //     // no debug file available for this asid.
+    //     return;
+    // }
+    // int rc = addr2line(gAllDebugFiles[target_asid], pc, &lineInfo);
+
+    int rc2 = addr2line(gCurrentTargetDebugFile, pc, &lineInfo);
+    // We are not in dwarf info
+    if (rc2 == -1){
+        // printf("%s: we are not in dwarf info\n", __FUNCTION__);
+        return;
+    }
+    
     int rc = pri_get_pc_source_info(cpu, pc, &info);
     // printf("%s: done call: %p\n", __FUNCTION__, &pri_get_pc_source_info);
 
@@ -2421,7 +2491,7 @@ void getAndSetSrcInfo(CPUState *cpu, target_ulong pc, target_ulong addr, bool is
     // printf("%s: file: %s, line: %lu==, asid: 0x" TARGET_FMT_lx "\n", 
     //     __FUNCTION__, info.filename, info.line_number, target_asid);
 
-    // exit(-1);
+    exit(-1);
 
     std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(target_asid);
 

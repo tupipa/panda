@@ -12,7 +12,7 @@ LIBS+= -lcapstone
 #-DIP_AND_CCT
 
 MYINCLUDES = -isystem$(PLUGIN_SRC_DIR)/sparsehash-master/src
-INCLUDES = -I./sparsehash-master/src
+#INCLUDES = -I./sparsehash-master/src
 CFLAGS += $(MYINCLUDES)
 
 # from pri_simple
@@ -20,4 +20,4 @@ QEMU_CXXFLAGS:=$(filter-out -Wundef,$(QEMU_CXXFLAGS))
 
 # The main rule for your plugin. List all object-file dependencies.
 $(PLUGIN_TARGET_DIR)/panda_$(PLUGIN_NAME).so: \
-	$(PLUGIN_OBJ_DIR)/$(PLUGIN_NAME).o
+	$(PLUGIN_OBJ_DIR)/addr2line/addr2line.o $(PLUGIN_OBJ_DIR)/$(PLUGIN_NAME).o 
