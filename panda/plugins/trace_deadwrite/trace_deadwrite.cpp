@@ -149,6 +149,7 @@ PANDAENDCOMMENT */
 #include <string.h>
 #include <setjmp.h>
 #include <sstream>
+#include <fstream>
 // Need GOOGLE sparse hash tables
 #include <google/sparse_hash_map>
 #include <google/dense_hash_map>
@@ -169,7 +170,7 @@ using google::dense_hash_map;      // namespace where class lives by default
 #include "panda/plugin_plugin.h"
 
 #include "util/runcmd.h"
-#include <sstream>  // used to split strings.
+// #include <sstream>  // used to split strings.
 
 extern "C" {
 // #include "trace_mem.h"
@@ -706,9 +707,11 @@ std::tr1::unordered_map<ADDRINT, bool> gBlockShadowMapDone;
 std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, int> *> gBlockShadowIPtoSlot;
 std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *> gAsidPCtoFileLine;
 
+//store all debug file paths
+std::vector<std::string> gDebugPaths;
 //store debug file for each asid.
-std::tr1::unordered_map<ADDRINT, std::string *> gAllDebugFiles;
-std::string gCurrentTargetDebugFile;
+std::tr1::unordered_map<ADDRINT, int> gAllDebugPaths;
+std::string gCurrentTargetDebugPath;
 
 BlockNode * gCurrentTraceBlock;
 uint32_t gCurrentSlot;
@@ -2413,7 +2416,7 @@ int addr2line(std::string *debugfile, target_ulong addr, FileLineInfo * lineInfo
 
     string rawLineInfo = runcmd(cmd);
 
-    if (rawLineInfo.rfind("??:0") == std::string:npos){
+    if (rawLineInfo.find("??:0") != std::string:npos){
         // printf("No result from addr2line\n");
         return -1;
 
@@ -2448,6 +2451,48 @@ int addr2line(std::string *debugfile, target_ulong addr, FileLineInfo * lineInfo
 }
 
 /*
+    int getFileLineInfoFinal for target_asid
+
+    called after replay finished.
+    using addr2line with debug symbol files.
+    fill gAsidPCtoFileLine for each available asids.
+    need to know the "asid <-> debug_symbol_file" mapping relationships (i.e. gAllDebugPaths[asid])
+
+*/
+int getFileLineInfoFinal(target_ulong target_asid){
+
+    FileLineInfo lineInfo;
+
+    // if (gAllDebugPaths.find(target_asid) == gAllDebugPaths.end()){
+    //     // no debug file available for this asid.
+    //     return;
+    // }
+    // int rc = addr2line(gAllDebugPaths[target_asid], pc, &lineInfo);
+
+    int rc2 = addr2line(gCurrentTargetDebugPath, pc, &lineInfo);
+    // We are not in dwarf info
+    if (rc2 == -1){
+        // printf("%s: we are not in dwarf info\n", __FUNCTION__);
+        return;
+    }
+
+
+    std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(target_asid);
+
+    std::tr1::unordered_map<ADDRINT, FileLineInfo *> *asidMap;
+
+    if (asidMapIt == gAsidPCtoFileLine.end()){
+        // no map for this asid yet, create one
+        asidMap = new std::tr1::unordered_map<ADDRINT, FileLineInfo *>;
+        gAsidPCtoFileLine[gCurrentASID] = asidMap;
+    }else{
+        asidMap = gAsidPCtoFileLine[gCurrentASID];
+    }
+
+
+}
+
+/*
     void getAndSetSrcInfo:
 
     called during mem_callback, given pc, find source code info: line number and source file name, or even debug symbols (such as variable name and value) if wanted
@@ -2459,20 +2504,7 @@ void getAndSetSrcInfo(CPUState *cpu, target_ulong pc, target_ulong addr, bool is
     // if NOT in source code, just return
     // printf("Now in %s now call: %p\n", __FUNCTION__, &pri_get_pc_source_info);
     // printf("Now in %s &info: %p\n", __FUNCTION__, &info);
-    FileLineInfo lineInfo;
-
-    // if (gAllDebugFiles.find(target_asid) == gAllDebugFiles.end()){
-    //     // no debug file available for this asid.
-    //     return;
-    // }
-    // int rc = addr2line(gAllDebugFiles[target_asid], pc, &lineInfo);
-
-    int rc2 = addr2line(gCurrentTargetDebugFile, pc, &lineInfo);
-    // We are not in dwarf info
-    if (rc2 == -1){
-        // printf("%s: we are not in dwarf info\n", __FUNCTION__);
-        return;
-    }
+    
     
     int rc = pri_get_pc_source_info(cpu, pc, &info);
     // printf("%s: done call: %p\n", __FUNCTION__, &pri_get_pc_source_info);
@@ -2491,7 +2523,7 @@ void getAndSetSrcInfo(CPUState *cpu, target_ulong pc, target_ulong addr, bool is
     // printf("%s: file: %s, line: %lu==, asid: 0x" TARGET_FMT_lx "\n", 
     //     __FUNCTION__, info.filename, info.line_number, target_asid);
 
-    exit(-1);
+    // exit(-1);
 
     std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(target_asid);
 
@@ -4745,7 +4777,27 @@ bool init_plugin(void *self) {
         gCurrentASID = asid;
     }
     printf("%s: target asid: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
-    
+
+    const char *debug_list = panda_parse_string_opt(args, "debug_paths", "debug_paths.txt", "the file name that stores all the possible debug symbol directories, default as debug_paths.txt");
+
+    // read the paths from the file
+    if (strlen(debug_list) > 0) {
+
+        std::ifstream debug_file_names(debug_list);
+        if (!debug_file_names) {
+            printf("Couldn't open %s; no strings to search for. Exiting.\n", stringsfile);
+            return false;
+        }
+
+        std::string line;
+        while(std::getline(debug_file_names, line)) {
+            printf("%s: add %s to Debug Paths\n", __FUNCTION__, line.c_str());
+            gDebugPaths.push_back(line);
+        }
+
+    }else{
+        printf("%s: WARNING: no debug info path found\n", __FUNCTION__);
+    }
 
     //step 2.2: args: log file name prefix
     // deleted, simple hardcoded the prefix
