@@ -184,6 +184,9 @@ extern "C" {
 #include "pri/pri_ext.h"
 #include "pri/pri.h"
 
+#include "osi/osi_types.h"
+#include "osi/osi_ext.h"
+
 #include "pri_dwarf/pri_dwarf_types.h"
 #include "pri_dwarf/pri_dwarf_ext.h"
 
@@ -707,11 +710,17 @@ std::tr1::unordered_map<ADDRINT, bool> gBlockShadowMapDone;
 std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, int> *> gBlockShadowIPtoSlot;
 std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *> gAsidPCtoFileLine;
 
+std::string gProcToMonitor;
 //store all debug file paths
-std::vector<std::string> gDebugPaths;
-//store debug file for each asid.
-std::tr1::unordered_map<ADDRINT, int> gAllDebugPaths;
-std::string gCurrentTargetDebugPath;
+std::vector<std::string> gDebugFiles;
+//store all process names
+std::vector<std::string> gProcs;
+//store a map from proc name to its debug file.
+std::tr1::unordered_map<std::string, int> gProcToDebugFileIndex;
+//store map from asid to proc name index.
+std::tr1::unordered_map<target_ulong, int> gAsidToProcIndex;
+//store currentTargetDebugPath, this should be the same as gDebugFiles[gProcToDebugFileIndex[gProcToMonitor]]
+std::string gCurrentTargetDebugFile;
 
 BlockNode * gCurrentTraceBlock;
 uint32_t gCurrentSlot;
@@ -2456,20 +2465,20 @@ int addr2line(std::string *debugfile, target_ulong addr, FileLineInfo * lineInfo
     called after replay finished.
     using addr2line with debug symbol files.
     fill gAsidPCtoFileLine for each available asids.
-    need to know the "asid <-> debug_symbol_file" mapping relationships (i.e. gAllDebugPaths[asid])
+    need to know the "asid <-> debug_symbol_file" mapping relationships (i.e. gProcToDebugFileIndex[asid])
 
 */
 int getFileLineInfoFinal(target_ulong target_asid){
 
     FileLineInfo lineInfo;
 
-    // if (gAllDebugPaths.find(target_asid) == gAllDebugPaths.end()){
+    // if (gProcToDebugFileIndex.find(target_asid) == gProcToDebugFileIndex.end()){
     //     // no debug file available for this asid.
     //     return;
     // }
-    // int rc = addr2line(gAllDebugPaths[target_asid], pc, &lineInfo);
+    // int rc = addr2line(gProcToDebugFileIndex[target_asid], pc, &lineInfo);
 
-    int rc2 = addr2line(gCurrentTargetDebugPath, pc, &lineInfo);
+    int rc2 = addr2line(gCurrentTargetDebugFile, pc, &lineInfo);
     // We are not in dwarf info
     if (rc2 == -1){
         // printf("%s: we are not in dwarf info\n", __FUNCTION__);
@@ -4590,6 +4599,69 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
 }
 
 
+/* handle_proc_change
+
+    - this is used to monitor the asid changes
+    - once a new asid if found, store it's proc name and asid mapping relationship
+    - this will change gProcs, gAsidToProcIndex, and gProcFound
+
+Refer pri_dwarf.cpp and asidstory.h 
+    - handle asid change in pri_dwarf.
+    - using callback from plugin asidstory.
+*/
+typedef void (* on_proc_change_t)(CPUState *env, target_ulong asid, OsiProc *proc);
+
+void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
+    if (!proc) { return; }
+    if (!proc->name) { return; }
+
+    printf("cur_proc_name: %s proc-to-monitor: %s\n", proc->name, gProcToMonitor.c_str());
+
+    std::string curProc(proc->name);
+    // store the asid<-> procName mappings
+     std::tr1::unordered_map<target_ulong, int>::iterator asidProcIt = gAsidToProcIndex.find(asid);
+    if (asidProcIt != gAsidToProcIndex.end()){
+        // not a new asid. 
+        // already a proc name stored. 
+        // Now check whether the stored name is the same name as current.
+        assert(gProcs[asidProcIt->second] == curProc);
+    }else{
+        // got a new asid with a new name.
+        printf("%s: got a new proc: %s, with asid: 0x" TARGET_FMT_lx, 
+            __FUNCTION__, proc->name, asid);
+        // store it in gProcs, and the map
+        gProcs.push_back(curProc);
+        gAsidToProcIndex[asid] = (int) gProcs.size() - 1;
+    }
+
+    if (curProc == gProcToMonitor){
+        // this is the monitored process.
+        gProcFound = true;
+    }else{
+        // this is not the monitored process. but still store the asid<-> procName mappings.
+
+    }
+
+    //check to be safe:
+    if (panda_current_asid(env) != asid){
+        printf("%s: BUG in Panda: on_proc_change asid not the current asid!!\n");
+        exit(-1);
+    }
+
+    // TODO:  get lib/modules and update asid <-> procName mappings as well as asid <-> debugFile mappings
+    // 
+    OsiModules *ms = get_libraries(cpu, current);
+    if (ms == NULL) {
+        printf("No mapped dynamic libraries.\n");
+    }
+    else {
+        printf("Dynamic libraries list (%d libs):\n", ms->num);
+        for (i = 0; i < ms->num; i++)
+            printf("\t0x" TARGET_FMT_lx "\t" TARGET_FMT_ld "\t%-24s %s\n", ms->module[i].base, ms->module[i].size, ms->module[i].name, ms->module[i].file);
+    }
+
+}
+
 void report_deadspy(void * self){
     //lele: ported from deadspy: ExtractDeadMap and Fini
     // 
@@ -4778,6 +4850,11 @@ bool init_plugin(void *self) {
     }
     printf("%s: target asid: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
 
+    const char *proc_to_monitor = panda_parse_string_req(args, "proc", "name of process to follow with debug info");
+
+    gProcToMonitor = std::string(proc_to_monitor);
+    printf("%s: process to monitor: %s\n", __FUNCTION__, proc_to_monitor);
+
     const char *debug_list = panda_parse_string_opt(args, "debug_paths", "debug_paths.txt", "the file name that stores all the possible debug symbol directories, default as debug_paths.txt");
 
     // read the paths from the file
@@ -4792,7 +4869,7 @@ bool init_plugin(void *self) {
         std::string line;
         while(std::getline(debug_file_names, line)) {
             printf("%s: add %s to Debug Paths\n", __FUNCTION__, line.c_str());
-            gDebugPaths.push_back(line);
+            gDebugFiles.push_back(line);
         }
 
     }else{
@@ -4823,6 +4900,11 @@ bool init_plugin(void *self) {
     panda_enable_precise_pc();
     // Enable memory logging
     panda_enable_memcb();
+
+    // use asidstory to find out the asid's of the ProcToMonitor.
+
+    PPP_REG_CB("asidstory", on_proc_change, handle_proc_change);
+
 
     pcb.virt_mem_before_write = mem_write_callback;
     panda_register_callback(self, PANDA_CB_VIRT_MEM_BEFORE_WRITE, pcb);
