@@ -4657,7 +4657,7 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
     else {
         printf("Dynamic libraries list (%d libs):\n", ms->num);
         for (i = 0; i < ms->num; i++)
-            printf("\t0x" TARGET_FMT_lx "\t" TARGET_FMT_ld "\t%-24s %s\n", ms->module[i].base, ms->module[i].size, ms->module[i].name, ms->module[i].file);
+            printf("\tasid: 0x" TARGET_FMT_lx "\tsize:" TARGET_FMT_ld "\t%-24s %s\n", ms->module[i].base, ms->module[i].size, ms->module[i].name, ms->module[i].file);
     }
 
 }
