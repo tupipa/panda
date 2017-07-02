@@ -150,6 +150,7 @@ PANDAENDCOMMENT */
 #include <setjmp.h>
 #include <sstream>
 #include <fstream>
+#include <algorithm>
 // Need GOOGLE sparse hash tables
 #include <google/sparse_hash_map>
 #include <google/dense_hash_map>
@@ -3135,27 +3136,59 @@ int addr2line(std::string debugfile, target_ulong addr, FileLineInfo * lineInfo)
     return 0;
 }
 
-/* getLineInfoForAsid:
+/* getLineInfoForAsidIP:
 
-    - given asid, and pc, trying to find proper debug file and call addr2line to get the line info
+    - given asid, and ip, trying to find proper debug file and call addr2line to get the line info
 
     - here we create and maintain a debug file vector for each asid <-> debugfiles 
 
 */
 
-int getLineInfoForAsid(target_ulong asid_target, target_ulong, FileLineInfo *fileInfo){
+int getLineInfoForAsidIP(target_ulong asid_target, target_ulong ip, FileLineInfo *fileInfo){
 
     //1. get proc name for asid
-    gProcs;
-    gAsidToProcIndex;
+    // gProcs;
+    // gAsidToProcIndex;
+    std::string procName;
+
+    std::tr1::unordered_map<target_ulong, int>::iterator asidProcIt = gAsidToProcIndex.find(asid_target);
+    if (asidProcIt != gAsidToProcIndex.end()){
+        //found the proc name from asid
+        procName = gProcs[asidProcIt -> second];
+
+    }else{
+        //no proc name found for asid: 
+        printf("%s: no proc name found for asid: 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_target );
+        return -1;
+    }
+
 
     //2. get debug file for proc name
+    // gProcToDebugFileIndex;
+    // gDebugFiles;
 
-    gProcToDebugFileIndex;
-    gDebugFiles;
+    std::string debugFileName;
 
-    //3, iterate through all debug files for proc
-    std::string debugfile ;
+    std::tr1::unordered_map<std::string, int>::iterator procDebugIt = gProcToDebugFileIndex.find(procName);
+    if (procDebugIt != gProcToDebugFileIndex.end()){
+        //found the proc name from asid
+        debugFileName = gDebugFiles[procDebugIt -> second];
+
+    }else{
+        //no proc name found for asid: 
+        printf("%s: no debug file found for proc name: %s\n", __FUNCTION__, procName );
+        return -1;
+    }
+
+    //3, iterate through all debug files for proc.
+    // TODO: might be different debug file for a proc?
+    // Now only 1 debug file for the proc.
+
+    if ( addr2line(debugFileName, ip, fileInfo)== 0 ){
+        return 0;
+    }else{
+        return -1;
+    }   
 
 }
 
@@ -3476,7 +3509,7 @@ inline target_ulong GetMeasurementBaseCount(){
             // 
             FileLineInfo lineForPc;
 
-            getLineInfoForAsid(target_asid, ip, &lineForPc);
+            getLineInfoForAsidIP(target_asid, ip, &lineForPc);
 
             printf("%s: WARNING: no asidMap for asid 0x" TARGET_FMT_lx "\n", __FUNCTION__, target_asid);
             *line = 0;
@@ -4642,17 +4675,36 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
         // Now check whether the stored name is the same name as current.
         assert(gProcs[asidProcIt->second] == curProc);
     }else{
-        // got a new asid with a new name.
-        printf("%s: got a new proc: %s, with asid: 0x" TARGET_FMT_lx, 
-            __FUNCTION__, proc->name, asid);
-        // store it in gProcs, and the map
-        gProcs.push_back(curProc);
-        gAsidToProcIndex[asid] = (int) gProcs.size() - 1;
+        // got a new asid 
+        // now check the name. If name already exists, get the index; if not, insert into gProcs and get the new index;
+        // use index to store asid -- procName mapping.
+        int procIndex;
+
+        std::vector<std::string>::iterator procNameIt =  std::find(gProcs.begin(), gProcs.end(), item);
+        
+        if ( procNameIt != gProcs.end() ){
+            // new asid belongs to an old proc name.
+            procIndex = (int) ( procNameIt - gProcs.begin());
+
+        }else{
+            // new asid belongs to a new proc name.
+            printf("%s: got a new proc: %s, with asid: 0x" TARGET_FMT_lx, 
+                __FUNCTION__, proc->name, asid);
+            // store it in gProcs, and the map
+            gProcs.push_back(curProc);
+            procIndex = (int) gProcs.size()-1;
+
+        }
+
+        gAsidToProcIndex[asid] = procIndex;
     }
 
     if (curProc == gProcToMonitor){
         // this is the monitored process.
         gProcFound = true;
+        // TODO: lele: might need to store all diff asids to this certain Proc Name.
+        // TODO: can use a list/vector to store it.
+        // NOTE: lele: this info could be derived from gAsidToProcIndex. So don't need to update dynamically here.
     }else{
         // this is not the monitored process. but still store the asid<-> procName mappings.
 
