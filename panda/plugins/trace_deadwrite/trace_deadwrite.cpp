@@ -717,8 +717,12 @@ std::string gProcToMonitor;
 std::vector<std::string> gDebugFiles;
 //store all process names
 std::vector<std::string> gProcs;
+//indicate whether we ever searched the debug file for a proc name, we use this to search only once for each proc name.
+std::tr1::unordered_map<std::string, bool> gProcToDebugDone;
 //store a map from proc name to its debug file.
 std::tr1::unordered_map<std::string, int> gProcToDebugFileIndex;
+//store a map from debug file to its proc name.
+std::tr1::unordered_map<std::string, int> gDebugFiletoProcIndex;
 //store map from asid to proc name index.
 std::tr1::unordered_map<target_ulong, int> gAsidToProcIndex;
 //store currentTargetDebugPath, this should be the same as gDebugFiles[gProcToDebugFileIndex[gProcToMonitor]]
@@ -3136,6 +3140,30 @@ int addr2line(std::string debugfile, target_ulong addr, FileLineInfo * lineInfo)
     return 0;
 }
 
+/* searchDebugFilesForProcName:
+    - for asid with IP, search all debugfiles that can return the lineInfo for this ip.
+    - debug files stored in a vector of strings
+    - mark the gProcToDebugDone[procName] as done if found one available lineInfo from a file.
+    - TODO: might be other ways to find debugfiles for a procName,
+    -    e.g. list in the txt file statically, or search here more intelligently
+*/
+int searchDebugFilesForProcName(std::string procName, target_ulong ip, FileLineInfo *fileInfo){
+    // search among all debug files, 
+    // if there is one ip info got a valid line info, we regard it as valide debug file for this proc.
+    bool found = false;
+    for (std::vector<std::string>::size_type i = 0; i < gDebugFiles.size(); i++){
+        if (addr2line(gDebugFiles[i], ip, fileInfo) == 0){
+            // found info from debugfile
+            // link this debugfile with procName
+            gProcToDebugFileIndex[procName] = (int) i;
+            return 0;
+        }
+    }
+    // if (found)
+    gProcToDebugDone[procName]=true;
+    return 0;
+}
+
 /* getLineInfoForAsidIP:
 
     - given asid, and ip, trying to find proper debug file and call addr2line to get the line info
@@ -3176,6 +3204,12 @@ int getLineInfoForAsidIP(target_ulong asid_target, target_ulong ip, FileLineInfo
 
     }else{
         //no proc name found for asid: 
+        // try to search it if never searched.
+        
+        if (! gProcToDebugDone[procName]){
+           return searchDebugFilesForProcName(procName,ip,fileInfo);
+        }
+
         printf("%s: no debug file found for proc name: %s\n", __FUNCTION__, procName );
         return -1;
     }
@@ -3184,7 +3218,7 @@ int getLineInfoForAsidIP(target_ulong asid_target, target_ulong ip, FileLineInfo
     // TODO: might be different debug file for a proc?
     // Now only 1 debug file for the proc.
 
-    if ( addr2line(debugFileName, ip, fileInfo)== 0 ){
+    if ( addr2line(debugFileName, ip, fileInfo) == 0 ){
         return 0;
     }else{
         return -1;
@@ -4648,6 +4682,31 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
 }
 
 
+/* int checkNewProc (std::string procName)
+    - check whether procName is in gProcs, 
+    - if does not exist, add it to gProcs and return its index; 
+    - if exists, nothing change and return its index.
+*/
+int checkNewProc(std::string procName){
+
+    int procIndex;
+    std::vector<std::string>::iterator procNameIt =  std::find(gProcs.begin(), gProcs.end(), item);
+    
+    if ( procNameIt != gProcs.end() ){
+        // new asid belongs to an old proc name.
+        procIndex = (int) ( procNameIt - gProcs.begin());
+
+    }else{
+        // new asid belongs to a new proc name.
+        printf("%s: got a new proc: %s\n", 
+            __FUNCTION__, procName.c_str());
+        // store it in gProcs, and the map
+        gProcs.push_back(curProc);
+        procIndex = (int) gProcs.size()-1;
+    }
+
+    return procIndex;
+}
 /* handle_proc_change
 
     - this is used to monitor the asid changes
@@ -4678,22 +4737,14 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
         // got a new asid 
         // now check the name. If name already exists, get the index; if not, insert into gProcs and get the new index;
         // use index to store asid -- procName mapping.
-        int procIndex;
+        int oldgProcSize = gProcs.size();
 
-        std::vector<std::string>::iterator procNameIt =  std::find(gProcs.begin(), gProcs.end(), item);
-        
-        if ( procNameIt != gProcs.end() ){
-            // new asid belongs to an old proc name.
-            procIndex = (int) ( procNameIt - gProcs.begin());
+        int procIndex=checkNewProc(curProc);
 
-        }else{
-            // new asid belongs to a new proc name.
-            printf("%s: got a new proc: %s, with asid: 0x" TARGET_FMT_lx, 
-                __FUNCTION__, proc->name, asid);
-            // store it in gProcs, and the map
-            gProcs.push_back(curProc);
-            procIndex = (int) gProcs.size()-1;
-
+        if (procIndex == oldgProcSize){
+            // gProcs is inserted with a new proc
+            printf("%s: got a new proc: %s, asid: 0x " TARGET_FMT_lx "\n", 
+            __FUNCTION__, procName.c_str(), asid);
         }
 
         gAsidToProcIndex[asid] = procIndex;
@@ -4726,6 +4777,11 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
         printf("Dynamic libraries list (%d libs):\n", ms->num);
         for (i = 0; i < ms->num; i++)
             printf("\tasid: 0x" TARGET_FMT_lx "\tsize:" TARGET_FMT_ld "\t%-24s %s\n", ms->module[i].base, ms->module[i].size, ms->module[i].name, ms->module[i].file);
+
+            int oldgProcSize = (int) gProcs.size();
+            int procIndex = checkNewProc(std::string(ms->module[i].name));
+            gAsidToProcIndex[ ms->module[i].base ] = procIndex;
+
     }
 
 }
