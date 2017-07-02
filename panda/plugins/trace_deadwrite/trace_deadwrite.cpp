@@ -4779,8 +4779,8 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
     //check to be safe:
     if (panda_current_asid(cpu) != asid){
         printf("%s: BUG in Panda: on_proc_change asid not the current asid!!\n", __FUNCTION__);
-        printf("%s:\tcurrent asid: 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid);
-        printf("%s:\tasid by on_proc_change callback: 0x" TARGET_FMT_lx "\n", __FUNCTION__, panda_current_asid(cpu));
+        printf("%s:\tcurrent asid: 0x" TARGET_FMT_lx "\n", __FUNCTION__, panda_current_asid(cpu));
+        printf("%s:\tasid by on_proc_change callback: 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid);
         asid = panda_current_asid(cpu);
         exit(-1);
     }
