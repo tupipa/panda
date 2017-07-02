@@ -4718,7 +4718,8 @@ int handle_asid_change(CPUState *cpu, target_ulong old_asid, target_ulong new_as
         printf("%s: TODO: handle kernel binaries here\n", __FUNCTION__);
         return 0;
     }else{
-        
+        printf("%s: asid change: old: 0x" TARGET_FMT_lx ", new: 0x" TARGET_FMT_lx "\n", 
+            __FUNCTION__, old_asid, new_asid);
         return 0;
     }
 
