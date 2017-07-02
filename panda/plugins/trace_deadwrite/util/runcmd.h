@@ -6,14 +6,15 @@
 #include <stdio.h>
 #include <string>
 
-std::string runcmd(const char* cmd);
+std::string runcmd(const std::string cmd_string);
 
 
 // cite: https://stackoverflow.com/questions/478898/how-to-execute-a-command-and-get-output-of-command-within-c-using-posix
 
 // pre-c++11 version.
 
-std::string runcmd(const char* cmd) {
+std::string runcmd(const std::string cmd_string) {
+    const char * cmd = cmd_string.c_str();
     char buffer[128];
     std::string result = "";
     FILE* pipe = popen(cmd, "r");

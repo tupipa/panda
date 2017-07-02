@@ -568,13 +568,14 @@ struct ContextNode {
 
 #ifdef IP_AND_CCT
 struct FileLineInfo{
+    bool valid; // set to valid if FileLineInfo is stored in it.
     std::string fileName;
     std::string funName;
     unsigned long lineNum;
     std::string extraInfo;
 
 	bool operator==(const FileLineInfo  & x) const{
-		if ( this->fileName == x.fileName && this->lineNum == x.lineNum)
+		if ( valid && this->fileName == x.fileName && this->lineNum == x.lineNum)
             return true;
 		return false;
 	}
@@ -2412,95 +2413,6 @@ inline VOID ReleaseLock(){
 //     pri_funct_livevar_iter(cpu, pc, (liveVarCB) pfun, (void *) &args);
 // }
 
-int addr2line(std::string *debugfile, target_ulong addr, FileLineInfo * lineInfo){
-    
-    // convert line number to string
-    std::stringstream stream;
-    stream << std::hex << addr;
-    std::string str_addr( stream.str());
-
-    std::string cmd;
-    cmd = "addr2line -f -p -e " + *debugfile + " " + str_addr;
-    std::cout << cmd << std::endl;
-
-    string rawLineInfo = runcmd(cmd);
-
-    if (rawLineInfo.find("??:0") != std::string:npos){
-        // printf("No result from addr2line\n");
-        return -1;
-
-    }else{
-
-        printf("get addr2line result: %s, now parse it\n", rawLineInfo.c_str());
-        //TODO. parse and store it as FileLineInfo struct.
-        size_t pos = rawLineInfo.find(" ");
-        lineInfo->funName = rawLineInfo.substring(0,pos); //store fun name.
-
-        std::string tmp = rawLineInfo.substring(pos+1); // ignore 
-        
-        //find second space, must be after 'at'
-        pos = tmp.find(" ");
-        tmp = rawLineInfo.substring(pos+1); //ignore 'at'
-
-        pos = tmp.find(":");
-        lineInfo->fileName = tmp.substring(0, pos);
-        tmp = rawLineInfo.substring(pos+1); //ignore file name.
-
-        pos = tmp.find(" ");
-        lineInfo->lineNum = tmp.substring(0, pos);
-
-        if (pos != std::string::npos){
-            tmp = rawLineInfo.substring(pos); //ignore line Num.
-            lineInfo->extraInfo = tmp;
-        }else{
-            lineInfo->extraInfo = ""
-        }
-    }
-    return 0;
-}
-
-/*
-    int getFileLineInfoFinal for target_asid
-
-    called after replay finished.
-    using addr2line with debug symbol files.
-    fill gAsidPCtoFileLine for each available asids.
-    need to know the "asid <-> debug_symbol_file" mapping relationships (i.e. gProcToDebugFileIndex[asid])
-
-*/
-int getFileLineInfoFinal(target_ulong target_asid){
-
-    FileLineInfo lineInfo;
-
-    // if (gProcToDebugFileIndex.find(target_asid) == gProcToDebugFileIndex.end()){
-    //     // no debug file available for this asid.
-    //     return;
-    // }
-    // int rc = addr2line(gProcToDebugFileIndex[target_asid], pc, &lineInfo);
-
-    int rc2 = addr2line(gCurrentTargetDebugFile, pc, &lineInfo);
-    // We are not in dwarf info
-    if (rc2 == -1){
-        // printf("%s: we are not in dwarf info\n", __FUNCTION__);
-        return;
-    }
-
-
-    std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(target_asid);
-
-    std::tr1::unordered_map<ADDRINT, FileLineInfo *> *asidMap;
-
-    if (asidMapIt == gAsidPCtoFileLine.end()){
-        // no map for this asid yet, create one
-        asidMap = new std::tr1::unordered_map<ADDRINT, FileLineInfo *>;
-        gAsidPCtoFileLine[gCurrentASID] = asidMap;
-    }else{
-        asidMap = gAsidPCtoFileLine[gCurrentASID];
-    }
-
-
-}
-
 /*
     void getAndSetSrcInfo:
 
@@ -2689,36 +2601,8 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
     //######################################################################################################
 
-
-    // Note: predicated instructions are correctly handled as given in PIN's sample example pinatrace.cpp
     
-    /* Comment taken from PIN sample : 
-        Instruments memory accesses using a predicated call, i.e.
-        the instrumentation is called iff the instruction will actually be executed.
-        
-        The IA-64 architecture has explicitly predicated instructions.
-        On the IA-32 and Intel(R) 64 architectures conditional moves and REP
-        prefixed instructions appear as predicated instructions in Pin. */
-    
-    
-    // How may memory operations?
-    // lele: no need to do this.
-    // UINT32 memOperands = INS_MemoryOperandCount(ins);
-    
-    // Also get the full stack here
-    // CallStack callstack = {0};
-    // callstack.n = get_callers(callstack.callers, n_callers, env);
-    // printf ("get %d callers\n", callstack.n);
-    // callstack.pc = p.pc;
-    // callstack.asid = p.cr3;
-    
-
-    // If it is a call/ret instruction, we need to adjust the CCT.
-    // ManageCallingContext(ins);
-    //ManageCallingContext(&callstack); //lele: ported from deadspy, May 6, 2017
-    
-    
-    uint32_t slot = 0; // only used for write op. Set to gCurrentSlot when this is write.
+    uint32_t slot = 0; // only used for write op.
 
     // uint32_t slot=gCurrentTraceBlock->nSlots;
 
@@ -3194,6 +3078,133 @@ int mem_write_callback(CPUState *env, target_ulong pc, target_ulong addr,
 //last STEP: printing
 //#########################################################################
 
+
+int addr2line(std::string debugfile, target_ulong addr, FileLineInfo * lineInfo){
+    
+    // convert line number to string
+    std::stringstream stream;
+    stream << std::hex << addr;
+    std::string str_addr( stream.str());
+
+    std::string cmd;
+    cmd = "addr2line -f -p -e " + debugfile + " " + str_addr;
+    std::cout << cmd << std::endl;
+
+    std::string rawLineInfo = runcmd(cmd);
+
+    printf("%s: cmd returned: %s\n", __FUNCTION__, rawLineInfo.c_str());
+
+    if (rawLineInfo.find("??:0") != std::string::npos){
+        // printf("No result from addr2line\n");
+        return -1;
+
+    }else{
+
+        printf("get addr2line result: %s, now parse it\n", rawLineInfo.c_str());
+        //TODO. parse and store it as FileLineInfo struct.
+        size_t pos = rawLineInfo.find(" ");
+        lineInfo->funName = rawLineInfo.substr(0,pos); //store fun name.
+
+        std::string tmp = rawLineInfo.substr(pos+1); // ignore 
+        
+        //find second space, must be after 'at'
+        pos = tmp.find(" ");
+        tmp = rawLineInfo.substr(pos+1); //ignore 'at'
+
+        pos = tmp.find(":");
+        lineInfo->fileName = tmp.substr(0, pos);
+        tmp = rawLineInfo.substr(pos+1); //ignore file name.
+
+        pos = tmp.find(" ");
+        std::string Text = tmp.substr(0, pos);;//string containing the number
+        unsigned long Result;//number which will contain the result
+        std::stringstream convert(Text); // stringstream used for the conversion initialized with the contents of Text
+        if ( !(convert >> Result) ){//give the value to Result using the characters in the string
+            Result = 0;//if that fails set Result to 0
+        }
+
+        lineInfo->lineNum = Result;
+
+        if (pos != std::string::npos){
+            tmp = rawLineInfo.substr(pos); //ignore line Num.
+            lineInfo->extraInfo = tmp;
+        }else{
+            lineInfo->extraInfo = "";
+        }
+    }
+    return 0;
+}
+
+/* getLineInfoForAsid:
+
+    - given asid, and pc, trying to find proper debug file and call addr2line to get the line info
+
+    - here we create and maintain a debug file vector for each asid <-> debugfiles 
+
+*/
+
+int getLineInfoForAsid(target_ulong asid_target, target_ulong, FileLineInfo *fileInfo){
+
+    //1. get proc name for asid
+    gProcs;
+    gAsidToProcIndex;
+
+    //2. get debug file for proc name
+
+    gProcToDebugFileIndex;
+    gDebugFiles;
+
+    //3, iterate through all debug files for proc
+    std::string debugfile ;
+
+}
+
+/*
+    int getFileLineInfoFinal for target_asid
+    called after replay finished.
+    using addr2line with debug symbol files.
+    fill gAsidPCtoFileLine for each available asids.
+    need to know the "asid <-> debug_symbol_file" mapping relationships (i.e. gProcToDebugFileIndex[asid])
+
+*/
+// int getFileLineInfoFinal(target_ulong target_asid){
+
+    
+
+//     target_ulong pc = ;
+
+//     FileLineInfo lineInfo;
+
+//     // if (gProcToDebugFileIndex.find(target_asid) == gProcToDebugFileIndex.end()){
+//     //     // no debug file available for this asid.
+//     //     return;
+//     // }
+//     // int rc = addr2line(gProcToDebugFileIndex[target_asid], pc, &lineInfo);
+
+//     int rc2 = addr2line(gCurrentTargetDebugFile, pc, &lineInfo);
+//     // We are not in dwarf info
+//     if (rc2 == -1){
+//         // printf("%s: we are not in dwarf info\n", __FUNCTION__);
+//         return;
+//     }
+
+
+//     std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(target_asid);
+
+//     std::tr1::unordered_map<ADDRINT, FileLineInfo *> *asidMap;
+
+//     if (asidMapIt == gAsidPCtoFileLine.end()){
+//         // no map for this asid yet, create one
+//         asidMap = new std::tr1::unordered_map<ADDRINT, FileLineInfo *>;
+//         gAsidPCtoFileLine[gCurrentASID] = asidMap;
+//     }else{
+//         asidMap = gAsidPCtoFileLine[gCurrentASID];
+//     }
+
+
+// }
+
+
     // Given a context node (curContext), traverses up in the chain till the root and prints the entire calling context 
     
     VOID PrintFullCallingContext(ContextNode * curContext){
@@ -3461,7 +3472,12 @@ inline target_ulong GetMeasurementBaseCount(){
         std::tr1::unordered_map<ADDRINT, FileLineInfo *> *asidMap;
 
         if (asidMapIt == gAsidPCtoFileLine.end()){
-            // no map for this asid , warning;
+            // no map for this asid , try to use addr2line to get line info;
+            // 
+            FileLineInfo lineForPc;
+
+            getLineInfoForAsid(target_asid, ip, &lineForPc);
+
             printf("%s: WARNING: no asidMap for asid 0x" TARGET_FMT_lx "\n", __FUNCTION__, target_asid);
             *line = 0;
             *file = "debuginfo_not_available_for_asid.txt";
@@ -3476,7 +3492,7 @@ inline target_ulong GetMeasurementBaseCount(){
                 // no line info for pc, warning;
                 // printf("%s: WARNING: no line/file info for ip 0x" TARGET_FMT_lx "\n", __FUNCTION__, ip);
                 *line = 0;
-                *file = "file_not_available_for_pc.txt";
+                *file = "file_not_available_for_pc";
                 *func = "NA";
             }else{
                 // line info exists, check whether changes
@@ -4672,22 +4688,23 @@ void report_deadspy(void * self){
     Fini();
 }
 
-void clear_insn(){
-    // std::tr1::unordered_map<target_ulong, cs_insn *>::iterator insnIt;
-    // for (insnIt = tb_insns.begin(); insnIt != tb_insns.end(); insnIt ++ ){
-    //     int count = tb_insns_count[insnIt -> first];
-    //     cs_insn * insn = insnIt->second;
-    //     cs_free(insn, count);
-    // }
+// void clear_insn(){
+//     std::tr1::unordered_map<target_ulong, cs_insn *>::iterator insnIt;
+//     for (insnIt = tb_insns.begin(); insnIt != tb_insns.end(); insnIt ++ ){
+//         int count = tb_insns_count[insnIt -> first];
+//         cs_insn * insn = insnIt->second;
+//         cs_free(insn, count);
+//     }
 
-}
+// }
+
 // TODO void clear gBlockShadowMap and gBlockShadowIPtoSlots
 // TODO void clear
 void uninit_plugin(void *self) {
 
     printf("%s: report deadspy\n", __FUNCTION__);
     report_deadspy(self);
-    clear_insn();
+    // clear_insn();
 
     printIgnoredASIDs();
 
