@@ -4764,7 +4764,7 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
 
         if (procIndex == oldgProcSize){
             // gProcs is inserted with a new proc
-            printf("%s: got a new proc: %s, asid: 0x " TARGET_FMT_lx "\n", 
+            printf("%s: got a new proc: %s, asid: 0x" TARGET_FMT_lx "\n", 
             __FUNCTION__, curProc.c_str(), asid);
         }
         gAsidToProcIndex[asid] = procIndex;
