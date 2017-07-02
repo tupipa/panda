@@ -713,6 +713,7 @@ std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, int> *> gBlock
 std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *> gAsidPCtoFileLine;
 
 std::string gProcToMonitor;
+bool gProcFound;
 //store all debug file paths
 std::vector<std::string> gDebugFiles;
 //store all process names
@@ -3150,7 +3151,7 @@ int addr2line(std::string debugfile, target_ulong addr, FileLineInfo * lineInfo)
 int searchDebugFilesForProcName(std::string procName, target_ulong ip, FileLineInfo *fileInfo){
     // search among all debug files, 
     // if there is one ip info got a valid line info, we regard it as valide debug file for this proc.
-    bool found = false;
+    // bool found = false;
     for (std::vector<std::string>::size_type i = 0; i < gDebugFiles.size(); i++){
         if (addr2line(gDebugFiles[i], ip, fileInfo) == 0){
             // found info from debugfile
@@ -3210,7 +3211,7 @@ int getLineInfoForAsidIP(target_ulong asid_target, target_ulong ip, FileLineInfo
            return searchDebugFilesForProcName(procName,ip,fileInfo);
         }
 
-        printf("%s: no debug file found for proc name: %s\n", __FUNCTION__, procName );
+        printf("%s: no debug file found for proc name: %s\n", __FUNCTION__, procName.c_str() );
         return -1;
     }
 
@@ -3903,7 +3904,7 @@ VOID printIgnoredASIDs(){
     // Iterate Over the Unordered Set and display it
     printf("%s: ignored ASIDs:\n", __FUNCTION__);
 	for (target_ulong asid_ : gIgnoredASIDs)
-		printf("\t0x" TARGET_FMT_lx "\n", asid_);
+		printf("\t0x" TARGET_FMT_lx ": procName: %s\n", asid_, gProcs[gAsidToProcIndex[asid_]].c_str());
 }
 // done last step: printing
 
@@ -4690,26 +4691,45 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
 int checkNewProc(std::string procName){
 
     int procIndex;
-    std::vector<std::string>::iterator procNameIt =  std::find(gProcs.begin(), gProcs.end(), item);
+    std::vector<std::string>::iterator procNameIt =  std::find(gProcs.begin(), gProcs.end(), procName);
     
     if ( procNameIt != gProcs.end() ){
-        // new asid belongs to an old proc name.
+        // an old proc name.
         procIndex = (int) ( procNameIt - gProcs.begin());
 
     }else{
-        // new asid belongs to a new proc name.
+        // a new proc name.
         printf("%s: got a new proc: %s\n", 
             __FUNCTION__, procName.c_str());
         // store it in gProcs, and the map
-        gProcs.push_back(curProc);
+        gProcs.push_back(procName);
         procIndex = (int) gProcs.size()-1;
     }
 
     return procIndex;
 }
+
+
+// only tracking kernel asid, because asidstory pluging skips this
+int handle_asid_change(CPUState *cpu, target_ulong old_asid, target_ulong new_asid) {
+
+    if (new_asid == 0) {
+        // handle_proc_change(cpu, new_asid, );
+        printf("%s: TODO: handle kernel binaries here\n", __FUNCTION__);
+        return 0;
+    }else{
+        
+        return 0;
+    }
+
+    return 0;
+}
+
+
+
 /* handle_proc_change
 
-    - this is used to monitor the asid changes
+    - this is used to monitor the non-kernel asid changes
     - once a new asid if found, store it's proc name and asid mapping relationship
     - this will change gProcs, gAsidToProcIndex, and gProcFound
 
@@ -4717,7 +4737,7 @@ Refer pri_dwarf.cpp and asidstory.h
     - handle asid change in pri_dwarf.
     - using callback from plugin asidstory.
 */
-typedef void (* on_proc_change_t)(CPUState *env, target_ulong asid, OsiProc *proc);
+typedef void (* on_proc_change_t)(CPUState *cpu, target_ulong asid, OsiProc *proc);
 
 void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
     if (!proc) { return; }
@@ -4744,45 +4764,71 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
         if (procIndex == oldgProcSize){
             // gProcs is inserted with a new proc
             printf("%s: got a new proc: %s, asid: 0x " TARGET_FMT_lx "\n", 
-            __FUNCTION__, procName.c_str(), asid);
+            __FUNCTION__, curProc.c_str(), asid);
         }
-
         gAsidToProcIndex[asid] = procIndex;
     }
 
     if (curProc == gProcToMonitor){
         // this is the monitored process.
         gProcFound = true;
-        // TODO: lele: might need to store all diff asids to this certain Proc Name.
-        // TODO: can use a list/vector to store it.
-        // NOTE: lele: this info could be derived from gAsidToProcIndex. So don't need to update dynamically here.
-    }else{
-        // this is not the monitored process. but still store the asid<-> procName mappings.
-
     }
 
     //check to be safe:
-    if (panda_current_asid(env) != asid){
-        printf("%s: BUG in Panda: on_proc_change asid not the current asid!!\n");
+    if (panda_current_asid(cpu) != asid){
+        printf("%s: BUG in Panda: on_proc_change asid not the current asid!!\n", __FUNCTION__);
+        printf("%s:\tcurrent asid: 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid);
+        printf("%s:\tasid by on_proc_change callback: 0x" TARGET_FMT_lx "\n", __FUNCTION__, panda_current_asid(cpu));
+        asid = panda_current_asid(cpu);
         exit(-1);
     }
 
     // TODO:  get lib/modules and update asid <-> procName mappings as well as asid <-> debugFile mappings
     // 
-    OsiModules *ms = get_libraries(cpu, current);
+    OsiModules *ms = get_libraries(cpu, proc);
     if (ms == NULL) {
         printf("No mapped dynamic libraries.\n");
     }
     else {
         printf("Dynamic libraries list (%d libs):\n", ms->num);
-        for (i = 0; i < ms->num; i++)
+        for (int i = 0; i < ms->num; i++){
+            
             printf("\tasid: 0x" TARGET_FMT_lx "\tsize:" TARGET_FMT_ld "\t%-24s %s\n", ms->module[i].base, ms->module[i].size, ms->module[i].name, ms->module[i].file);
 
             int oldgProcSize = (int) gProcs.size();
             int procIndex = checkNewProc(std::string(ms->module[i].name));
+            if (oldgProcSize == procIndex){
+                // a new proc found
+                printf("%s: a new dynamic lib name found %s\n", __FUNCTION__, ms->module[i].name);
+            }
             gAsidToProcIndex[ ms->module[i].base ] = procIndex;
-
+        }
     }
+
+    OsiModules *kms = get_modules(cpu);
+
+    if (kms == NULL) {
+        printf("No mapped kernel modules.\n");
+    } else {
+        printf("Kernel module list (%d modules):\n", kms->num);
+        for (int i = 0; i < kms->num; i++){
+            printf("\t0x" TARGET_FMT_lx "\t" TARGET_FMT_ld "\t%-24s %s\n", kms->module[i].base, kms->module[i].size, kms->module[i].name, kms->module[i].file);
+
+            int oldgProcSize = (int) gProcs.size();
+            int procIndex = checkNewProc(std::string(kms->module[i].name));
+            if (oldgProcSize == procIndex){
+                // a new proc found
+                printf("%s: a new kernel module name found %s\n", __FUNCTION__, kms->module[i].name);
+            }
+            gAsidToProcIndex[ kms->module[i].base ] = procIndex;
+        }
+    }
+
+
+    // clean up 
+    // printf("%s: clean up..\n", __FUNCTION__);
+    free_osimodules(ms);
+    // free_osimodules(kms); //no clean kms in osi_test.c
 
 }
 
@@ -4987,7 +5033,7 @@ bool init_plugin(void *self) {
 
         std::ifstream debug_file_names(debug_list);
         if (!debug_file_names) {
-            printf("Couldn't open %s; no strings to search for. Exiting.\n", stringsfile);
+            printf("Couldn't open %s; no strings to search for. Exiting.\n", debug_list);
             return false;
         }
 
@@ -5030,6 +5076,9 @@ bool init_plugin(void *self) {
 
     PPP_REG_CB("asidstory", on_proc_change, handle_proc_change);
 
+
+    pcb.asid_changed = handle_asid_change;
+    panda_register_callback(self, PANDA_CB_ASID_CHANGED, pcb);
 
     pcb.virt_mem_before_write = mem_write_callback;
     panda_register_callback(self, PANDA_CB_VIRT_MEM_BEFORE_WRITE, pcb);
