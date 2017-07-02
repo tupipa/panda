@@ -4744,7 +4744,8 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
     if (!proc) { return; }
     if (!proc->name) { return; }
 
-    printf("cur_proc_name: %s proc-to-monitor: %s\n", proc->name, gProcToMonitor.c_str());
+    printf("%s: cur_proc_name: %s proc-to-monitor: %s\n",
+        __FUNCTION__, proc->name, gProcToMonitor.c_str());
 
     std::string curProc(proc->name);
     // store the asid<-> procName mappings
