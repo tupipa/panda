@@ -588,7 +588,7 @@ struct FileLineInfo{
     std::string extraInfo;
 
 	bool operator==(const FileLineInfo  & x) const{
-		if ( valid && this->fileName == x.fileName && this->lineNum == x.lineNum)
+		if ( valid && x.valid && this->fileName == x.fileName && this->lineNum == x.lineNum)
             return true;
 		return false;
 	}
@@ -2501,6 +2501,7 @@ void getAndSetSrcInfo(CPUState *cpu, target_ulong pc, target_ulong addr, bool is
         lineForPc= new FileLineInfo;
         std::string fileN(info.filename);
         std::string funN(info.funct_name);
+        lineForPc->valid = true;
         lineForPc->fileName = fileN;
         lineForPc->funName = funN;
         lineForPc->lineNum = info.line_number;
@@ -2509,6 +2510,7 @@ void getAndSetSrcInfo(CPUState *cpu, target_ulong pc, target_ulong addr, bool is
         // line info exists, check whether changes
         lineForPc = (*asidMap)[pc];
         FileLineInfo newLineInfo;
+        newLineInfo.valid = true;
         newLineInfo.lineNum=info.line_number;
         newLineInfo.fileName=std::string(info.filename);
         newLineInfo.funName=std::string(info.funct_name);
@@ -3137,7 +3139,7 @@ int addr2line(std::string debugfile, target_ulong addr, FileLineInfo * lineInfo)
     }else{
 
         printf("get addr2line result: %s, now parse it\n", rawLineInfo.c_str());
-        //TODO. parse and store it as FileLineInfo struct.
+        //parse and store it as FileLineInfo struct.
         size_t pos = rawLineInfo.find(" ");
         lineInfo->funName = rawLineInfo.substr(0,pos); //store fun name.
 
@@ -3167,6 +3169,7 @@ int addr2line(std::string debugfile, target_ulong addr, FileLineInfo * lineInfo)
         }else{
             lineInfo->extraInfo = "";
         }
+        lineInfo->valid = true;
     }
     return 0;
 }
