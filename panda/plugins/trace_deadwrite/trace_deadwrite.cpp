@@ -944,39 +944,39 @@ inline void ** GetNextIPVecBuffer(uint32_t size){
 
 
 
-#ifdef IP_AND_CCT
+// #ifdef IP_AND_CCT
 
-    // Analysis routine called on entering a function (found in symbol table only)
-    //inline VOID UpdateDataOnFunctionEntry(ADDRINT currentIp){
-    //LELE: moved to before_block_exec
-    inline VOID UpdateDataOnFunctionEntry(CPUState *cpu, TranslationBlock *tb){
+//     // Analysis routine called on entering a function (found in symbol table only)
+//     //inline VOID UpdateDataOnFunctionEntry(ADDRINT currentIp){
+//     //LELE: moved to before_block_exec
+//     inline VOID UpdateDataOnFunctionEntry(CPUState *cpu, TranslationBlock *tb){
 
-        // if I enter here due to a tail-call, then we will make it a child under the parent context node
-        // if (!gInitiatedCall){
-        //     printf("a tailer call?\n");
-        //     gCurrentContext = gCurrentContext->parent;
-        // } else {
+//         // if I enter here due to a tail-call, then we will make it a child under the parent context node
+//         // if (!gInitiatedCall){
+//         //     printf("a tailer call?\n");
+//         //     gCurrentContext = gCurrentContext->parent;
+//         // } else {
 
-        if (gInitiatedCall){
-            // normal function call, so unset gInitiatedCall
-            // printf("%s:get a new function call !\n", __FUNCTION__);
-            gInitiatedCall = false;
-            // Let GoDownCallChain do the work needed to setup pointers for child nodes.
-            GoDownCallChain(cpu,tb);
+//         if (gInitiatedCall){
+//             // normal function call, so unset gInitiatedCall
+//             // printf("%s:get a new function call !\n", __FUNCTION__);
+//             gInitiatedCall = false;
+//             // Let GoDownCallChain do the work needed to setup pointers for child nodes.
+//             GoDownCallChain(cpu,tb);
 
-            //TODO: check if tb->pc is equal with currentIp
-            // printf("%s: go down to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
-            // printf("%s: go down to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
+//             //TODO: check if tb->pc is equal with currentIp
+//             printf("%s: go down to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
+//             // printf("%s: go down to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
         
-        }else{
-            printf("ERROR: call function entry, but call flag is not true\n");
-            exit(-1);
-        }
+//         }else{
+//             printf("ERROR: call function entry, but call flag is not true\n");
+//             exit(-1);
+//         }
 
 
-    }
+//     }
 
-#endif //end IP_AND_CCT
+// #endif //end IP_AND_CCT
 
 // MT
 #ifndef MULTI_THREADED
@@ -986,18 +986,20 @@ inline void ** GetNextIPVecBuffer(uint32_t size){
 
 //VOID GoDownCallChain(ADDRINT callee){
 VOID GoDownCallChain(CPUState *cpu, TranslationBlock *tb){
-    printf("%s: go down chain, tb->pc = 0x" TARGET_FMT_lx "\n",__FUNCTION__, tb->pc);
+    // printf("%s: go down chain, tb->pc = 0x" TARGET_FMT_lx "\n",__FUNCTION__, tb->pc);
     target_ulong callee=tb->pc;
-    if( ( gContextIter = (gCurrentContext->childContexts).find(callee)) != gCurrentContext->childContexts.end()) {
+    // if( ( gContextIter = (gCurrentContext->childContexts).find(callee)) != gCurrentContext->childContexts.end()) {
+    if ( (gCurrentContext->childContexts).count(callee) != 0){
         // printf("%s: down to existed context node; bb addr: 0x" TARGET_FMT_lx "\n", __FUNCTION__, callee);
-        gCurrentContext = gContextIter->second;
+        // gCurrentContext = gContextIter->second;
+        gCurrentContext = (gCurrentContext->childContexts)[callee];
     } else {
-        // printf("%s: new context node; bb addr: 0x" TARGET_FMT_lx "\n",__FUNCTION__, callee);
         ContextNode * newChild =  new ContextNode();
         newChild->parent = gCurrentContext;
         newChild->address = callee;
-        gCurrentContext->childContexts[callee] = newChild;
+        (gCurrentContext->childContexts)[callee] = newChild;
         gCurrentContext = newChild;
+        printf("%s: new context node; bb addr: 0x" TARGET_FMT_lx "\n",__FUNCTION__, callee);
     }
 }
 
@@ -2459,7 +2461,7 @@ inline VOID ReleaseLock(){
 void getAndSetSrcInfo(CPUState *cpu, target_ulong pc, target_ulong addr, bool isWrite, target_ulong target_asid){
     SrcInfo info;
     // if NOT in source code, just return
-    // printf("Now in %s now call: %p\n", __FUNCTION__, &pri_get_pc_source_info);
+    printf("Now in %s, now call: %p\n", __FUNCTION__, &pri_get_pc_source_info);
     // printf("Now in %s &info: %p\n", __FUNCTION__, &info);
     
     
@@ -2564,7 +2566,9 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
     target_ulong asid_cur = panda_current_asid(env);
 
+// #if defined(TARGET_I386) && !defined(TARGET_X86_64)
     // getAndSetSrcInfo(env, pc, addr, is_write, asid_cur);
+// #endif
 
     // target_ulong asid_cur = 0;
 
@@ -2583,9 +2587,9 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             gIgnoredASIDs.insert(asid_cur);
             return 1;
         } 
-        // else{
-        //     printf("%s: trace one ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
-        // }
+        else{
+            printf("%s: trace one ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
+        }
     }else if (gTraceKernel){
         if (asid_cur != 0x0 ){
             //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
@@ -2607,7 +2611,11 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
         printf("\n All: Mem op for ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
     }
 
-    getAndSetSrcInfo(env, pc, addr, is_write, asid_cur);
+
+// #if defined(TARGET_I386) && !defined(TARGET_X86_64)
+    // getAndSetSrcInfo(env, pc, addr, is_write, asid_cur);
+// #endif
+
     // return 0;
 //    string_pos &sp = text_tracker[p];
 
@@ -2721,8 +2729,8 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     if (is_write){
         bool needUpdateTraceBlock=false;
 
-        // printf("%s: record write pc: %p, addr: %p (%d bytes).\n",
-        //     __FUNCTION__, (void*)(uintptr_t)pc, (void *)(uintptr_t)addr, (int)size);
+        printf("%s: record write pc: %p, addr: %p (%d bytes).\n",
+            __FUNCTION__, (void*)(uintptr_t)pc, (void *)(uintptr_t)addr, (int)size);
 
         // uint32_t slot = gCurrentTraceBlock->nSlots;
 
@@ -4390,12 +4398,12 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
     //  - initialized here but filled at mem_callback.
 
     //if( (gTraceIter = (gCurrentContext->childBlocks).find(currentIp)) != gCurrentContext->childBlocks.end()) {
-    if( (gTraceIter = (gCurrentContext->childBlocks).find(currentIp)) != gCurrentContext->childBlocks.end()) {
+    if( (gTraceIter = (gCurrentContext->childBlocks).find(currentIp)) != (gCurrentContext->childBlocks).end()) {
         // if tracenode is already exists
         // set the current Trace to the new trace
         // set the IpVector
         gNewBlockNode = false;
-        // printf("%s:Trace Node already exists\n",__FUNCTION__);
+        printf("%s:Trace Node already exists\n",__FUNCTION__);
         gCurrentTraceBlock = gTraceIter->second;
         // printf("%s: reset gCurrentTraceBlock for existed Node\n", __FUNCTION__);
         gCurrentTraceIpVector = gCurrentTraceBlock->childIPs;
@@ -4427,7 +4435,7 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 
         // Create new trace node and insert under the context node.
 
-        // printf("%s: Create and initialize a new Trace node.\n",__FUNCTION__);
+        printf("%s: Create and initialize a new Trace node.\n",__FUNCTION__);
         gNewBlockNode = true;
 
         BlockNode * newChild = new BlockNode();
@@ -4471,8 +4479,8 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 
 #ifdef CONTINUOUS_DEADINFO
         // if CONTINUOUS_DEADINFO is set, then all ip vecs come from a fixed 4GB buffer
-        // printf("%s: Continuous Info: GetNextIPVecBuffer, with size of tb size: %d...\n", 
-            // __FUNCTION__, tb->size);
+        printf("%s: Continuous Info: GetNextIPVecBuffer, with size of tb size: %d...\n", 
+            __FUNCTION__, tb->size);
         newChild->childIPs  = (BlockNode **)GetNextIPVecBuffer(tb->size);
         // initialize as 0, get from IPVecBuffer one by one during mem_callback
         // printf("%s: Continuous Info: initialize childIPs as 0\n", __FUNCTION__);
@@ -4491,8 +4499,8 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
         gCurrentContext->childBlocks[currentIp] = newChild;
         gCurrentTraceBlock = newChild;
 
-        // printf("%s: reset gCurrentTraceIpVector pointing to %p, for tb->pc: 0x" TARGET_FMT_lx "\n",
-        //     __FUNCTION__, gCurrentTraceBlock->childIPs, gCurrentTraceBlock->address);
+        printf("%s: reset gCurrentTraceIpVector pointing to %p, for tb->pc: 0x" TARGET_FMT_lx "\n",
+            __FUNCTION__, gCurrentTraceBlock->childIPs, gCurrentTraceBlock->address);
 
         gCurrentTraceIpVector = gCurrentTraceBlock->childIPs;
 
@@ -4621,7 +4629,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
         // Let GoDownCallChain do the work needed to setup pointers for child nodes.
         GoDownCallChain(cpu,tb);
         //TODO: check if tb->pc is equal with currentIp
-        // printf("%s: go down to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
+        printf("%s: go down to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
         // printf("%s: go down to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
         
     }
@@ -4633,6 +4641,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     instrumentBeforeBlockExe(cpu, tb);
 
 
+    printf("%s: done. tb->pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
     return 1;
 }
 
@@ -4889,7 +4898,7 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
         printf("Dynamic libraries list (%d libs):\n", ms->num);
         for (int i = 0; i < ms->num; i++){
             
-            printf("\tasid: 0x" TARGET_FMT_lx "\tsize:" TARGET_FMT_ld "\t%-24s %s\n", ms->module[i].base, ms->module[i].size, ms->module[i].name, ms->module[i].file);
+            // printf("\tasid: 0x" TARGET_FMT_lx "\tsize:" TARGET_FMT_ld "\t%-24s %s\n", ms->module[i].base, ms->module[i].size, ms->module[i].name, ms->module[i].file);
 
             int oldgProcSize = (int) gProcs.size();
             int procIndex = checkNewProc(std::string(ms->module[i].name));
@@ -4908,7 +4917,7 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
     } else {
         printf("Kernel module list (%d modules):\n", kms->num);
         for (int i = 0; i < kms->num; i++){
-            printf("\t0x" TARGET_FMT_lx "\t" TARGET_FMT_ld "\t%-24s %s\n", kms->module[i].base, kms->module[i].size, kms->module[i].name, kms->module[i].file);
+            // printf("\t0x" TARGET_FMT_lx "\t" TARGET_FMT_ld "\t%-24s %s\n", kms->module[i].base, kms->module[i].size, kms->module[i].name, kms->module[i].file);
 
             int oldgProcSize = (int) gProcs.size();
             int procIndex = checkNewProc(std::string(kms->module[i].name));
@@ -5148,24 +5157,23 @@ bool init_plugin(void *self) {
 // ADD support of pri_dwarf. get Line Number and Source File Name by PC.
     // only support i386
     // Refer: pri_simple, pri_dwarf
-#if defined(TARGET_I386) && !defined(TARGET_X86_64)
-// #if defined(TARGET_I386)
-    args = panda_get_args("pri_taint");
-    panda_require("pri");
-    assert(init_pri_api());
-    panda_require("pri_dwarf");
-    assert(init_pri_dwarf_api());
+// #if defined(TARGET_I386) && !defined(TARGET_X86_64)
+//     args = panda_get_args("pri_taint");
+//     panda_require("pri");
+//     assert(init_pri_api());
+//     panda_require("pri_dwarf");
+//     assert(init_pri_dwarf_api());
 
-    // PPP_REG_CB("pri", on_before_line_change, on_line_change);
-    //PPP_REG_CB("pri", on_fn_start, on_fn_start);
-    // {
-    //     panda_cb pcb;
-    //     pcb.virt_mem_before_write = virt_mem_write;
-    //     panda_register_callback(self,PANDA_CB_VIRT_MEM_BEFORE_WRITE,pcb);
-    //     pcb.virt_mem_after_read = virt_mem_read;
-    //     panda_register_callback(self,PANDA_CB_VIRT_MEM_AFTER_READ,pcb);
-    // }
-#endif
+//     // PPP_REG_CB("pri", on_before_line_change, on_line_change);
+//     //PPP_REG_CB("pri", on_fn_start, on_fn_start);
+//     // {
+//     //     panda_cb pcb;
+//     //     pcb.virt_mem_before_write = virt_mem_write;
+//     //     panda_register_callback(self,PANDA_CB_VIRT_MEM_BEFORE_WRITE,pcb);
+//     //     pcb.virt_mem_after_read = virt_mem_read;
+//     //     panda_register_callback(self,PANDA_CB_VIRT_MEM_AFTER_READ,pcb);
+//     // }
+// #endif
 // END support of pri_dwarf.
 //######################################################
     
