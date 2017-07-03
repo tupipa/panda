@@ -221,8 +221,8 @@ extern "C" {
     // void on_line_change(CPUState *cpu, target_ulong pc, const char *file_Name, const char *funct_name, unsigned long long lno);
 }
 
-// #include "callstack_instr/callstack_instr.h"
-// #include "callstack_instr/callstack_instr_ext.h"
+#include "callstack_instr/callstack_instr.h"
+#include "callstack_instr/callstack_instr_ext.h"
 
 // using namespace __gnu_cxx;
 
@@ -5143,9 +5143,9 @@ bool init_plugin(void *self) {
     //lele: step 3: sys int: set callstack plugins, enable precise pc, memcb, and set callback functions.
 
 
-    // panda_require("callstack_instr");
+    panda_require("callstack_instr");
     panda_require("osi");
-    // panda_require("osi_linux");
+    panda_require("osi_linux");
     panda_require("asidstory");
 
 
@@ -5154,7 +5154,7 @@ bool init_plugin(void *self) {
     assert(init_osi_api());
     // assert(init_asidstory_api());
     // assert(init_pri_api());
-    // if(!init_callstack_instr_api()) return false;
+    if(!init_callstack_instr_api()) return false;
 
 //#################################################
 // ADD support of pri_dwarf. get Line Number and Source File Name by PC.
