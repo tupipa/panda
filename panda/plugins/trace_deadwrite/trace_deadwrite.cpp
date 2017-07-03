@@ -182,19 +182,20 @@ extern "C" {
 #include "panda/addr.h"
 #include "panda/plog.h"
 
-#include "pri/pri_types.h"
-#include "pri/pri_ext.h"
-#include "pri/pri.h"
+// #include "pri/pri_types.h"
+// #include "pri/pri_ext.h"
+// #include "pri/pri.h"
 
 #include "osi/osi_types.h"
 #include "osi/osi_ext.h"
 
 #include "osi_linux/osi_linux_ext.h"
 
-#include "pri_dwarf/pri_dwarf_types.h"
-#include "pri_dwarf/pri_dwarf_ext.h"
+// #include "pri_dwarf/pri_dwarf_types.h"
+// #include "pri_dwarf/pri_dwarf_ext.h"
 
 #include "asidstory/asidstory.h"
+// #include "asidstory/asidstory_ext.h"
 
     bool init_plugin(void *);
     void uninit_plugin(void *);
@@ -2457,99 +2458,99 @@ inline VOID ReleaseLock(){
     called during mem_callback, given pc, find source code info: line number and source file name, or even debug symbols (such as variable name and value) if wanted
         - line/file info are stored in gAsidPCtoFileLine
         - will check if pc exists before add.
-*/
-void getAndSetSrcInfo(CPUState *cpu, target_ulong pc, target_ulong addr, bool isWrite, target_ulong target_asid){
-    SrcInfo info;
-    // if NOT in source code, just return
-    printf("Now in %s, now call: %p\n", __FUNCTION__, &pri_get_pc_source_info);
-    // printf("Now in %s &info: %p\n", __FUNCTION__, &info);
+// */
+// void getAndSetSrcInfo(CPUState *cpu, target_ulong pc, target_ulong addr, bool isWrite, target_ulong target_asid){
+//     SrcInfo info;
+//     // if NOT in source code, just return
+//     printf("Now in %s, now call: %p\n", __FUNCTION__, &pri_get_pc_source_info);
+//     // printf("Now in %s &info: %p\n", __FUNCTION__, &info);
     
     
-    int rc = pri_get_pc_source_info(cpu, pc, &info);
-    // printf("%s: done call: %p\n", __FUNCTION__, &pri_get_pc_source_info);
+//     int rc = pri_get_pc_source_info(cpu, pc, &info);
+//     // printf("%s: done call: %p\n", __FUNCTION__, &pri_get_pc_source_info);
 
-    // We are not in dwarf info
-    if (rc == -1){
-        // printf("%s: we are not in dwarf info\n", __FUNCTION__);
-        return;
-    }
-    // We are in the first byte of a .plt function
-    if (rc == 1) {
-        // printf("%s: we are in the first byte of a .plt function\n", __FUNCTION__);
-        return;
-    }
+//     // We are not in dwarf info
+//     if (rc == -1){
+//         // printf("%s: we are not in dwarf info\n", __FUNCTION__);
+//         return;
+//     }
+//     // We are in the first byte of a .plt function
+//     if (rc == 1) {
+//         // printf("%s: we are in the first byte of a .plt function\n", __FUNCTION__);
+//         return;
+//     }
 
-    // printf("%s: file: %s, line: %lu==, asid: 0x" TARGET_FMT_lx "\n", 
-    //     __FUNCTION__, info.filename, info.line_number, target_asid);
+//     // printf("%s: file: %s, line: %lu==, asid: 0x" TARGET_FMT_lx "\n", 
+//     //     __FUNCTION__, info.filename, info.line_number, target_asid);
 
-    // exit(-1);
+//     // exit(-1);
 
-    std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(target_asid);
+//     std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(target_asid);
 
-    std::tr1::unordered_map<ADDRINT, FileLineInfo *> *asidMap;
+//     std::tr1::unordered_map<ADDRINT, FileLineInfo *> *asidMap;
 
-    if (asidMapIt == gAsidPCtoFileLine.end()){
-        // no map for this asid yet, create one
-        asidMap = new std::tr1::unordered_map<ADDRINT, FileLineInfo *>;
-        gAsidPCtoFileLine[gCurrentASID] = asidMap;
-    }else{
-        asidMap = gAsidPCtoFileLine[gCurrentASID];
-    }
+//     if (asidMapIt == gAsidPCtoFileLine.end()){
+//         // no map for this asid yet, create one
+//         asidMap = new std::tr1::unordered_map<ADDRINT, FileLineInfo *>;
+//         gAsidPCtoFileLine[gCurrentASID] = asidMap;
+//     }else{
+//         asidMap = gAsidPCtoFileLine[gCurrentASID];
+//     }
 
-    std::tr1::unordered_map<ADDRINT, FileLineInfo *>::iterator lineForPcIt = (*asidMap).find(pc);
-    FileLineInfo *lineForPc;
-    if (lineForPcIt == (*asidMap).end()){
-        // no line info for pc, create one
-        lineForPc= new FileLineInfo;
-        std::string fileN(info.filename);
-        std::string funN(info.funct_name);
-        lineForPc->valid = true;
-        lineForPc->fileName = fileN;
-        lineForPc->funName = funN;
-        lineForPc->lineNum = info.line_number;
-        (*asidMap)[pc] = lineForPc;
-    }else{
-        // line info exists, check whether changes
-        lineForPc = (*asidMap)[pc];
-        FileLineInfo newLineInfo;
-        newLineInfo.valid = true;
-        newLineInfo.lineNum=info.line_number;
-        newLineInfo.fileName=std::string(info.filename);
-        newLineInfo.funName=std::string(info.funct_name);
+//     std::tr1::unordered_map<ADDRINT, FileLineInfo *>::iterator lineForPcIt = (*asidMap).find(pc);
+//     FileLineInfo *lineForPc;
+//     if (lineForPcIt == (*asidMap).end()){
+//         // no line info for pc, create one
+//         lineForPc= new FileLineInfo;
+//         std::string fileN(info.filename);
+//         std::string funN(info.funct_name);
+//         lineForPc->valid = true;
+//         lineForPc->fileName = fileN;
+//         lineForPc->funName = funN;
+//         lineForPc->lineNum = info.line_number;
+//         (*asidMap)[pc] = lineForPc;
+//     }else{
+//         // line info exists, check whether changes
+//         lineForPc = (*asidMap)[pc];
+//         FileLineInfo newLineInfo;
+//         newLineInfo.valid = true;
+//         newLineInfo.lineNum=info.line_number;
+//         newLineInfo.fileName=std::string(info.filename);
+//         newLineInfo.funName=std::string(info.funct_name);
 
-        if(! (newLineInfo == *lineForPc)){
-            printf("%s: ERROR: file/line info inconsistent for pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, pc);
-            printf("%s: \t old file name: %s, new file name: %s\n", __FUNCTION__, lineForPc->fileName.c_str(), newLineInfo.fileName.c_str());
-            printf("%s: \t old func name: %s, new func name: %s\n", __FUNCTION__, lineForPc->funName.c_str(), newLineInfo.funName.c_str());
-            printf("%s: \t old line: %lu, new line: %lu\n", __FUNCTION__, lineForPc->lineNum, newLineInfo.lineNum);
-            exit(-1);
-        }
+//         if(! (newLineInfo == *lineForPc)){
+//             printf("%s: ERROR: file/line info inconsistent for pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, pc);
+//             printf("%s: \t old file name: %s, new file name: %s\n", __FUNCTION__, lineForPc->fileName.c_str(), newLineInfo.fileName.c_str());
+//             printf("%s: \t old func name: %s, new func name: %s\n", __FUNCTION__, lineForPc->funName.c_str(), newLineInfo.funName.c_str());
+//             printf("%s: \t old line: %lu, new line: %lu\n", __FUNCTION__, lineForPc->lineNum, newLineInfo.lineNum);
+//             exit(-1);
+//         }
        
-    }
+//     }
 
-    // struct args args = {cpu, NULL, 0};
-    // pri_funct_livevar_iter(cpu, pc, (liveVarCB) pfun, (void *) &args);
-    // char *symbol_name = pri_get_vma_symbol(cpu, pc, addr);
-    // if (!symbol_name){
-    //     // symbol was not found for particular addr
-    //     if (isWrite) {
-    //         printf ("Virt mem write at 0x%x - (NONE)\n", addr);
-    //     }
-    //     else {
-    //         printf ("Virt mem read at 0x%x - (NONE)\n", addr);
-    //     }
-    //     return 0;
-    // }
-    // else {
-    //     if (isWrite) {
-    //         printf ("Virt mem write at 0x%x - \"%s\"\n", addr, symbol_name);
-    //     }
-    //     else {
-    //         printf ("Virt mem read at 0x%x - \"%s\"\n", addr, symbol_name);
-    //     }
-    // }
-    // return 0;
-}
+//     // struct args args = {cpu, NULL, 0};
+//     // pri_funct_livevar_iter(cpu, pc, (liveVarCB) pfun, (void *) &args);
+//     // char *symbol_name = pri_get_vma_symbol(cpu, pc, addr);
+//     // if (!symbol_name){
+//     //     // symbol was not found for particular addr
+//     //     if (isWrite) {
+//     //         printf ("Virt mem write at 0x%x - (NONE)\n", addr);
+//     //     }
+//     //     else {
+//     //         printf ("Virt mem read at 0x%x - (NONE)\n", addr);
+//     //     }
+//     //     return 0;
+//     // }
+//     // else {
+//     //     if (isWrite) {
+//     //         printf ("Virt mem write at 0x%x - \"%s\"\n", addr, symbol_name);
+//     //     }
+//     //     else {
+//     //         printf ("Virt mem read at 0x%x - \"%s\"\n", addr, symbol_name);
+//     //     }
+//     // }
+//     // return 0;
+// }
 
 
 // this creates BOTH the global for this callback fn (on_ssm_func)
@@ -5144,12 +5145,14 @@ bool init_plugin(void *self) {
 
     // panda_require("callstack_instr");
     panda_require("osi");
+    // panda_require("osi_linux");
     panda_require("asidstory");
 
 
     // assert(init_callstack_instr_api());
     assert(init_osi_linux_api());
     assert(init_osi_api());
+    // assert(init_asidstory_api());
     // assert(init_pri_api());
     // if(!init_callstack_instr_api()) return false;
 
@@ -5178,6 +5181,11 @@ bool init_plugin(void *self) {
 //######################################################
     
 
+    // Need this to get EIP with our callbacks
+    panda_enable_precise_pc();
+    // Enable memory logging
+    panda_enable_memcb();
+
     panda_do_flush_tb();
     printf("do_flush_tb enabled\n");
     //tb chaining disable
@@ -5185,10 +5193,6 @@ bool init_plugin(void *self) {
     printf("panda basic block chaining disabled\n");
 
 
-    // Need this to get EIP with our callbacks
-    panda_enable_precise_pc();
-    // Enable memory logging
-    panda_enable_memcb();
 
     // use asidstory to find out the asid's of the ProcToMonitor.
 

@@ -230,6 +230,7 @@ void panda_callbacks_asid_changed(CPUState *env, target_ulong old_asid, target_u
     for(plist = panda_cbs[PANDA_CB_ASID_CHANGED]; plist != NULL; plist = panda_cb_list_next(plist)) {
         plist->entry.asid_changed(env, old_asid, new_asid);
     }
+    // printf("%s: done\n", __FUNCTION__);
 }
 
 
