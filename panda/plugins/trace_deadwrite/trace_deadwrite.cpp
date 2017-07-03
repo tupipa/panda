@@ -167,13 +167,14 @@ using google::dense_hash_map;      // namespace where class lives by default
 #endif
 
 
-#include "panda/plugin.h"
-#include "panda/plugin_plugin.h"
-
 #include "util/runcmd.h"
 // #include <sstream>  // used to split strings.
 
 extern "C" {
+#include "panda/plugin.h"
+#include "panda/plugin_plugin.h"
+
+
 // #include "trace_mem.h"
 #include "trace_deadwrite.h"
 
@@ -188,28 +189,39 @@ extern "C" {
 #include "osi/osi_types.h"
 #include "osi/osi_ext.h"
 
+#include "osi_linux/osi_linux_ext.h"
+
 #include "pri_dwarf/pri_dwarf_types.h"
 #include "pri_dwarf/pri_dwarf_ext.h"
+
+#include "asidstory/asidstory.h"
 
     bool init_plugin(void *);
     void uninit_plugin(void *);
 
-    void init_deadspy();
-    int mem_write_callback(CPUState *env, target_ulong pc, target_ulong addr, target_ulong size, void *buf);
-    int mem_read_callback(CPUState *env, target_ulong pc, target_ulong addr, target_ulong size, void *buf);
+    // void init_deadspy();
+    // int mem_write_callback(CPUState *env, target_ulong pc, target_ulong addr, target_ulong size, void *buf);
+    // int mem_read_callback(CPUState *env, target_ulong pc, target_ulong addr, target_ulong size, void *buf);
 
+
+    // int before_block_exec(CPUState *cpu, TranslationBlock *tb) ;
+
+    // int after_block_exec(CPUState *cpu, TranslationBlock *tb) ;
+
+    // int handle_asid_change(CPUState *cpu, target_ulong old_asid, target_ulong new_asid);
+    
     // prototype for the register-this-callback fn
     //PPP_PROT_REG_CB(on_ssm);
     //PPP_PROT_REG_CB(on_deadwrite);
 
-    int get_loglevel() ;
-    void set_loglevel(int new_loglevel);
+    // int get_loglevel() ;
+    // void set_loglevel(int new_loglevel);
 
     // void on_line_change(CPUState *cpu, target_ulong pc, const char *file_Name, const char *funct_name, unsigned long long lno);
 }
 
-#include "callstack_instr/callstack_instr.h"
-#include "callstack_instr/callstack_instr_ext.h"
+// #include "callstack_instr/callstack_instr.h"
+// #include "callstack_instr/callstack_instr_ext.h"
 
 // using namespace __gnu_cxx;
 
@@ -726,6 +738,7 @@ std::tr1::unordered_map<std::string, int> gProcToDebugFileIndex;
 std::tr1::unordered_map<std::string, int> gDebugFiletoProcIndex;
 //store map from asid to proc name index.
 std::tr1::unordered_map<target_ulong, int> gAsidToProcIndex;
+std::tr1::unordered_map<target_ulong, OsiProc> gRunningProcs;
 //store currentTargetDebugPath, this should be the same as gDebugFiles[gProcToDebugFileIndex[gProcToMonitor]]
 std::string gCurrentTargetDebugFile;
 
@@ -827,6 +840,23 @@ inline bool MergedDeadInfoComparer(const DeadInfoForPresentation & first, const 
 inline bool DeadInfoComparer(const DeadInfo &first, const DeadInfo &second);
 inline bool IsValidIP(ADDRINT ip);
 inline bool IsValidIP(DeadInfo  di);
+
+
+
+void init_deadspy();
+int mem_write_callback(CPUState *env, target_ulong pc, target_ulong addr, target_ulong size, void *buf);
+int mem_read_callback(CPUState *env, target_ulong pc, target_ulong addr, target_ulong size, void *buf);
+
+
+int before_block_exec(CPUState *cpu, TranslationBlock *tb) ;
+
+int after_block_exec(CPUState *cpu, TranslationBlock *tb) ;
+
+int handle_asid_change(CPUState *cpu, target_ulong old_asid, target_ulong new_asid);
+
+
+int handle_proc_change(CPUState *cpu, target_ulong old_asid, target_ulong new_asid);
+
 
 
 // ######################################################
@@ -4738,14 +4768,71 @@ Refer pri_dwarf.cpp and asidstory.h
     - handle asid change in pri_dwarf.
     - using callback from plugin asidstory.
 */
-typedef void (* on_proc_change_t)(CPUState *cpu, target_ulong asid, OsiProc *proc);
+// typedef void (* on_proc_change_t)(CPUState *cpu, target_ulong asid, OsiProc *proc);
 
 void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
+    printf("-----------begin: %s------------\n", __FUNCTION__);
     if (!proc) { return; }
     if (!proc->name) { return; }
 
-    printf("%s: cur_proc_name: %s proc-to-monitor: %s\n",
-        __FUNCTION__, proc->name, gProcToMonitor.c_str());
+    printf("a valid: %s\n", __FUNCTION__);
+    // check to be safe
+    // use the asid by panda_current_asid(cpu). 
+    // BUG in Panda: on_proc_change asid can be different with panda_current_asid(cpu)
+    if (panda_current_asid(cpu) != asid){
+        // printf("%s: WARNING: BUG in Panda: on_proc_change asid not the current asid!!\n", __FUNCTION__);
+        // printf("\t\tcurrent asid: 0x" TARGET_FMT_lx "\n", panda_current_asid(cpu));
+        // printf("\t\tasid by on_proc_change callback: 0x" TARGET_FMT_lx "\n", asid);
+        asid = panda_current_asid(cpu);
+        //exit(-1);
+    }
+
+
+    // get current process before each bb execs
+    // which will probably help us actually know the current process
+    // Refer: loaded.cpp osi_foo()
+    OsiProc *p = get_current_process(cpu);
+
+    if (panda_in_kernel(cpu)) {
+
+        p = get_current_process(cpu);
+
+        //some sanity checks on what we think the current process is
+        // this means we didnt find current task
+        if (p->offset == 0 || p->name == 0 || ((int) p->pid) == -1) {
+            printf("%s: ERROR get current proc, lacking offset/name/pid\n", __FUNCTION__);
+            exit(-1);
+        }
+        uint32_t n = strnlen(p->name, 32);
+        // name is one char?
+        if (n<2) {
+            printf("%s: ERROR get current proc name(length < 2) \n", __FUNCTION__);
+            exit(-1);
+        }
+        uint32_t np = 0;
+        for (uint32_t i=0; i<n; i++) {
+            np += (isprint(p->name[i]) != 0);
+        }
+        // name doesnt consist of solely printable characters
+        //        printf ("np=%d n=%d\n", np, n);
+        if (np != n) {
+            printf("%s: name doesnt consist of solely printable characters\n", __FUNCTION__);
+            //printf ("np=%d n=%d\n", np, n);
+            exit(-1);
+        }
+        // target_ulong asid = panda_current_asid(cpu);
+        // if (gRunningProcs.count(asid) == 0) {
+            printf ("%s: current proc: asid=0x" TARGET_FMT_lx "(p->asid: 0x" TARGET_FMT_lx ") to running procs.  cmd=[%s]  task=0x" TARGET_FMT_lx "\n",
+                __FUNCTION__, asid, p->asid, p->name, p->offset);
+            // assert(asid == p->asid);
+        // }
+        gRunningProcs[asid] = *p;
+    }
+
+    printf("%s: proc_change: asid: 0x" TARGET_FMT_lx "(p->asid: 0x" TARGET_FMT_lx "), cmd: %s, pid: " TARGET_FMT_lu ", offset: 0x" TARGET_FMT_lx " \n",
+        __FUNCTION__, asid, proc->asid, proc->name, proc->pid, proc->offset);
+
+    // assert(asid == proc->asid);
 
     std::string curProc(proc->name);
     // store the asid<-> procName mappings
@@ -4754,7 +4841,13 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
         // not a new asid. 
         // already a proc name stored. 
         // Now check whether the stored name is the same name as current.
-        assert(gProcs[asidProcIt->second] == curProc);
+        if (! (gProcs[asidProcIt->second] == curProc)){
+            printf("%s: WARNING::(ERROR): gProcs[%d]='%s' for asid 0x" TARGET_FMT_lx ", but curProcName is '%s' for this asid\n" ,
+            __FUNCTION__, asidProcIt->second, gProcs[asidProcIt->second].c_str(), asid, proc->name);
+            // exit(-1);
+            //update if changed
+            gProcs[asidProcIt->second] = curProc;
+        }
     }else{
         // got a new asid 
         // now check the name. If name already exists, get the index; if not, insert into gProcs and get the new index;
@@ -4771,22 +4864,20 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
         gAsidToProcIndex[asid] = procIndex;
     }
 
-    if (curProc == gProcToMonitor){
+    if (!gProcFound && curProc == gProcToMonitor){
         // this is the monitored process.
         gProcFound = true;
     }
 
-    //check to be safe:
-    if (panda_current_asid(cpu) != asid){
-        printf("%s: BUG in Panda: on_proc_change asid not the current asid!!\n", __FUNCTION__);
-        printf("%s:\tcurrent asid: 0x" TARGET_FMT_lx "\n", __FUNCTION__, panda_current_asid(cpu));
-        printf("%s:\tasid by on_proc_change callback: 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid);
-        asid = panda_current_asid(cpu);
-        exit(-1);
-    }
 
-    // TODO:  get lib/modules and update asid <-> procName mappings as well as asid <-> debugFile mappings
-    // 
+    //get lib/modules and update asid <-> procName mappings as well as asid <-> debugFile mappings
+    //
+    
+    // OsiProc *current = get_current_process(cpu);
+    // printf("Current process: %s PID:" TARGET_FMT_ld " PPID:" TARGET_FMT_ld "\n", current->name, current->pid, current->ppid);
+ 
+    // OsiModules *ms = get_libraries(cpu, current);
+    
     OsiModules *ms = get_libraries(cpu, proc);
     if (ms == NULL) {
         printf("No mapped dynamic libraries.\n");
@@ -4826,12 +4917,16 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
         }
     }
 
+    // exit(-1);
 
     // clean up 
     // printf("%s: clean up..\n", __FUNCTION__);
+    // free_osiproc(current);
+    free_osiproc(proc);
     free_osimodules(ms);
-    // free_osimodules(kms); //no clean kms in osi_test.c
+    free_osimodules(kms); //no clean kms in osi_test.c
 
+    printf("-----------end: %s------------\n", __FUNCTION__);
 }
 
 void report_deadspy(void * self){
@@ -4960,34 +5055,8 @@ bool init_plugin(void *self) {
 
     panda_arg_list *args;
 
-//#################################################
-// ADD support of pri_dwarf. get Line Number and Source File Name by PC.
-    // only support i386
-    // Refer: pri_simple, pri_dwarf
-// #if defined(TARGET_I386) && !defined(TARGET_X86_64)
-#if defined(TARGET_I386)
-    args = panda_get_args("pri_taint");
-    panda_require("pri");
-    assert(init_pri_api());
-    panda_require("pri_dwarf");
-    assert(init_pri_dwarf_api());
-
-    // PPP_REG_CB("pri", on_before_line_change, on_line_change);
-    //PPP_REG_CB("pri", on_fn_start, on_fn_start);
-    // {
-    //     panda_cb pcb;
-    //     pcb.virt_mem_before_write = virt_mem_write;
-    //     panda_register_callback(self,PANDA_CB_VIRT_MEM_BEFORE_WRITE,pcb);
-    //     pcb.virt_mem_after_read = virt_mem_read;
-    //     panda_register_callback(self,PANDA_CB_VIRT_MEM_AFTER_READ,pcb);
-    // }
-#endif
-// END support of pri_dwarf.
-//######################################################
-    
     panda_cb pcb;
 
-    panda_require("callstack_instr");
 
 
 
@@ -5059,8 +5128,44 @@ bool init_plugin(void *self) {
     init_deadspy(prefix);
 
     //lele: step 3: sys int: set callstack plugins, enable precise pc, memcb, and set callback functions.
-    if(!init_callstack_instr_api()) return false;
 
+
+    // panda_require("callstack_instr");
+    panda_require("osi");
+    panda_require("asidstory");
+
+
+    // assert(init_callstack_instr_api());
+    assert(init_osi_linux_api());
+    assert(init_osi_api());
+    // assert(init_pri_api());
+    // if(!init_callstack_instr_api()) return false;
+
+//#################################################
+// ADD support of pri_dwarf. get Line Number and Source File Name by PC.
+    // only support i386
+    // Refer: pri_simple, pri_dwarf
+#if defined(TARGET_I386) && !defined(TARGET_X86_64)
+// #if defined(TARGET_I386)
+    args = panda_get_args("pri_taint");
+    panda_require("pri");
+    assert(init_pri_api());
+    panda_require("pri_dwarf");
+    assert(init_pri_dwarf_api());
+
+    // PPP_REG_CB("pri", on_before_line_change, on_line_change);
+    //PPP_REG_CB("pri", on_fn_start, on_fn_start);
+    // {
+    //     panda_cb pcb;
+    //     pcb.virt_mem_before_write = virt_mem_write;
+    //     panda_register_callback(self,PANDA_CB_VIRT_MEM_BEFORE_WRITE,pcb);
+    //     pcb.virt_mem_after_read = virt_mem_read;
+    //     panda_register_callback(self,PANDA_CB_VIRT_MEM_AFTER_READ,pcb);
+    // }
+#endif
+// END support of pri_dwarf.
+//######################################################
+    
 
     panda_do_flush_tb();
     printf("do_flush_tb enabled\n");
