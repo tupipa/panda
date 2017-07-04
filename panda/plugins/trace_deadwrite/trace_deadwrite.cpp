@@ -3142,26 +3142,50 @@ int addr2line(std::string debugfile, target_ulong addr, FileLineInfo * lineInfo)
 
     printf("%s: cmd returned: %s\n", __FUNCTION__, rawLineInfo.c_str());
 
-    if (rawLineInfo.find("??:0") != std::string::npos){
+    if (rawLineInfo.find("?? ??:0") != std::string::npos){
         // printf("No result from addr2line\n");
         return -1;
 
-    }else{
+    }else if (rawLineInfo.find("??:?") != std::string::npos){
+        // printf("have func but no file/line result from addr2line\n");
 
-        printf("get addr2line result: %s, now parse it\n", rawLineInfo.c_str());
+        printf("get addr2line result:\n\t%s\n\tnow parse it\n", rawLineInfo.c_str());
         //parse and store it as FileLineInfo struct.
         size_t pos = rawLineInfo.find(" ");
         lineInfo->funName = rawLineInfo.substr(0,pos); //store fun name.
 
-        std::string tmp = rawLineInfo.substr(pos+1); // ignore 
+        std::string tmp = rawLineInfo.substr(pos+1); // ignore fun name
+        std::cout<<"rest raw after ignore func: "<<tmp<<std::endl;
         
         //find second space, must be after 'at'
         pos = tmp.find(" ");
-        tmp = rawLineInfo.substr(pos+1); //ignore 'at'
+        tmp = tmp.substr(pos+1); //ignore 'at'
+        std::cout<<"rest raw after ignore 'at': "<<tmp<<std::endl;
+
+        lineInfo->lineNum = 0;
+        lineInfo->fileName = "file_not_found";
+        lineInfo->valid = true;
+        lineInfo->extraInfo = tmp;
+
+    }else{
+
+        printf("get addr2line result:\n\t%s\n\tnow parse it\n", rawLineInfo.c_str());
+        //parse and store it as FileLineInfo struct.
+        size_t pos = rawLineInfo.find(" ");
+        lineInfo->funName = rawLineInfo.substr(0,pos); //store fun name.
+
+        std::string tmp = rawLineInfo.substr(pos+1); // ignore fun name
+        std::cout<<"rest raw after ignore func: "<<tmp<<std::endl;
+        
+        //find second space, must be after 'at'
+        pos = tmp.find(" ");
+        tmp = tmp.substr(pos+1); //ignore 'at'
+        std::cout<<"rest raw after ignore 'at': "<<tmp<<std::endl;
 
         pos = tmp.find(":");
         lineInfo->fileName = tmp.substr(0, pos);
-        tmp = rawLineInfo.substr(pos+1); //ignore file name.
+        tmp = tmp.substr(pos+1); //ignore file name.
+        std::cout<<"rest raw after ignore 'filename': "<<tmp<<std::endl;
 
         pos = tmp.find(" ");
         std::string Text = tmp.substr(0, pos);;//string containing the number
@@ -3169,6 +3193,8 @@ int addr2line(std::string debugfile, target_ulong addr, FileLineInfo * lineInfo)
         std::stringstream convert(Text); // stringstream used for the conversion initialized with the contents of Text
         if ( !(convert >> Result) ){//give the value to Result using the characters in the string
             Result = 0;//if that fails set Result to 0
+            printf("%s: cannot cast %s to number\n",__FUNCTION__, Text.c_str());
+            exit(-1);
         }
 
         lineInfo->lineNum = Result;
@@ -3180,6 +3206,11 @@ int addr2line(std::string debugfile, target_ulong addr, FileLineInfo * lineInfo)
             lineInfo->extraInfo = "";
         }
         lineInfo->valid = true;
+        // exit(-1);
+        if (lineInfo->lineNum == 0) {
+            printf("%s at %s:%d, got a 0 line number\n", __FUNCTION__, __FILE__, __LINE__);
+            exit(-1);
+        }
     }
     return 0;
 }
@@ -3586,8 +3617,8 @@ inline target_ulong GetMeasurementBaseCount(){
     
     void  panda_GetSourceLocation(target_ulong target_asid, ADDRINT ip, unsigned long *line, std::string *file, std::string *func){
         //Lele: given IP, return the line number and file
-        printf("Now in %s for asid: 0x" TARGET_FMT_lx ", ip: 0x" TARGET_FMT_lx "\n",
-            __FUNCTION__, target_asid, ip);
+        // printf("Now in %s for asid: 0x" TARGET_FMT_lx ", ip: 0x" TARGET_FMT_lx "\n",
+        //     __FUNCTION__, target_asid, ip);
         
         // std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(target_asid);
 
@@ -3609,6 +3640,8 @@ inline target_ulong GetMeasurementBaseCount(){
                 *line = lineForPc_ptr->lineNum;
                 *file = lineForPc_ptr->fileName;
                 *func = lineForPc_ptr->funName;
+                // printf("%s: get line info from gAsidPCtoFileLine map. ip: 0x" TARGET_FMT_lx ": %s at %s:%lu\n",
+                    // __FUNCTION__, ip, func->c_str(), file->c_str(), (*line));
                 return;
             }
         }else{
@@ -3619,6 +3652,10 @@ inline target_ulong GetMeasurementBaseCount(){
 
         // if cannot find line info from gAsidPCtoFileLine 
         // try to use addr2line to get line info;
+        // either found or not, set line info for this ip
+        // store it in gAsidPCtoFileLine[asid][ip], and
+        // return the values.
+
         FileLineInfo *lineForPc = new FileLineInfo;
             // 
         if (getLineInfoForAsidIP(target_asid, ip, lineForPc) < 0){
@@ -3628,21 +3665,14 @@ inline target_ulong GetMeasurementBaseCount(){
             lineForPc->lineNum = 0;
             lineForPc->fileName= "debug_info_not_available.txt";
             lineForPc->funName = "NA";
-            *line = 0;
-            *file = "debug_info_not_available.txt";
-            *func = "NA";
-            return;
         }
 
-        // either found or not, set line info for this ip
-        // store it in gAsidPCtoFileLine[asid][ip], and
-        // return the values.
-
         (*asidMap)[ip] = lineForPc;
-
         *line = lineForPc->lineNum;
         *file = lineForPc->fileName;
         *func = lineForPc->funName;
+        printf("%s: get line info from addr2line. ip: 0x" TARGET_FMT_lx ": %s at %s:%lu\n",
+                __FUNCTION__, ip, func->c_str(), file->c_str(), (*line));
 
     }
 
@@ -4511,8 +4541,8 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 
 #ifdef CONTINUOUS_DEADINFO
         // if CONTINUOUS_DEADINFO is set, then all ip vecs come from a fixed 4GB buffer
-        printf("%s: Continuous Info: GetNextIPVecBuffer, with size of tb size: %d...\n", 
-            __FUNCTION__, tb->size);
+        // printf("%s: Continuous Info: GetNextIPVecBuffer, with size of tb size: %d...\n", 
+        //     __FUNCTION__, tb->size);
         newChild->childIPs  = (BlockNode **)GetNextIPVecBuffer(tb->size);
         // initialize as 0, get from IPVecBuffer one by one during mem_callback
         // printf("%s: Continuous Info: initialize childIPs as 0\n", __FUNCTION__);
@@ -4531,8 +4561,8 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
         gCurrentContext->childBlocks[currentIp] = newChild;
         gCurrentTraceBlock = newChild;
 
-        printf("%s: reset gCurrentTraceIpVector pointing to %p, for tb->pc: 0x" TARGET_FMT_lx "\n",
-            __FUNCTION__, gCurrentTraceBlock->childIPs, gCurrentTraceBlock->address);
+        // printf("%s: reset gCurrentTraceIpVector pointing to %p, for tb->pc: 0x" TARGET_FMT_lx "\n",
+        //     __FUNCTION__, gCurrentTraceBlock->childIPs, gCurrentTraceBlock->address);
 
         gCurrentTraceIpVector = gCurrentTraceBlock->childIPs;
 
@@ -4798,8 +4828,8 @@ int handle_asid_change(CPUState *cpu, target_ulong old_asid, target_ulong new_as
         printf("%s: TODO: handle kernel binaries here\n", __FUNCTION__);
         return 0;
     }else{
-        printf("%s: asid change: old: 0x" TARGET_FMT_lx ", new: 0x" TARGET_FMT_lx "\n", 
-            __FUNCTION__, old_asid, new_asid);
+        // printf("%s: asid change: old: 0x" TARGET_FMT_lx ", new: 0x" TARGET_FMT_lx "\n", 
+        //     __FUNCTION__, old_asid, new_asid);
         
         return 0;
     }
@@ -4837,7 +4867,7 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
         asid = panda_current_asid(cpu);
         //exit(-1);
     }
-
+    
 
     // get current process before each bb execs
     // which will probably help us actually know the current process
