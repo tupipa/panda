@@ -4008,6 +4008,9 @@ VOID printIgnoredASIDs(){
     printf("%s: ignored ASIDs:\n", __FUNCTION__);
 	for (target_ulong asid_ : gIgnoredASIDs)
 		printf("\t0x" TARGET_FMT_lx ": procName: %s\n", asid_, gProcs[gAsidToProcIndex[asid_]].c_str());
+    printf("\n");
+    printf("%s: (last) monitored ASID:\n", __FUNCTION__);
+    printf("\t0x" TARGET_FMT_lx ": procName: %s\n", gTargetAsid, gProcs[gAsidToProcIndex[gTargetAsid]].c_str());
 }
 // done last step: printing
 
