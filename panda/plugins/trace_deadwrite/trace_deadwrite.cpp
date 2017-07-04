@@ -4484,8 +4484,9 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
         if (oldTraceShadowIP){
             oldBlockSize = oldTraceShadowIP[-2];
             if (tb->size > oldBlockSize){
-                printf("%s: ERROR: old childBlock under current context has a bigger tb size, for tb->pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
-                printf("%s: context node addr:  0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentContext->address);
+                target_ulong asid_cur = panda_current_asid(cpu);
+                printf("%s: ERROR: old childBlock under current context has a bigger tb size, for tb->pc: 0x" TARGET_FMT_lx ", asid=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc, asid_cur);
+                printf("%s:\tcontext node addr:  0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentContext->address);
                 exit(-1);
             }
         }else{
@@ -4591,7 +4592,33 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 // inline void UpdateTraceIPs(CPUState *cpu, TranslationBlock *tb){
 // }
 
+/*
+ handle_on_call(CPUState *env, target_ulong func); --> called on after_block_exe
 
+ handle_on_ret(CPUState *env, target_ulong func);  --> called on before_block_exe
+
+ Refer: callstack_instr.h
+
+*/
+void handle_on_call(CPUState *env, target_ulong ip){
+    // target_ulong asid_cur = panda_current_asid(cpu);
+     target_ulong asid_cur = panda_current_asid(env);
+     if (asid_cur != gTargetAsid){
+            return;
+     }
+    gInitiatedCall = true;
+}
+
+// from callstack_instr.h, called before_block_exe
+void handle_on_ret(CPUState *env, target_ulong ip){
+    // target_ulong asid_cur = panda_current_asid(cpu);
+     target_ulong asid_cur = panda_current_asid(env);
+     if (asid_cur != gTargetAsid){
+            return;
+     }
+     
+    gInitiatedRet = true;
+}
 
 /**
 //PANDA NOTE:
@@ -4676,7 +4703,8 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
         //TODO: check if tb->pc is equal with currentIp
         // printf("%s: go up to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
         // printf("%s: go up to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
-    }else if(gInitiatedIRET){
+    }
+    if(gInitiatedIRET){
 
         // printf("%s:get a new interrupt ret.\n", __FUNCTION__);
         gInitiatedIRET=false;
@@ -4685,7 +4713,8 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
         // printf("%s: go up to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
         // printf("%s: go up to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
 
-    }else if(gInitiatedCall){
+    }
+    if(gInitiatedCall){
         //Refer: UpdateDataOnFunctionEntry(cpu, tb); // it will reset   gInitiatedCall      
         // normal function call, so unset gInitiatedCall
         // printf("%s:get a new function call !\n", __FUNCTION__);
@@ -4772,17 +4801,35 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     // reset slot index, so that in next basic block, we count mem R/W from the begining.
     gCurrentSlot = 0;
 
+    if(call_cache.count(tb->pc) == 0){
+        printf("%s: WARNING: no disasemble cache available for tb->pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+        return 1;
+    }
     instr_type tb_type = call_cache[tb->pc];
     if (tb_type == INSTR_CALL) {
         // printf("%s: call detected, set InitiatedCall flag\n", __FUNCTION__);
-        gInitiatedCall=true;
+        if (gInitiatedCall){
+            // printf("%s: good, already found by callstack_instr plugin via handle_on_call\n", __FUNCTION__);
+        }else{
+            printf("%s: WARNING: call not found by callstack_instr plugin\n", __FUNCTION__);
+            gInitiatedCall = true;
+        }
     }else if (tb_type == INSTR_RET) {
         // printf("%s: return detected, set InitiatedRet flag\n", __FUNCTION__);
-        gInitiatedRet=true;
-    }else if (tb_type == INSTR_INT) {
+        // gInitiatedRet=true;
+        if (gInitiatedRet){
+            // printf("%s: good, already found by callstack_instr plugin via handle_on_call\n", __FUNCTION__);
+        }else{
+            printf("%s: WARNING: ret not found by callstack_instr plugin\n", __FUNCTION__);
+            // gInitiatedRet = true;
+        }
+
+    }else 
+    if (tb_type == INSTR_INT) {
         printf("%s: interrupt detected, set InitiatedINT flag\n", __FUNCTION__);
         gInitiatedINT=true;
-    }else if (tb_type == INSTR_IRET) {
+    }
+    else if (tb_type == INSTR_IRET) {
         printf("%s: iret detected, set InitiatedIRET flag\n", __FUNCTION__);
         gInitiatedRet=true;
     }
@@ -4806,8 +4853,8 @@ int checkNewProc(std::string procName){
 
     }else{
         // a new proc name.
-        printf("%s: got a new proc: %s\n", 
-            __FUNCTION__, procName.c_str());
+        // printf("%s: got a new proc: %s\n", 
+        //     __FUNCTION__, procName.c_str());
         // store it in gProcs, and the map
         gProcs.push_back(procName);
         procIndex = (int) gProcs.size()-1;
@@ -4855,7 +4902,7 @@ Refer pri_dwarf.cpp and asidstory.h
 // typedef void (* on_proc_change_t)(CPUState *cpu, target_ulong asid, OsiProc *proc);
 
 void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
-    // printf("-----------begin: %s------------\n", __FUNCTION__);
+    printf("-----------begin: %s------------\n", __FUNCTION__);
     if (!proc) { return; }
     if (!proc->name) { return; }
 
@@ -4906,8 +4953,8 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
         }
         // target_ulong asid = panda_current_asid(cpu);
         // if (gRunningProcs.count(asid) == 0) {
-        printf ("%s: current proc: asid=0x" TARGET_FMT_lx "(p->asid: 0x" TARGET_FMT_lx ") to running procs.  cmd=[%s]  task=0x" TARGET_FMT_lx "\n",
-            __FUNCTION__, asid, p->asid, p->name, p->offset);
+        // printf ("%s: current proc: asid=0x" TARGET_FMT_lx "(p->asid: 0x" TARGET_FMT_lx ") to running procs.  cmd=[%s]  task=0x" TARGET_FMT_lx "\n",
+        //     __FUNCTION__, asid, p->asid, p->name, p->offset);
             // assert(asid == p->asid);
         // }
         gRunningProcs[asid] = *p;
@@ -4949,8 +4996,9 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
     }
 
     if (curProc == gProcToMonitor){
-        gTargetAsid = asid;
-        printf("%s: reset target asid to 0x" TARGET_FMT_lx ", proc: %s\n", __FUNCTION__, asid, curProc.c_str());
+        // gTargetAsid = asid;
+        // printf("%s: reset target asid to 0x" TARGET_FMT_lx ", proc: %s\n", __FUNCTION__, asid, curProc.c_str());
+        printf("%s: got asid of target Proc 0x" TARGET_FMT_lx ", proc: %s\n", __FUNCTION__, asid, curProc.c_str());
         if (!gProcFound){
             // this is the monitored process.
             gProcFound = true;
@@ -4982,7 +5030,8 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
             int procIndex = checkNewProc(std::string(ms->module[i].name));
             if (oldgProcSize == procIndex){
                 // a new proc found
-                printf("%s: a new dynamic lib name found %s\n", __FUNCTION__, ms->module[i].name);
+                printf("%s: a new dynamic lib name found %s, asid: " TARGET_FMT_lx "\n",
+                    __FUNCTION__, ms->module[i].name, ms->module[i].base);
             }
             gAsidToProcIndex[ ms->module[i].base ] = procIndex;
         }
@@ -5001,7 +5050,8 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
             int procIndex = checkNewProc(std::string(kms->module[i].name));
             if (oldgProcSize == procIndex){
                 // a new proc found
-                printf("%s: a new kernel module name found %s\n", __FUNCTION__, kms->module[i].name);
+                printf("%s: a new kernel module name found %s, asid: " TARGET_FMT_lx "\n",
+                    __FUNCTION__, kms->module[i].name, kms->module[i].base);
             }
             gAsidToProcIndex[ kms->module[i].base ] = procIndex;
         }
@@ -5016,7 +5066,7 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
     free_osimodules(ms);
     free_osimodules(kms); //no clean kms in osi_test.c
 
-    // printf("-----------end: %s------------\n", __FUNCTION__);
+    printf("-----------end: %s------------\n\n", __FUNCTION__);
 }
 
 void report_deadspy(void * self){
@@ -5226,7 +5276,7 @@ bool init_plugin(void *self) {
     panda_require("asidstory");
 
 
-    // assert(init_callstack_instr_api());
+    assert(init_callstack_instr_api());
     assert(init_osi_linux_api());
     assert(init_osi_api());
     // assert(init_asidstory_api());
@@ -5274,6 +5324,8 @@ bool init_plugin(void *self) {
     // use asidstory to find out the asid's of the ProcToMonitor.
 
     PPP_REG_CB("asidstory", on_proc_change, handle_proc_change);
+    PPP_REG_CB("callstack_instr", on_call, handle_on_call);
+    PPP_REG_CB("callstack_instr", on_ret, handle_on_ret);
 
 
     pcb.asid_changed = handle_asid_change;
