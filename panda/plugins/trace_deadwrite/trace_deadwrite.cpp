@@ -858,6 +858,7 @@ int handle_asid_change(CPUState *cpu, target_ulong old_asid, target_ulong new_as
 
 int handle_proc_change(CPUState *cpu, target_ulong old_asid, target_ulong new_asid);
 
+void  panda_GetSourceLocation(target_ulong target_asid, ADDRINT ip, unsigned long *line, std::string *file, std::string *func);
 
 
 // ######################################################
