@@ -4756,6 +4756,12 @@ int checkNewProc(std::string procName){
 // only tracking kernel asid, because asidstory pluging skips this
 int handle_asid_change(CPUState *cpu, target_ulong old_asid, target_ulong new_asid) {
 
+    // lele: panda BUG: when asid didn't change, we can still reach here...
+    if(new_asid == old_asid){
+        printf("%s: panda BUG: no asid change here.\n", __FUNCTION__);
+        return 0;
+    } 
+
     if (new_asid == 0) {
         // handle_proc_change(cpu, new_asid, );
         printf("%s: TODO: handle kernel binaries here\n", __FUNCTION__);
@@ -4763,6 +4769,7 @@ int handle_asid_change(CPUState *cpu, target_ulong old_asid, target_ulong new_as
     }else{
         printf("%s: asid change: old: 0x" TARGET_FMT_lx ", new: 0x" TARGET_FMT_lx "\n", 
             __FUNCTION__, old_asid, new_asid);
+        
         return 0;
     }
 
@@ -4885,6 +4892,7 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
 
     //get lib/modules and update asid <-> procName mappings as well as asid <-> debugFile mappings
     //
+    // Refer: osi_test.c in before_block_exec
     
     // OsiProc *current = get_current_process(cpu);
     // printf("Current process: %s PID:" TARGET_FMT_ld " PPID:" TARGET_FMT_ld "\n", current->name, current->pid, current->ppid);
@@ -4935,7 +4943,7 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
     // clean up 
     // printf("%s: clean up..\n", __FUNCTION__);
     // free_osiproc(current);
-    free_osiproc(proc);
+    // free_osiproc(proc); // this will cause seg fault after asid_changed, before calling handle_proc_change func..
     free_osimodules(ms);
     free_osimodules(kms); //no clean kms in osi_test.c
 

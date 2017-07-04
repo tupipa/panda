@@ -290,6 +290,12 @@ int asidstory_asid_changed(CPUState *env, target_ulong old_asid, target_ulong ne
     // some fool trying to use asidstory for boot? 
     if (new_asid == 0) return 0;
 
+    // lele: panda BUG: when asid didn't change, we can still reach here...
+    if(new_asid == old_asid){
+        // printf("%s: panda BUG: no asid change here.\n", __FUNCTION__);
+        return 0;
+    } 
+
     //    printf ("%" PRId64 " %" PRId64 " ASID CHANGE %x %x\n", num_asid_change, num_seq_bb, old_asid, new_asid);
     num_asid_change ++;
 
