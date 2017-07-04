@@ -3194,18 +3194,18 @@ int searchDebugFilesForProcName(std::string procName, target_ulong ip, FileLineI
     // search among all debug files, 
     // if there is one ip info got a valid line info, we regard it as valide debug file for this proc.
     // bool found = false;
-    printf("%s in %s:%d\n", __FUNCTION__, __FILE__, __LINE__);
+    // printf("%s: search debug file for proc: %s\n", __FUNCTION__, procName.c_str());
     for (std::vector<std::string>::size_type i = 0; i < gDebugFiles.size(); i++){
         if (addr2line(gDebugFiles[i], ip, fileInfo) == 0){
             // found info from debugfile
             // link this debugfile with procName
             gProcToDebugFileIndex[procName] = (int) i;
+            printf("%s: found debug file %s for proc %s\n", __FUNCTION__, gDebugFiles[i].c_str(), procName.c_str() );
+            gProcToDebugDone[procName]=true;
             return 0;
         }
     }
-    // if (found)
-    gProcToDebugDone[procName]=true;
-    return 0;
+    return -1;
 }
 
 /* getLineInfoForAsidIP:
@@ -3241,11 +3241,12 @@ int getLineInfoForAsidIP(target_ulong asid_target, target_ulong ip, FileLineInfo
 
     std::string debugFileName;
 
-    std::tr1::unordered_map<std::string, int>::iterator procDebugIt = gProcToDebugFileIndex.find(procName);
-    if (procDebugIt != gProcToDebugFileIndex.end()){
+    // std::tr1::unordered_map<std::string, int>::iterator procDebugIt = gProcToDebugFileIndex.find(procName);
+    // if (procDebugIt != gProcToDebugFileIndex.end()){
+    if (gProcToDebugFileIndex.count(procName) != 0){
         //found the proc name from asid
-        printf("%s: found debug file for %s\n", __FUNCTION__, procName.c_str());
-        debugFileName = gDebugFiles[procDebugIt -> second];
+        debugFileName = gDebugFiles[gProcToDebugFileIndex[procName]];
+        printf("%s: found debug file for %s: %s\n", __FUNCTION__, procName.c_str(), debugFileName.c_str());
         // exit(-1);
 
     }else{
@@ -3341,29 +3342,34 @@ int getLineInfoForAsidIP(target_ulong asid_target, target_ulong ip, FileLineInfo
             target_ulong con_pc = curContext->address;       
             if(IsValidIP(con_pc)){
                 fprintf(gTraceFile, "\n!pc: 0x" TARGET_FMT_lx, con_pc);
+                std::string file, func;
+                unsigned long line;
+                //printf("get source location\n");
+                panda_GetSourceLocation(gCurrentASID, con_pc,  &line,&file, &func);
+                fprintf(gTraceFile,"\tfile %s:%lu: %s",file.c_str(),line, func.c_str());                                    
 
                 // check whether we have func/file/line info:                  
-                std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(gCurrentASID);
+                // std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(gCurrentASID);
 
-                std::tr1::unordered_map<ADDRINT, FileLineInfo *> *asidMap;
-                if (asidMapIt == gAsidPCtoFileLine.end()){
-                    // no map for this asid.
-                    fprintf(gTraceFile, "\tno map for asid");
-                }else{
-                    //map exists, get the map and find the file/line/func info for this pc.
-                    asidMap = gAsidPCtoFileLine[gCurrentASID];
-                    std::tr1::unordered_map<ADDRINT, FileLineInfo *>::iterator lineForPcIt = (*asidMap).find(con_pc);
-                    FileLineInfo *lineForPc;
-                    if (lineForPcIt == (*asidMap).end()){
-                        fprintf(gTraceFile, "\tno FileLineInfo for this pc");
-                    }else{
-                        lineForPc = (*asidMap)[con_pc];
-                        fprintf(gTraceFile, "\tfunc: %s, file: %s: %lu",
-                            lineForPc->funName.c_str(),
-                            lineForPc->fileName.c_str(), 
-                            lineForPc->lineNum);
-                    }
-                }
+                // std::tr1::unordered_map<ADDRINT, FileLineInfo *> *asidMap;
+                // if (asidMapIt == gAsidPCtoFileLine.end()){
+                //     // no map for this asid.
+                //     fprintf(gTraceFile, "\tno map for asid: 0x" TARGET_FMT_lx "\n", gCurrentASID);
+                // }else{
+                //     //map exists, get the map and find the file/line/func info for this pc.
+                //     asidMap = gAsidPCtoFileLine[gCurrentASID];
+                //     std::tr1::unordered_map<ADDRINT, FileLineInfo *>::iterator lineForPcIt = (*asidMap).find(con_pc);
+                //     FileLineInfo *lineForPc;
+                //     if (lineForPcIt == (*asidMap).end()){
+                //         fprintf(gTraceFile, "\tno FileLineInfo for this pc");
+                //     }else{
+                //         lineForPc = (*asidMap)[con_pc];
+                //         fprintf(gTraceFile, "\tfunc: %s, file: %s: %lu",
+                //             lineForPc->funName.c_str(),
+                //             lineForPc->fileName.c_str(), 
+                //             lineForPc->lineNum);
+                //     }
+                // }
             }
 #ifndef MULTI_THREADED 
             else if (curContext == gRootContext){
@@ -3579,7 +3585,8 @@ inline target_ulong GetMeasurementBaseCount(){
     
     void  panda_GetSourceLocation(target_ulong target_asid, ADDRINT ip, unsigned long *line, std::string *file, std::string *func){
         //Lele: given IP, return the line number and file
-        printf("Now in %s\n", __FUNCTION__);
+        printf("Now in %s for asid: 0x" TARGET_FMT_lx ", ip: 0x" TARGET_FMT_lx "\n",
+            __FUNCTION__, target_asid, ip);
         
         // std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(target_asid);
 
@@ -3603,26 +3610,38 @@ inline target_ulong GetMeasurementBaseCount(){
                 *func = lineForPc_ptr->funName;
                 return;
             }
+        }else{
+            // create a map for this asid
+            asidMap = new std::tr1::unordered_map<ADDRINT, FileLineInfo *>;
+            gAsidPCtoFileLine[target_asid] = asidMap;
         }
 
         // if cannot find line info from gAsidPCtoFileLine 
         // try to use addr2line to get line info;
-        FileLineInfo lineForPc;
+        FileLineInfo *lineForPc = new FileLineInfo;
             // 
-        if (getLineInfoForAsidIP(target_asid, ip, &lineForPc) < 0){
+        if (getLineInfoForAsidIP(target_asid, ip, lineForPc) < 0){
             // cannot find by addr2line.
             // printf("%s: WARNING: no asidMap for asid 0x" TARGET_FMT_lx "\n", __FUNCTION__, target_asid);
+            lineForPc->valid = true;
+            lineForPc->lineNum = 0;
+            lineForPc->fileName= "debug_info_not_available.txt";
+            lineForPc->funName = "NA";
             *line = 0;
             *file = "debug_info_not_available.txt";
             *func = "NA";
             return;
-        }else{
-            // found by addr2line
-            *line = lineForPc.lineNum;
-            *file = lineForPc.fileName;
-            *func = lineForPc.funName;
         }
 
+        // either found or not, set line info for this ip
+        // store it in gAsidPCtoFileLine[asid][ip], and
+        // return the values.
+
+        (*asidMap)[ip] = lineForPc;
+
+        *line = lineForPc->lineNum;
+        *file = lineForPc->fileName;
+        *func = lineForPc->funName;
 
     }
 
@@ -3665,7 +3684,7 @@ inline target_ulong GetMeasurementBaseCount(){
         PrintFullCallingContext(di.pMergedDeadInfo->context2);
         fprintf(gTraceFile,"\n-------------------------------------------------------\n");
 
-        printf("func: %s: done.\n", __FUNCTION__);
+        // printf("func: %s: done.\n", __FUNCTION__);
     }
     
     
@@ -4802,11 +4821,11 @@ Refer pri_dwarf.cpp and asidstory.h
 // typedef void (* on_proc_change_t)(CPUState *cpu, target_ulong asid, OsiProc *proc);
 
 void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
-    printf("-----------begin: %s------------\n", __FUNCTION__);
+    // printf("-----------begin: %s------------\n", __FUNCTION__);
     if (!proc) { return; }
     if (!proc->name) { return; }
 
-    printf("a valid: %s\n", __FUNCTION__);
+    // printf("a valid: %s\n", __FUNCTION__);
     // check to be safe
     // use the asid by panda_current_asid(cpu). 
     // BUG in Panda: on_proc_change asid can be different with panda_current_asid(cpu)
@@ -4853,8 +4872,8 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
         }
         // target_ulong asid = panda_current_asid(cpu);
         // if (gRunningProcs.count(asid) == 0) {
-            printf ("%s: current proc: asid=0x" TARGET_FMT_lx "(p->asid: 0x" TARGET_FMT_lx ") to running procs.  cmd=[%s]  task=0x" TARGET_FMT_lx "\n",
-                __FUNCTION__, asid, p->asid, p->name, p->offset);
+        printf ("%s: current proc: asid=0x" TARGET_FMT_lx "(p->asid: 0x" TARGET_FMT_lx ") to running procs.  cmd=[%s]  task=0x" TARGET_FMT_lx "\n",
+            __FUNCTION__, asid, p->asid, p->name, p->offset);
             // assert(asid == p->asid);
         // }
         gRunningProcs[asid] = *p;
@@ -4958,7 +4977,7 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
     free_osimodules(ms);
     free_osimodules(kms); //no clean kms in osi_test.c
 
-    printf("-----------end: %s------------\n", __FUNCTION__);
+    // printf("-----------end: %s------------\n", __FUNCTION__);
 }
 
 void report_deadspy(void * self){
