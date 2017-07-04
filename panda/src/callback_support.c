@@ -226,6 +226,11 @@ void panda_callbacks_cpu_restore_state(CPUState *env, TranslationBlock *tb) {
 
 
 void panda_callbacks_asid_changed(CPUState *env, target_ulong old_asid, target_ulong new_asid) {
+    //lele: check whether asid really changed or not
+    if(new_asid == old_asid){
+        printf("%s: %s:%d: panda BUG: no asid change here.\n", __FUNCTION__, __FILE__, __LINE__);
+        return;
+    } 
     panda_cb_list *plist;
     for(plist = panda_cbs[PANDA_CB_ASID_CHANGED]; plist != NULL; plist = panda_cb_list_next(plist)) {
         plist->entry.asid_changed(env, old_asid, new_asid);

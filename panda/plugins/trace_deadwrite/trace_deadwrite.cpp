@@ -2588,9 +2588,9 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
             gIgnoredASIDs.insert(asid_cur);
             return 1;
         } 
-        else{
-            printf("%s: trace one ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
-        }
+        // else{
+        //     printf("%s: trace one ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
+        // }
     }else if (gTraceKernel){
         if (asid_cur != 0x0 ){
             //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
@@ -2730,8 +2730,8 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     if (is_write){
         bool needUpdateTraceBlock=false;
 
-        printf("%s: record write pc: %p, addr: %p (%d bytes).\n",
-            __FUNCTION__, (void*)(uintptr_t)pc, (void *)(uintptr_t)addr, (int)size);
+        // printf("%s: record write pc: %p, addr: %p (%d bytes).\n",
+        //     __FUNCTION__, (void*)(uintptr_t)pc, (void *)(uintptr_t)addr, (int)size);
 
         // uint32_t slot = gCurrentTraceBlock->nSlots;
 
@@ -3134,7 +3134,7 @@ int addr2line(std::string debugfile, target_ulong addr, FileLineInfo * lineInfo)
     std::string str_addr( stream.str());
 
     std::string cmd;
-    cmd = "addr2line -f -p -e " + debugfile + " " + str_addr;
+    cmd = "addr2line -f -p -e " + debugfile + " 0x" + str_addr;
     std::cout << cmd << std::endl;
 
     std::string rawLineInfo = runcmd(cmd);
@@ -3194,6 +3194,7 @@ int searchDebugFilesForProcName(std::string procName, target_ulong ip, FileLineI
     // search among all debug files, 
     // if there is one ip info got a valid line info, we regard it as valide debug file for this proc.
     // bool found = false;
+    printf("%s in %s:%d\n", __FUNCTION__, __FILE__, __LINE__);
     for (std::vector<std::string>::size_type i = 0; i < gDebugFiles.size(); i++){
         if (addr2line(gDebugFiles[i], ip, fileInfo) == 0){
             // found info from debugfile
@@ -3243,16 +3244,19 @@ int getLineInfoForAsidIP(target_ulong asid_target, target_ulong ip, FileLineInfo
     std::tr1::unordered_map<std::string, int>::iterator procDebugIt = gProcToDebugFileIndex.find(procName);
     if (procDebugIt != gProcToDebugFileIndex.end()){
         //found the proc name from asid
+        printf("%s: found debug file for %s\n", __FUNCTION__, procName.c_str());
         debugFileName = gDebugFiles[procDebugIt -> second];
+        // exit(-1);
 
     }else{
         //no proc name found for asid: 
         // try to search it if never searched.
+        // TODO: might give more chances to search? like 5 chances each procName?
         
         if (! gProcToDebugDone[procName]){
            return searchDebugFilesForProcName(procName,ip,fileInfo);
         }
-
+        // 
         printf("%s: no debug file found for proc name: %s\n", __FUNCTION__, procName.c_str() );
         return -1;
     }
@@ -3577,41 +3581,48 @@ inline target_ulong GetMeasurementBaseCount(){
         //Lele: given IP, return the line number and file
         printf("Now in %s\n", __FUNCTION__);
         
-        std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(target_asid);
+        // std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(target_asid);
 
         std::tr1::unordered_map<ADDRINT, FileLineInfo *> *asidMap;
 
-        if (asidMapIt == gAsidPCtoFileLine.end()){
-            // no map for this asid , try to use addr2line to get line info;
+        // find line info from gAsidPCtoFileLine 
+
+        if (gAsidPCtoFileLine.count(target_asid) != 0){
+            // map exists for this asid, get the map
+
+            asidMap = gAsidPCtoFileLine[target_asid];
+            // std::tr1::unordered_map<ADDRINT, FileLineInfo *>::iterator lineForPcIt = (*asidMap).find(ip);
+            FileLineInfo *lineForPc_ptr;
+            // if (lineForPcIt == (*asidMap).end()){
+            if ((*asidMap).count(ip) != 0){
+
+                // line info exists in *asidMap, check whether changes
+                lineForPc_ptr = (*asidMap)[ip];
+                *line = lineForPc_ptr->lineNum;
+                *file = lineForPc_ptr->fileName;
+                *func = lineForPc_ptr->funName;
+                return;
+            }
+        }
+
+        // if cannot find line info from gAsidPCtoFileLine 
+        // try to use addr2line to get line info;
+        FileLineInfo lineForPc;
             // 
-            FileLineInfo lineForPc;
-
-            getLineInfoForAsidIP(target_asid, ip, &lineForPc);
-
-            printf("%s: WARNING: no asidMap for asid 0x" TARGET_FMT_lx "\n", __FUNCTION__, target_asid);
+        if (getLineInfoForAsidIP(target_asid, ip, &lineForPc) < 0){
+            // cannot find by addr2line.
+            // printf("%s: WARNING: no asidMap for asid 0x" TARGET_FMT_lx "\n", __FUNCTION__, target_asid);
             *line = 0;
-            *file = "debuginfo_not_available_for_asid.txt";
+            *file = "debug_info_not_available.txt";
             *func = "NA";
             return;
         }else{
-
-            asidMap = gAsidPCtoFileLine[target_asid];
-            std::tr1::unordered_map<ADDRINT, FileLineInfo *>::iterator lineForPcIt = (*asidMap).find(ip);
-            FileLineInfo *lineForPc;
-            if (lineForPcIt == (*asidMap).end()){
-                // no line info for pc, warning;
-                // printf("%s: WARNING: no line/file info for ip 0x" TARGET_FMT_lx "\n", __FUNCTION__, ip);
-                *line = 0;
-                *file = "file_not_available_for_pc";
-                *func = "NA";
-            }else{
-                // line info exists, check whether changes
-                lineForPc = (*asidMap)[ip];
-                *line = lineForPc->lineNum;
-                *file = lineForPc->fileName;
-                *func = lineForPc->funName;
-            }
+            // found by addr2line
+            *line = lineForPc.lineNum;
+            *file = lineForPc.fileName;
+            *func = lineForPc.funName;
         }
+
 
     }
 
@@ -4404,7 +4415,7 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
         // set the current Trace to the new trace
         // set the IpVector
         gNewBlockNode = false;
-        printf("%s:Trace Node already exists\n",__FUNCTION__);
+        // printf("%s:Trace Node already exists\n",__FUNCTION__);
         gCurrentTraceBlock = gTraceIter->second;
         // printf("%s: reset gCurrentTraceBlock for existed Node\n", __FUNCTION__);
         gCurrentTraceIpVector = gCurrentTraceBlock->childIPs;
@@ -4436,7 +4447,7 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 
         // Create new trace node and insert under the context node.
 
-        printf("%s: Create and initialize a new Trace node.\n",__FUNCTION__);
+        // printf("%s: Create and initialize a new Trace node.\n",__FUNCTION__);
         gNewBlockNode = true;
 
         BlockNode * newChild = new BlockNode();
@@ -4630,7 +4641,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
         // Let GoDownCallChain do the work needed to setup pointers for child nodes.
         GoDownCallChain(cpu,tb);
         //TODO: check if tb->pc is equal with currentIp
-        printf("%s: go down to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
+        // printf("%s: go down to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
         // printf("%s: go down to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
         
     }
@@ -4642,7 +4653,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     instrumentBeforeBlockExe(cpu, tb);
 
 
-    printf("%s: done. tb->pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
+    // printf("%s: done. tb->pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
     return 1;
 }
 
