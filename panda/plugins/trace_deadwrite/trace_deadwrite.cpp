@@ -758,7 +758,7 @@ ADDRINT gCurrentCallerIp;
 bool gTraceKernel=false; //trace all kernel processes; asid=0
 bool gTraceApp=false; // trace all other asids !=0;
 bool gTraceOne = false; //trace only one given ASID, kernel=0, or other asids. If this is true, the 'traceKernel' and 'traceApp' is invalide; If ASID not given, default is 0.
-ADDRINT gCurrentASID=0x0; //target ASID;
+ADDRINT gTargetAsid=0x0; //target ASID;
 //ADDRINT gTargetASID=0x0; //target ASID;
 
 // gIgnoredASIDs < asid1, asid2, .. >:
@@ -2493,9 +2493,9 @@ inline VOID ReleaseLock(){
 //     if (asidMapIt == gAsidPCtoFileLine.end()){
 //         // no map for this asid yet, create one
 //         asidMap = new std::tr1::unordered_map<ADDRINT, FileLineInfo *>;
-//         gAsidPCtoFileLine[gCurrentASID] = asidMap;
+//         gAsidPCtoFileLine[gTargetAsid] = asidMap;
 //     }else{
-//         asidMap = gAsidPCtoFileLine[gCurrentASID];
+//         asidMap = gAsidPCtoFileLine[gTargetAsid];
 //     }
 
 //     std::tr1::unordered_map<ADDRINT, FileLineInfo *>::iterator lineForPcIt = (*asidMap).find(pc);
@@ -2584,13 +2584,13 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     //lele: filter out the processes(threads?) according to its ASID    
     //printf("curASID: " TARGET_FMT_lx "\n", callstack.asid);
     if (gTraceOne){
-        if (asid_cur != gCurrentASID){
+        if (asid_cur != gTargetAsid){
             //printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             gIgnoredASIDs.insert(asid_cur);
             return 1;
         } 
         // else{
-        //     printf("%s: trace one ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
+        //     printf("%s: trace one ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gTargetAsid);
         // }
     }else if (gTraceKernel){
         if (asid_cur != 0x0 ){
@@ -3343,9 +3343,9 @@ int getLineInfoForAsidIP(target_ulong asid_target, target_ulong ip, FileLineInfo
 //     if (asidMapIt == gAsidPCtoFileLine.end()){
 //         // no map for this asid yet, create one
 //         asidMap = new std::tr1::unordered_map<ADDRINT, FileLineInfo *>;
-//         gAsidPCtoFileLine[gCurrentASID] = asidMap;
+//         gAsidPCtoFileLine[gTargetAsid] = asidMap;
 //     }else{
-//         asidMap = gAsidPCtoFileLine[gCurrentASID];
+//         asidMap = gAsidPCtoFileLine[gTargetAsid];
 //     }
 
 
@@ -3377,19 +3377,19 @@ int getLineInfoForAsidIP(target_ulong asid_target, target_ulong ip, FileLineInfo
                 std::string file, func;
                 unsigned long line;
                 //printf("get source location\n");
-                panda_GetSourceLocation(gCurrentASID, con_pc,  &line,&file, &func);
-                fprintf(gTraceFile,"\tfile %s:%lu: %s",file.c_str(),line, func.c_str());                                    
+                panda_GetSourceLocation(gTargetAsid, con_pc,  &line,&file, &func);
+                fprintf(gTraceFile,"\t%s:%lu: %s",file.c_str(),line, func.c_str());                                    
 
                 // check whether we have func/file/line info:                  
-                // std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(gCurrentASID);
+                // std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(gTargetAsid);
 
                 // std::tr1::unordered_map<ADDRINT, FileLineInfo *> *asidMap;
                 // if (asidMapIt == gAsidPCtoFileLine.end()){
                 //     // no map for this asid.
-                //     fprintf(gTraceFile, "\tno map for asid: 0x" TARGET_FMT_lx "\n", gCurrentASID);
+                //     fprintf(gTraceFile, "\tno map for asid: 0x" TARGET_FMT_lx "\n", gTargetAsid);
                 // }else{
                 //     //map exists, get the map and find the file/line/func info for this pc.
-                //     asidMap = gAsidPCtoFileLine[gCurrentASID];
+                //     asidMap = gAsidPCtoFileLine[gTargetAsid];
                 //     std::tr1::unordered_map<ADDRINT, FileLineInfo *>::iterator lineForPcIt = (*asidMap).find(con_pc);
                 //     FileLineInfo *lineForPc;
                 //     if (lineForPcIt == (*asidMap).end()){
@@ -3663,7 +3663,7 @@ inline target_ulong GetMeasurementBaseCount(){
             // printf("%s: WARNING: no asidMap for asid 0x" TARGET_FMT_lx "\n", __FUNCTION__, target_asid);
             lineForPc->valid = true;
             lineForPc->lineNum = 0;
-            lineForPc->fileName= "debug_info_not_available.txt";
+            lineForPc->fileName= "debug_info_not_available";
             lineForPc->funName = "NA";
         }
 
@@ -3682,7 +3682,7 @@ inline target_ulong GetMeasurementBaseCount(){
         std::string file, func;
         unsigned long line;
         //PIN_GetSourceLocation(ip, NULL, &line,&file);
-        panda_GetSourceLocation(gCurrentASID, ip, &line,&file, &func);
+        panda_GetSourceLocation(gTargetAsid, ip, &line,&file, &func);
 		std::ostringstream retVal;
 		retVal << line;
 		return file + ":" + retVal.str();
@@ -3701,7 +3701,7 @@ inline target_ulong GetMeasurementBaseCount(){
         std::string file, func;
         unsigned long line;
         //printf("get source location\n");
-        panda_GetSourceLocation(gCurrentASID, di.pMergedDeadInfo->ip1,  &line,&file, &func);
+        panda_GetSourceLocation(gTargetAsid, di.pMergedDeadInfo->ip1,  &line,&file, &func);
         fprintf(gTraceFile,"\n%p:%s:%lu: %s",(void *)(uintptr_t)(di.pMergedDeadInfo->ip1),file.c_str(),line, func.c_str());                                    
 #endif //end MERGE_SAME_LINES        
         PrintFullCallingContext(di.pMergedDeadInfo->context1);
@@ -3709,7 +3709,7 @@ inline target_ulong GetMeasurementBaseCount(){
 #ifdef MERGE_SAME_LINES
         fprintf(gTraceFile,"\n%s",di.pMergedDeadInfo->line2.c_str());                                    
 #else //no MERGE_SAME_LINES        
-        panda_GetSourceLocation(gCurrentASID, di.pMergedDeadInfo->ip2,  &line,&file, &func);
+        panda_GetSourceLocation(gTargetAsid, di.pMergedDeadInfo->ip2,  &line,&file, &func);
         fprintf(gTraceFile,"\n%p:%s:%lu: %s",(void *)(uintptr_t)(di.pMergedDeadInfo->ip2),file.c_str(),line, func.c_str());
 #endif //end MERGE_SAME_LINES        
         PrintFullCallingContext(di.pMergedDeadInfo->context2);
@@ -4342,13 +4342,13 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     //Lele: check asid.
     target_ulong asid_cur = panda_current_asid(cpu);
     if (gTraceOne){
-        if (asid_cur != gCurrentASID){
+        if (asid_cur != gTargetAsid){
             // printf("%s: ignore ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             gIgnoredASIDs.insert(asid_cur);
             return 1;
         }
         // else{
-        //     printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
+        //     printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gTargetAsid);
         // }
     }else if (gTraceKernel){
         if (asid_cur != 0x0 ){
@@ -4629,13 +4629,13 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     //Lele: check asid.
     target_ulong asid_cur = panda_current_asid(cpu);
     if (gTraceOne){
-        if (asid_cur != gCurrentASID){
+        if (asid_cur != gTargetAsid){
             // printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             gIgnoredASIDs.insert(asid_cur);
             return 1;
         } 
         // else{
-        //     printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
+        //     printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gTargetAsid);
         // }
     }else if (gTraceKernel){
         if (asid_cur != 0x0 ){
@@ -4717,13 +4717,13 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     //Lele: check asid.
     target_ulong asid_cur = panda_current_asid(cpu);
     if (gTraceOne){
-        if (asid_cur != gCurrentASID){
+        if (asid_cur != gTargetAsid){
             // printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
             gIgnoredASIDs.insert(asid_cur);
             return 1;
         } 
         // else{
-        //     printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
+        //     printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gTargetAsid);
         // }
     }else if (gTraceKernel){
         if (asid_cur != 0x0 ){
@@ -4945,10 +4945,15 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
         gAsidToProcIndex[asid] = procIndex;
     }
 
-    if (!gProcFound && curProc == gProcToMonitor){
-        // this is the monitored process.
-        gProcFound = true;
+    if (curProc == gProcToMonitor){
+        gTargetAsid = asid;
+        printf("%s: reset target asid to 0x" TARGET_FMT_lx ", proc: %s\n", __FUNCTION__, asid, curProc.c_str());
+        if (!gProcFound){
+            // this is the monitored process.
+            gProcFound = true;
+        }
     }
+
 
 
     //get lib/modules and update asid <-> procName mappings as well as asid <-> debugFile mappings
@@ -5160,19 +5165,19 @@ bool init_plugin(void *self) {
     if (asid == 0){
         // no ASID parameter given, set the default behavior as following:
         printf("%s: asid given as 0, or not given , or invalid, now use default value 0\n",__FUNCTION__);
-        //gCurrentASID = 0x0; 
+        //gTargetAsid = 0x0; 
         //gTraceKernel=true;
         //gTraceApp=true;
         gTraceOne=true;
-        gCurrentASID = 0;
-        //gCurrentASID = 0x000000001fb14000;
-        //gCurrentASID = 0x0;
+        gTargetAsid = 0;
+        //gTargetAsid = 0x000000001fb14000;
+        //gTargetAsid = 0x0;
     }else{
         // set target asid as input asid.
         gTraceOne=true;
-        gCurrentASID = asid;
+        gTargetAsid = asid;
     }
-    printf("%s: target asid: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentASID);
+    printf("%s: target asid: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gTargetAsid);
 
     const char *proc_to_monitor = panda_parse_string_req(args, "proc", "name of process to follow with debug info");
 
