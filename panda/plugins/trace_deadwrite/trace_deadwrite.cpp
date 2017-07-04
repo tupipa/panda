@@ -4802,7 +4802,7 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     gCurrentSlot = 0;
 
     if(call_cache.count(tb->pc) == 0){
-        printf("%s: WARNING: no disasemble cache available for tb->pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+        // printf("%s: WARNING: no disasemble cache available for tb->pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
         return 1;
     }
     instr_type tb_type = call_cache[tb->pc];
@@ -4953,8 +4953,8 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
         }
         // target_ulong asid = panda_current_asid(cpu);
         // if (gRunningProcs.count(asid) == 0) {
-        // printf ("%s: current proc: asid=0x" TARGET_FMT_lx "(p->asid: 0x" TARGET_FMT_lx ") to running procs.  cmd=[%s]  task=0x" TARGET_FMT_lx "\n",
-        //     __FUNCTION__, asid, p->asid, p->name, p->offset);
+        printf ("%s: current proc: asid=0x" TARGET_FMT_lx "(p->asid: 0x" TARGET_FMT_lx ") to running procs.  cmd=[%s]  task=0x" TARGET_FMT_lx "\n",
+            __FUNCTION__, asid, p->asid, p->name, p->offset);
             // assert(asid == p->asid);
         // }
         gRunningProcs[asid] = *p;
@@ -5030,7 +5030,7 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
             int procIndex = checkNewProc(std::string(ms->module[i].name));
             if (oldgProcSize == procIndex){
                 // a new proc found
-                printf("%s: a new dynamic lib name found %s, asid: " TARGET_FMT_lx "\n",
+                printf("%s: a new dynamic lib name found %s, base: " TARGET_FMT_lx "\n",
                     __FUNCTION__, ms->module[i].name, ms->module[i].base);
             }
             gAsidToProcIndex[ ms->module[i].base ] = procIndex;
@@ -5050,7 +5050,7 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
             int procIndex = checkNewProc(std::string(kms->module[i].name));
             if (oldgProcSize == procIndex){
                 // a new proc found
-                printf("%s: a new kernel module name found %s, asid: " TARGET_FMT_lx "\n",
+                printf("%s: a new kernel module name found %s, base: " TARGET_FMT_lx "\n",
                     __FUNCTION__, kms->module[i].name, kms->module[i].base);
             }
             gAsidToProcIndex[ kms->module[i].base ] = procIndex;
