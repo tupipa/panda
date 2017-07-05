@@ -2636,6 +2636,8 @@ int addr2line(std::string debugfile, target_ulong addr, FileLineInfo * lineInfo)
             printf("%s at %s:%d, got a 0 line number\n", __FUNCTION__, __FILE__, __LINE__);
             exit(-1);
         }
+    }else{
+        return -1;
     }
     return 0;
 }
