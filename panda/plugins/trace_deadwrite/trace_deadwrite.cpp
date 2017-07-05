@@ -881,7 +881,7 @@ bool is_target_process_running(CPUState *cpu);
 */
 
 bool is_target_process_running(CPUState *cpu){
-    
+
     OsiProc *p = get_current_running_process(cpu);
 
     if (p==0){
@@ -2736,7 +2736,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     //get_prog_point(env, &p);
 
 
-    target_ulong asid_cur = panda_current_asid_proc_struct(env);
+    // target_ulong asid_cur = panda_current_asid_proc_struct(env);
 
 // #if defined(TARGET_I386) && !defined(TARGET_X86_64)
     // getAndSetSrcInfo(env, pc, addr, is_write, asid_cur);
@@ -2753,36 +2753,39 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     
     //lele: filter out the processes(threads?) according to its ASID    
     //printf("curASID: " TARGET_FMT_lx "\n", callstack.asid);
-    if (gTraceOne){
-        if (asid_cur != gTargetAsid){
-            //printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
-            gIgnoredASIDs.insert(asid_cur);
-            return 1;
-        } 
-        // else{
-        //     printf("%s: trace one ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gTargetAsid);
-        // }
-    }else if (gTraceKernel){
-        if (asid_cur != 0x0 ){
-            //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
-            gIgnoredASIDs.insert(asid_cur);
-            return 1;
-        } else{
-            printf("\n Kernel mem op\n");
-        }
-    }else if (gTraceApp){
-        if (asid_cur == 0x0 ){
-            //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
-            gIgnoredASIDs.insert(asid_cur);
-            return 1;
-        } else{
-            printf("\n App mem op, ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
-        }
-    }else{
-        // no filters
-        printf("\n All: Mem op for ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
-    }
+    // if (gTraceOne){
+    //     if (asid_cur != gTargetAsid){
+    //         //printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+    //         gIgnoredASIDs.insert(asid_cur);
+    //         return 1;
+    //     } 
+    //     // else{
+    //     //     printf("%s: trace one ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gTargetAsid);
+    //     // }
+    // }else if (gTraceKernel){
+    //     if (asid_cur != 0x0 ){
+    //         //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
+    //         gIgnoredASIDs.insert(asid_cur);
+    //         return 1;
+    //     } else{
+    //         printf("\n Kernel mem op\n");
+    //     }
+    // }else if (gTraceApp){
+    //     if (asid_cur == 0x0 ){
+    //         //printf("ignore ASID " TARGET_FMT_lx , p.cr3);
+    //         gIgnoredASIDs.insert(asid_cur);
+    //         return 1;
+    //     } else{
+    //         printf("\n App mem op, ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
+    //     }
+    // }else{
+    //     // no filters
+    //     printf("\n All: Mem op for ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
+    // }
 
+    if(!is_target_process_running(env)){
+        return 1;
+    }
 
 // #if defined(TARGET_I386) && !defined(TARGET_X86_64)
     // getAndSetSrcInfo(env, pc, addr, is_write, asid_cur);
@@ -4517,37 +4520,40 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     // printf("%s: gBlockShadowMap might be not usefull across all the blocks???? how to resolve? \n", __FUNCTION__);
 
     //Lele: check asid.
-    target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
-    if (gTraceOne){
-        if (asid_cur != gTargetAsid){
-            // printf("%s: ignore ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
-            gIgnoredASIDs.insert(asid_cur);
-            return 1;
-        }
-        // else{
-        //     printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gTargetAsid);
-        // }
-    }else if (gTraceKernel){
-        if (asid_cur != 0x0 ){
-            printf("%s: ignore non-kernel ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
-            gIgnoredASIDs.insert(asid_cur);
-            return 1;
-        } else{
-            printf("\n%s: kernel block\n", __FUNCTION__);
-        }
-    }else if (gTraceApp){
-        if (asid_cur == 0x0 ){
-            printf("%s: ignore kernel ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
-            gIgnoredASIDs.insert(asid_cur);
-            return 1;
-        } else{
-            printf("\n%s: App block, ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
-        }
-    }else{
-        // no filters
-        printf("\n%s: a block for ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
-    }
+    // target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
+    // if (gTraceOne){
+    //     if (asid_cur != gTargetAsid){
+    //         // printf("%s: ignore ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+    //         gIgnoredASIDs.insert(asid_cur);
+    //         return 1;
+    //     }
+    //     // else{
+    //     //     printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gTargetAsid);
+    //     // }
+    // }else if (gTraceKernel){
+    //     if (asid_cur != 0x0 ){
+    //         printf("%s: ignore non-kernel ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+    //         gIgnoredASIDs.insert(asid_cur);
+    //         return 1;
+    //     } else{
+    //         printf("\n%s: kernel block\n", __FUNCTION__);
+    //     }
+    // }else if (gTraceApp){
+    //     if (asid_cur == 0x0 ){
+    //         printf("%s: ignore kernel ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+    //         gIgnoredASIDs.insert(asid_cur);
+    //         return 1;
+    //     } else{
+    //         printf("\n%s: App block, ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+    //     }
+    // }else{
+    //     // no filters
+    //     printf("\n%s: a block for ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+    // }
 
+    if(!is_target_process_running(cpu)){
+        return 1;
+    }
 
     // printf("\n%s: ---------------- a new targeted block --------------------\n", __FUNCTION__);
     
@@ -4776,21 +4782,29 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 */
 void handle_on_call(CPUState *env, target_ulong ip){
     // target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
-     target_ulong asid_cur = panda_current_asid_proc_struct(env);
-     if (asid_cur != gTargetAsid){
-            return;
-     }
+    //  target_ulong asid_cur = panda_current_asid_proc_struct(env);
+    //  if (asid_cur != gTargetAsid){
+    //         return;
+    //  }
+
+    if(!is_target_process_running(env)){
+        return ;
+    }
+    
     gInitiatedCall = true;
 }
 
 // from callstack_instr.h, called before_block_exe
 void handle_on_ret(CPUState *env, target_ulong ip){
     // target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
-     target_ulong asid_cur = panda_current_asid_proc_struct(env);
-     if (asid_cur != gTargetAsid){
-            return;
-     }
-     
+    //  target_ulong asid_cur = panda_current_asid_proc_struct(env);
+    //  if (asid_cur != gTargetAsid){
+    //         return;
+    //  }
+    if(!is_target_process_running(env)){
+        return ;
+    }
+
     gInitiatedRet = true;
 }
 
@@ -4831,38 +4845,41 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     //printf("########### Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
 
     //Lele: check asid.
-    target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
-    if (gTraceOne){
-        if (asid_cur != gTargetAsid){
-            // printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
-            gIgnoredASIDs.insert(asid_cur);
-            return 1;
-        } 
-        // else{
-        //     printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gTargetAsid);
-        // }
-    }else if (gTraceKernel){
-        if (asid_cur != 0x0 ){
-            printf("%s: ignore non-kernel ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
-            gIgnoredASIDs.insert(asid_cur);
-            return 1;
-        } else{
-            printf("\n kernel block\n");
-        }
-    }else if (gTraceApp){
-        if (asid_cur == 0x0 ){
-            printf("%s: ignore kernel ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
-            gIgnoredASIDs.insert(asid_cur);
-            return 1;
-        } else{
-            printf("\nApp block, ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
-        }
-    }else{
-        // no filters
-        printf("%s: a block for ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+    // target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
+    // if (gTraceOne){
+    //     if (asid_cur != gTargetAsid){
+    //         // printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+    //         gIgnoredASIDs.insert(asid_cur);
+    //         return 1;
+    //     } 
+    //     // else{
+    //     //     printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gTargetAsid);
+    //     // }
+    // }else if (gTraceKernel){
+    //     if (asid_cur != 0x0 ){
+    //         printf("%s: ignore non-kernel ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+    //         gIgnoredASIDs.insert(asid_cur);
+    //         return 1;
+    //     } else{
+    //         printf("\n kernel block\n");
+    //     }
+    // }else if (gTraceApp){
+    //     if (asid_cur == 0x0 ){
+    //         printf("%s: ignore kernel ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+    //         gIgnoredASIDs.insert(asid_cur);
+    //         return 1;
+    //     } else{
+    //         printf("\nApp block, ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
+    //     }
+    // }else{
+    //     // no filters
+    //     printf("%s: a block for ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+    // }
+
+
+    if(!is_target_process_running(cpu)){
+        return 1;
     }
-
-
 
     // Refer: ManageCallingContext() -> GoUpCallChain().
     // if(INS_IsProcedureCall(ins) ) {
@@ -4921,37 +4938,40 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     //printf("########### Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
 
     //Lele: check asid.
-    target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
-    if (gTraceOne){
-        if (asid_cur != gTargetAsid){
-            // printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
-            gIgnoredASIDs.insert(asid_cur);
-            return 1;
-        } 
-        // else{
-        //     printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gTargetAsid);
-        // }
-    }else if (gTraceKernel){
-        if (asid_cur != 0x0 ){
-            printf("%s: ignore non-kernel ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
-            gIgnoredASIDs.insert(asid_cur);
-            return 1;
-        } else{
-            printf("\n kernel block\n");
-        }
-    }else if (gTraceApp){
-        if (asid_cur == 0x0 ){
-            printf("%s: ignore kernel ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
-            gIgnoredASIDs.insert(asid_cur);
-            return 1;
-        } else{
-            printf("\nApp block, ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
-        }
-    }else{
-        // no filters
-        printf("%s: a block for ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
-    }
+    // target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
+    // if (gTraceOne){
+    //     if (asid_cur != gTargetAsid){
+    //         // printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+    //         gIgnoredASIDs.insert(asid_cur);
+    //         return 1;
+    //     } 
+    //     // else{
+    //     //     printf("%s: a block for target ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gTargetAsid);
+    //     // }
+    // }else if (gTraceKernel){
+    //     if (asid_cur != 0x0 ){
+    //         printf("%s: ignore non-kernel ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+    //         gIgnoredASIDs.insert(asid_cur);
+    //         return 1;
+    //     } else{
+    //         printf("\n kernel block\n");
+    //     }
+    // }else if (gTraceApp){
+    //     if (asid_cur == 0x0 ){
+    //         printf("%s: ignore kernel ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+    //         gIgnoredASIDs.insert(asid_cur);
+    //         return 1;
+    //     } else{
+    //         printf("\nApp block, ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
+    //     }
+    // }else{
+    //     // no filters
+    //     printf("%s: a block for ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
+    // }
 
+    if(!is_target_process_running(cpu)){
+        return 1;
+    }
 
     
     //  lele: should update Trace IPs after block executed.
@@ -5395,13 +5415,13 @@ bool init_plugin(void *self) {
         //gTargetAsid = 0x0; 
         //gTraceKernel=true;
         //gTraceApp=true;
-        gTraceOne=true;
+        // gTraceOne=true;
         gTargetAsid = 0;
         //gTargetAsid = 0x000000001fb14000;
         //gTargetAsid = 0x0;
     }else{
         // set target asid as input asid.
-        gTraceOne=true;
+        // gTraceOne=true;
         gTargetAsid = asid;
     }
     printf("%s: target asid: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gTargetAsid);
