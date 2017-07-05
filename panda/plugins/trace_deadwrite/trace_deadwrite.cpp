@@ -4265,7 +4265,7 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
             // printf("%s: good, already found by callstack_instr plugin via handle_on_call\n", __FUNCTION__);
         }else{
             printf("%s: WARNING: call not found by callstack_instr plugin\n", __FUNCTION__);
-            gInitiatedCall = true;
+            // gInitiatedCall = true;
         }
     }else if (tb_type == INSTR_RET) {
         // printf("%s: return detected, set InitiatedRet flag\n", __FUNCTION__);
