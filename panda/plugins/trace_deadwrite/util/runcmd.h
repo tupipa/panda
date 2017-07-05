@@ -1,5 +1,9 @@
 
 
+#ifndef __UTIL_RUNCMD_H_
+#define __UTIL_RUNCMD_H_
+
+
 
 #include <iostream>
 #include <stdexcept>
@@ -79,3 +83,5 @@ std::string runcmd(const std::string cmd_string) {
 //   while (std::getline(proc.err(), line))
 //     std::cout << "stderr: " << line << '\n';
 // } 
+
+#endif

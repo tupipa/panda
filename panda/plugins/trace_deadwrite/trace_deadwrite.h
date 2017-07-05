@@ -64,9 +64,6 @@ using google::dense_hash_map;      // namespace where class lives by default
 #endif
 
 
-#include "util/runcmd.h"
-// #include <sstream>  // used to split strings.
-
 extern "C" {
 #include "panda/plugin.h"
 #include "panda/plugin_plugin.h"
@@ -120,6 +117,9 @@ extern "C" {
 
 #include "callstack_instr/callstack_instr.h"
 #include "callstack_instr/callstack_instr_ext.h"
+
+#include "util/runcmd.h"
+// #include "util/struct_hash.h"
 
 // using namespace __gnu_cxx;
 
@@ -623,6 +623,45 @@ std::vector<ContextTree> gContextTreeVector;
 #endif //end MULTI_THREADED
 
 
+struct ProcID{
+    OsiProc *proc;
+
+	bool operator==(const ProcID  & x) const{
+		if ( this->proc->asid == x.proc->asid && this->proc->name == x.proc->name)
+            return true;
+		return false;
+	}
+
+	bool operator<(const ProcID  & x) const{
+		if (this->proc->asid < x.proc->asid)
+            return true;
+		return false;
+	}
+};
+
+
+namespace std {
+
+  template <>
+  struct hash<ProcID>
+  {
+    std::size_t operator()(const ProcID& k) const
+    {
+      using std::size_t;
+      using std::hash;
+      using std::string;
+
+      // Compute individual hash values for first,
+      // second and third and combine them using XOR
+      // and bit shifting:
+
+      return (hash<string>()(std::string(k.proc->name))
+               ^ (hash<target_ulong>()(k.proc->asid) << 1));
+    }
+  };
+
+}
+
 
 #ifdef IP_AND_CCT
 sparse_hash_map<ADDRINT, BlockNode *>::iterator gTraceIter;
@@ -642,15 +681,20 @@ bool gProcFound;
 std::vector<std::string> gDebugFiles;
 //store all process names
 std::vector<std::string> gProcs;
+// std::vector<ProcID> gProcStructs;
+// std::tr1::unordered_map<target_ulong, OsiProc> gRunningProcs;
+std::unordered_set<ProcID> gRunningProcs;
+
 //indicate whether we ever searched the debug file for a proc name, we use this to search only once for each proc name.
 std::tr1::unordered_map<std::string, bool> gProcToDebugDone;
 //store a map from proc name to its debug file.
 std::tr1::unordered_map<std::string, int> gProcToDebugFileIndex;
 //store a map from debug file to its proc name.
 std::tr1::unordered_map<std::string, int> gDebugFiletoProcIndex;
+
 //store map from asid to proc name index.
 std::tr1::unordered_map<target_ulong, int> gAsidToProcIndex;
-std::tr1::unordered_map<target_ulong, OsiProc> gRunningProcs;
+
 //store currentTargetDebugPath, this should be the same as gDebugFiles[gProcToDebugFileIndex[gProcToMonitor]]
 std::string gCurrentTargetDebugFile;
 
@@ -770,7 +814,7 @@ int handle_asid_change(CPUState *cpu, target_ulong old_asid, target_ulong new_as
 
 int handle_proc_change(CPUState *cpu, target_ulong old_asid, target_ulong new_asid);
 
-void  panda_GetSourceLocation(target_ulong target_asid, ADDRINT ip, unsigned long *line, std::string *file, std::string *func);
+void  panda_GetSourceLocation(ADDRINT ip, unsigned long *line, std::string *file, std::string *func);
 
 target_ulong panda_current_asid_proc_struct(CPUState *cpu);
 

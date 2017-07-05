@@ -155,7 +155,7 @@ bool is_target_process_running(CPUState *cpu){
 OsiProc * get_current_running_process(CPUState *cpu){
     
     OsiProc *p=0;
-    target_ulong asid;
+    // target_ulong asid;
 
     if (panda_in_kernel(cpu)) { // Lele: why have to be in kernel????
 
@@ -196,9 +196,10 @@ OsiProc * get_current_running_process(CPUState *cpu){
                 // exit(-1);
                 return 0;
             }
-            asid = p->asid;
-            if (gRunningProcs.count(asid)==0){
-                gRunningProcs[asid] = *p;
+            // asid = p->asid;
+            ProcID p_ = {p};
+            if (gRunningProcs.count(p_)==0){
+                gRunningProcs.insert(p_);
             }
         }
     }
@@ -265,8 +266,9 @@ target_ulong panda_current_asid_proc_struct(CPUState *cpu){
             goto cpu_cr3;
         }
         asid = p->asid;
-        if (gRunningProcs.count(asid)==0){
-            gRunningProcs[asid] = *p;
+        ProcID p_ = {p};
+        if (gRunningProcs.count(p_)==0){
+            gRunningProcs.insert(p_);
         }
         // else{
         //     free_osiproc(p);
@@ -2800,7 +2802,7 @@ int getLineInfoForAsidIP(target_ulong asid_target, target_ulong ip, FileLineInfo
                 std::string file, func;
                 unsigned long line;
                 //printf("get source location\n");
-                panda_GetSourceLocation(gTargetAsid, con_pc,  &line,&file, &func);
+                panda_GetSourceLocation(con_pc,  &line,&file, &func);
                 fprintf(gTraceFile,"\t%s:%lu: %s",file.c_str(),line, func.c_str());                                    
 
                 // check whether we have func/file/line info:                  
@@ -3038,12 +3040,14 @@ inline target_ulong GetMeasurementBaseCount(){
 		return ip[slotNo];
 	}
     
-    void  panda_GetSourceLocation(target_ulong target_asid, ADDRINT ip, unsigned long *line, std::string *file, std::string *func){
+    void  panda_GetSourceLocation(ADDRINT ip, unsigned long *line, std::string *file, std::string *func){
         //Lele: given IP, return the line number and file
         // printf("Now in %s for asid: 0x" TARGET_FMT_lx ", ip: 0x" TARGET_FMT_lx "\n",
         //     __FUNCTION__, target_asid, ip);
         
         // std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(target_asid);
+
+        target_ulong target_asid = gTargetAsid;
 
         std::tr1::unordered_map<ADDRINT, FileLineInfo *> *asidMap;
 
@@ -3105,7 +3109,7 @@ inline target_ulong GetMeasurementBaseCount(){
         std::string file, func;
         unsigned long line;
         //PIN_GetSourceLocation(ip, NULL, &line,&file);
-        panda_GetSourceLocation(gTargetAsid, ip, &line,&file, &func);
+        panda_GetSourceLocation( ip, &line,&file, &func);
 		std::ostringstream retVal;
 		retVal << line;
 		return file + ":" + retVal.str();
@@ -3124,7 +3128,7 @@ inline target_ulong GetMeasurementBaseCount(){
         std::string file, func;
         unsigned long line;
         //printf("get source location\n");
-        panda_GetSourceLocation(gTargetAsid, di.pMergedDeadInfo->ip1,  &line,&file, &func);
+        panda_GetSourceLocation(di.pMergedDeadInfo->ip1,  &line,&file, &func);
         fprintf(gTraceFile,"\n%p:%s:%lu: %s",(void *)(uintptr_t)(di.pMergedDeadInfo->ip1),file.c_str(),line, func.c_str());                                    
 #endif //end MERGE_SAME_LINES        
         PrintFullCallingContext(di.pMergedDeadInfo->context1);
@@ -3132,7 +3136,7 @@ inline target_ulong GetMeasurementBaseCount(){
 #ifdef MERGE_SAME_LINES
         fprintf(gTraceFile,"\n%s",di.pMergedDeadInfo->line2.c_str());                                    
 #else //no MERGE_SAME_LINES        
-        panda_GetSourceLocation(gTargetAsid, di.pMergedDeadInfo->ip2,  &line,&file, &func);
+        panda_GetSourceLocation(di.pMergedDeadInfo->ip2,  &line,&file, &func);
         fprintf(gTraceFile,"\n%p:%s:%lu: %s",(void *)(uintptr_t)(di.pMergedDeadInfo->ip2),file.c_str(),line, func.c_str());
 #endif //end MERGE_SAME_LINES        
         PrintFullCallingContext(di.pMergedDeadInfo->context2);
@@ -3426,11 +3430,16 @@ VOID Fini() {
     fclose(gTraceFile);
 }
 
-VOID printIgnoredASIDs(){
+VOID printAllProcsFound(){
     // Iterate Over the Unordered Set and display it
-    printf("%s: ignored ASIDs:\n", __FUNCTION__);
-	for (target_ulong asid_ : gIgnoredASIDs)
-		printf("\t0x" TARGET_FMT_lx ": procName: %s\n", asid_, gProcs[gAsidToProcIndex[asid_]].c_str());
+    printf("%s: All Procs Found:\n", __FUNCTION__);
+    std::unordered_set<ProcID>::iterator it;
+    for (it = gRunningProcs.begin(); it != gRunningProcs.end(); ++it)
+    {
+        // u_long f = *it; // Note the "*" here
+		printf("\t0x" TARGET_FMT_lx ": procName: %s\n", 
+            it->proc->asid, it->proc->name);
+    }
     printf("\n");
     printf("%s: (last) monitored ASID:\n", __FUNCTION__);
     if (gAsidToProcIndex.count(gTargetAsid) == 0){
@@ -4396,12 +4405,12 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
     //         exit(-1);
     //     }
     //     // target_ulong asid = panda_current_asid_proc_struct(cpu);
-    //     // if (gRunningProcs.count(asid) == 0) {
+    //     // if (gRunningProcs.count(*p) == 0) {
     //     printf ("%s: current proc: asid=0x" TARGET_FMT_lx "(p->asid: 0x" TARGET_FMT_lx ") to running procs.  cmd=[%s]  task=0x" TARGET_FMT_lx "\n",
     //         __FUNCTION__, asid, p->asid, p->name, p->offset);
     //         // assert(asid == p->asid);
     //     // }
-    //     gRunningProcs[asid] = *p;
+    //     gRunningProcs.insert(*p);
     // }
 
     printf("%s: proc_change: asid: 0x" TARGET_FMT_lx "(p->asid: 0x" TARGET_FMT_lx "), cmd: %s, pid: " TARGET_FMT_lu ", offset: 0x" TARGET_FMT_lx " \n",
@@ -4541,7 +4550,7 @@ void uninit_plugin(void *self) {
     report_deadspy(self);
     // clear_insn();
 
-    printIgnoredASIDs();
+    printAllProcsFound();
 
     // std::map<prog_point,match_strings>::iterator it;
 
