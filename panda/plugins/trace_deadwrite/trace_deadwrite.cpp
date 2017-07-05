@@ -921,22 +921,23 @@ OsiProc * get_current_running_process(CPUState *cpu){
         //some sanity checks on what we think the current process is
         // this means we didnt find current task
         if (!p){
+            // printf("%s: no process info get, now return 0\n", __FUNCTION__);
             p=0;
         }else{
                 
             if (p->offset == 0 || p->name == 0 || ((int) p->pid) == -1) {
                 // printf("%s: ERROR get current proc, lacking offset/name/pid\n", __FUNCTION__);
                 // exit(-1);
-                p=0;
+                return 0;
             }
 
             // printf("%s: good, has offset/name/pid.\n", __FUNCTION__);
             uint32_t n = strnlen(p->name, 32);
             // name is one char?
             if (n<2) {
-                // printf("%s: ERROR get current proc name(length < 2): %s\n", __FUNCTION__, p->name);
+                printf("%s: ERROR get current proc name(length < 2): %s\n", __FUNCTION__, p->name);
                 // exit(-1);
-                p=0;
+                return 0;
             }
             uint32_t np = 0;
             for (uint32_t i=0; i<n; i++) {
@@ -948,7 +949,7 @@ OsiProc * get_current_running_process(CPUState *cpu){
                 // printf("%s: name doesnt consist of solely printable characters\n", __FUNCTION__);
                 //printf ("np=%d n=%d\n", np, n);
                 // exit(-1);
-                p=0;
+                return 0;
             }
         }
     }
