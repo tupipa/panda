@@ -892,10 +892,10 @@ bool is_target_process_running(CPUState *cpu){
         if (asid == gTargetAsid){
             return true;
         }else{
+            gIgnoredASIDs.insert(asid);
             return false;
         }
     }else{
-
         std::string curProc(p->name);
         if (curProc == gProcToMonitor){
             return true;
@@ -950,6 +950,10 @@ OsiProc * get_current_running_process(CPUState *cpu){
                 //printf ("np=%d n=%d\n", np, n);
                 // exit(-1);
                 return 0;
+            }
+            asid = p->asid;
+            if (gRunningProcs.count(asid)==0){
+                gRunningProcs[asid] = *p;
             }
         }
     }
@@ -5117,43 +5121,43 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
     // get current process before each bb execs
     // which will probably help us actually know the current process
     // Refer: loaded.cpp osi_foo()
-    OsiProc *p;
+    // OsiProc *p = get_current_running_process(cpu);
 
-    if (panda_in_kernel(cpu)) {
+    // if (panda_in_kernel(cpu)) {
 
-        p = get_current_process(cpu);
+    //     p = get_current_process(cpu);
 
-        //some sanity checks on what we think the current process is
-        // this means we didnt find current task
-        if (p->offset == 0 || p->name == 0 || ((int) p->pid) == -1) {
-            printf("%s: ERROR get current proc, lacking offset/name/pid\n", __FUNCTION__);
-            exit(-1);
-        }
-        uint32_t n = strnlen(p->name, 32);
-        // name is one char?
-        if (n<2) {
-            printf("%s: ERROR get current proc name(length < 2) \n", __FUNCTION__);
-            exit(-1);
-        }
-        uint32_t np = 0;
-        for (uint32_t i=0; i<n; i++) {
-            np += (isprint(p->name[i]) != 0);
-        }
-        // name doesnt consist of solely printable characters
-        //        printf ("np=%d n=%d\n", np, n);
-        if (np != n) {
-            printf("%s: name doesnt consist of solely printable characters\n", __FUNCTION__);
-            //printf ("np=%d n=%d\n", np, n);
-            exit(-1);
-        }
-        // target_ulong asid = panda_current_asid_proc_struct(cpu);
-        // if (gRunningProcs.count(asid) == 0) {
-        printf ("%s: current proc: asid=0x" TARGET_FMT_lx "(p->asid: 0x" TARGET_FMT_lx ") to running procs.  cmd=[%s]  task=0x" TARGET_FMT_lx "\n",
-            __FUNCTION__, asid, p->asid, p->name, p->offset);
-            // assert(asid == p->asid);
-        // }
-        gRunningProcs[asid] = *p;
-    }
+    //     //some sanity checks on what we think the current process is
+    //     // this means we didnt find current task
+    //     if (p->offset == 0 || p->name == 0 || ((int) p->pid) == -1) {
+    //         printf("%s: ERROR get current proc, lacking offset/name/pid\n", __FUNCTION__);
+    //         exit(-1);
+    //     }
+    //     uint32_t n = strnlen(p->name, 32);
+    //     // name is one char?
+    //     if (n<2) {
+    //         printf("%s: ERROR get current proc name(length < 2) \n", __FUNCTION__);
+    //         exit(-1);
+    //     }
+    //     uint32_t np = 0;
+    //     for (uint32_t i=0; i<n; i++) {
+    //         np += (isprint(p->name[i]) != 0);
+    //     }
+    //     // name doesnt consist of solely printable characters
+    //     //        printf ("np=%d n=%d\n", np, n);
+    //     if (np != n) {
+    //         printf("%s: name doesnt consist of solely printable characters\n", __FUNCTION__);
+    //         //printf ("np=%d n=%d\n", np, n);
+    //         exit(-1);
+    //     }
+    //     // target_ulong asid = panda_current_asid_proc_struct(cpu);
+    //     // if (gRunningProcs.count(asid) == 0) {
+    //     printf ("%s: current proc: asid=0x" TARGET_FMT_lx "(p->asid: 0x" TARGET_FMT_lx ") to running procs.  cmd=[%s]  task=0x" TARGET_FMT_lx "\n",
+    //         __FUNCTION__, asid, p->asid, p->name, p->offset);
+    //         // assert(asid == p->asid);
+    //     // }
+    //     gRunningProcs[asid] = *p;
+    // }
 
     printf("%s: proc_change: asid: 0x" TARGET_FMT_lx "(p->asid: 0x" TARGET_FMT_lx "), cmd: %s, pid: " TARGET_FMT_lu ", offset: 0x" TARGET_FMT_lx " \n",
         __FUNCTION__, asid, proc->asid, proc->name, proc->pid, proc->offset);
