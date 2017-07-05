@@ -2565,7 +2565,7 @@ int addr2line(std::string debugfile, target_ulong addr, FileLineInfo * lineInfo)
 
     std::string rawLineInfo = runcmd(cmd);
 
-    printf("%s: cmd returned: %s\n", __FUNCTION__, rawLineInfo.c_str());
+    printf("%s: cmd returned: '%s'\n", __FUNCTION__, rawLineInfo.c_str());
 
     if (rawLineInfo.find("?? ??:0") != std::string::npos){
         // printf("No result from addr2line\n");
@@ -2592,7 +2592,7 @@ int addr2line(std::string debugfile, target_ulong addr, FileLineInfo * lineInfo)
         lineInfo->valid = true;
         lineInfo->extraInfo = tmp;
 
-    }else{
+    }else if (rawLineInfo.find_first_not_of('\n\t ') != std::string::npos){
 
         printf("get addr2line result:\n\t%s\n\tnow parse it\n", rawLineInfo.c_str());
         //parse and store it as FileLineInfo struct.
