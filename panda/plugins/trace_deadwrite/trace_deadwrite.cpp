@@ -860,6 +860,11 @@ int handle_proc_change(CPUState *cpu, target_ulong old_asid, target_ulong new_as
 
 void  panda_GetSourceLocation(target_ulong target_asid, ADDRINT ip, unsigned long *line, std::string *file, std::string *func);
 
+target_ulong panda_current_asid_proc_struct(CPUState *cpu);
+
+OsiProc * get_current_running_process(CPUState *cpu);
+
+bool is_target_process_running(CPUState *cpu);
 
 // ######################################################
 // ######################################################
@@ -867,7 +872,172 @@ void  panda_GetSourceLocation(target_ulong target_asid, ADDRINT ip, unsigned lon
 // ######################################################
 // ######################################################
 
+/*
+ is_target_process_running
+    - return true if the target process is running at this time point the function is called.
 
+    - could distinguish the target process by process name or asid.
+
+*/
+
+bool is_target_process_running(CPUState *cpu){
+    
+    OsiProc *p = get_current_running_process(cpu);
+
+    if (p==0){
+        // process info not available
+        // use asid to distinguish, lele: should be abandoned.
+
+        target_ulong asid = panda_current_asid_proc_struct(cpu);
+        if (asid == gTargetAsid){
+            return true;
+        }else{
+            return false;
+        }
+    }else{
+
+        std::string curProc(p->name);
+        if (curProc == gProcToMonitor){
+            return true;
+        }else{
+            return false;
+        }
+    }
+}
+
+/*  
+
+*/
+OsiProc * get_current_running_process(CPUState *cpu){
+    
+    OsiProc *p=0;
+
+    if (panda_in_kernel(cpu)) { // Lele: why have to be in kernel????
+
+        // printf("%s: calling get_current_process\n", __FUNCTION__);
+        p = get_current_process(cpu);
+
+        // printf("%s: calling get_current_process, done.\n", __FUNCTION__);
+        //some sanity checks on what we think the current process is
+        // this means we didnt find current task
+        if (!p){
+            p=0;
+        }else{
+                
+            if (p->offset == 0 || p->name == 0 || ((int) p->pid) == -1) {
+                // printf("%s: ERROR get current proc, lacking offset/name/pid\n", __FUNCTION__);
+                // exit(-1);
+                p=0;
+            }
+
+            // printf("%s: good, has offset/name/pid.\n", __FUNCTION__);
+            uint32_t n = strnlen(p->name, 32);
+            // name is one char?
+            if (n<2) {
+                // printf("%s: ERROR get current proc name(length < 2): %s\n", __FUNCTION__, p->name);
+                // exit(-1);
+                p=0;
+            }
+            uint32_t np = 0;
+            for (uint32_t i=0; i<n; i++) {
+                np += (isprint(p->name[i]) != 0);
+            }
+            // name doesnt consist of solely printable characters
+            //        printf ("np=%d n=%d\n", np, n);
+            if (np != n) {
+                // printf("%s: name doesnt consist of solely printable characters\n", __FUNCTION__);
+                //printf ("np=%d n=%d\n", np, n);
+                // exit(-1);
+                p=0;
+            }
+        }
+    }
+
+    return p;
+
+}
+
+
+/* panda_current_asid_proc_struct
+    - use process's task struct to get the asid value.
+    - 
+*/
+
+target_ulong panda_current_asid_proc_struct(CPUState *cpu){
+
+    target_ulong asid;
+
+// #if defined(TARGET_X86_64)
+    // the asid got from cpu->cr3 is usually different than the asid got from the task struct.
+    // therefore, we use task struct to get the asid in the first priority.
+    // - also use cpu->cr3 if we failed to get it from task struct.
+
+    // printf("Now in %s\n", __FUNCTION__);
+    OsiProc *p;
+    if (panda_in_kernel(cpu)) {
+
+        // printf("%s: calling get_current_process\n", __FUNCTION__);
+        p = get_current_process(cpu);
+
+        // printf("%s: calling get_current_process, done.\n", __FUNCTION__);
+        //some sanity checks on what we think the current process is
+        // this means we didnt find current task
+        if (!p){
+            goto cpu_cr3;
+        }
+        if (p->offset == 0 || p->name == 0 || ((int) p->pid) == -1) {
+            // printf("%s: ERROR get current proc, lacking offset/name/pid\n", __FUNCTION__);
+            // exit(-1);
+            goto cpu_cr3;
+        }
+        if(p->asid == 0){
+            goto cpu_cr3;
+        }
+
+        // printf("%s: good, has offset/name/pid.\n", __FUNCTION__);
+        uint32_t n = strnlen(p->name, 32);
+        // name is one char?
+        if (n<2) {
+            // printf("%s: ERROR get current proc name(length < 2): %s\n", __FUNCTION__, p->name);
+            // exit(-1);
+            goto cpu_cr3;
+        }
+        uint32_t np = 0;
+        for (uint32_t i=0; i<n; i++) {
+            np += (isprint(p->name[i]) != 0);
+        }
+        // name doesnt consist of solely printable characters
+        //        printf ("np=%d n=%d\n", np, n);
+        if (np != n) {
+            // printf("%s: name doesnt consist of solely printable characters\n", __FUNCTION__);
+            //printf ("np=%d n=%d\n", np, n);
+            // exit(-1);
+            goto cpu_cr3;
+        }
+        asid = p->asid;
+        if (gRunningProcs.count(asid)==0){
+            gRunningProcs[asid] = *p;
+        }
+        // else{
+        //     free_osiproc(p);
+        // }
+
+        // printf ("%s: current proc: p->asid: 0x" TARGET_FMT_lx ", cmd=[%s]  task=0x" TARGET_FMT_lx ", pid = %d, ppid = %d\n",
+            // __FUNCTION__, p->asid, p->name, p->offset, (int)p->pid, (int)p->ppid);
+
+        return asid;
+    }
+
+cpu_cr3:
+
+// #endif // TARGET_X86_64
+    // printf("%s: WARNING: p is null, using cpu->cr3 to get asid\n", __FUNCTION__);
+    asid = panda_current_asid(cpu);
+
+    // printf("%s: done.\n", __FUNCTION__);
+    return asid;
+
+}
 
 
 #ifndef MULTI_THREADED
@@ -2566,7 +2736,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     //get_prog_point(env, &p);
 
 
-    target_ulong asid_cur = panda_current_asid(env);
+    target_ulong asid_cur = panda_current_asid_proc_struct(env);
 
 // #if defined(TARGET_I386) && !defined(TARGET_X86_64)
     // getAndSetSrcInfo(env, pc, addr, is_write, asid_cur);
@@ -2575,10 +2745,10 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     // target_ulong asid_cur = 0;
 
     // if (p.cr3 != asid_cur){
-    //     //printf("ERROR: panda_current_asid is not equal with p.cr3 (p.cr3: %p, cur_asid: %p)\n", (void *)(uintptr_t)p.cr3, (void *)(uintptr_t)asid_cur );
+    //     //printf("ERROR: panda_current_asid_proc_struct is not equal with p.cr3 (p.cr3: %p, cur_asid: %p)\n", (void *)(uintptr_t)p.cr3, (void *)(uintptr_t)asid_cur );
     //     //exit(-1);
     // }else{
-    //      //printf("panda_current_asid is equal with p.cr3 (p.cr3: %p, cur_asid: %p)\n", (void *)(uintptr_t)p.cr3, (void *)(uintptr_t)asid_cur );
+    //      //printf("panda_current_asid_proc_struct is equal with p.cr3 (p.cr3: %p, cur_asid: %p)\n", (void *)(uintptr_t)p.cr3, (void *)(uintptr_t)asid_cur );
     // }
     
     //lele: filter out the processes(threads?) according to its ASID    
@@ -4347,7 +4517,7 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     // printf("%s: gBlockShadowMap might be not usefull across all the blocks???? how to resolve? \n", __FUNCTION__);
 
     //Lele: check asid.
-    target_ulong asid_cur = panda_current_asid(cpu);
+    target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
     if (gTraceOne){
         if (asid_cur != gTargetAsid){
             // printf("%s: ignore ASID " TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
@@ -4488,7 +4658,7 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
         if (oldTraceShadowIP){
             oldBlockSize = oldTraceShadowIP[-2];
             if (tb->size > oldBlockSize){
-                target_ulong asid_cur = panda_current_asid(cpu);
+                target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
                 printf("%s: ERROR: old childBlock under current context has a bigger tb size, for tb->pc: 0x" TARGET_FMT_lx ", asid=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc, asid_cur);
                 printf("%s:\tcontext node addr:  0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentContext->address);
                 exit(-1);
@@ -4605,8 +4775,8 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 
 */
 void handle_on_call(CPUState *env, target_ulong ip){
-    // target_ulong asid_cur = panda_current_asid(cpu);
-     target_ulong asid_cur = panda_current_asid(env);
+    // target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
+     target_ulong asid_cur = panda_current_asid_proc_struct(env);
      if (asid_cur != gTargetAsid){
             return;
      }
@@ -4615,8 +4785,8 @@ void handle_on_call(CPUState *env, target_ulong ip){
 
 // from callstack_instr.h, called before_block_exe
 void handle_on_ret(CPUState *env, target_ulong ip){
-    // target_ulong asid_cur = panda_current_asid(cpu);
-     target_ulong asid_cur = panda_current_asid(env);
+    // target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
+     target_ulong asid_cur = panda_current_asid_proc_struct(env);
      if (asid_cur != gTargetAsid){
             return;
      }
@@ -4661,7 +4831,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     //printf("########### Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
 
     //Lele: check asid.
-    target_ulong asid_cur = panda_current_asid(cpu);
+    target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
     if (gTraceOne){
         if (asid_cur != gTargetAsid){
             // printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
@@ -4751,7 +4921,7 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     //printf("########### Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
 
     //Lele: check asid.
-    target_ulong asid_cur = panda_current_asid(cpu);
+    target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
     if (gTraceOne){
         if (asid_cur != gTargetAsid){
             // printf("%s: ignore ASID 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
@@ -4912,13 +5082,13 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
 
     // printf("a valid: %s\n", __FUNCTION__);
     // check to be safe
-    // use the asid by panda_current_asid(cpu). 
-    // BUG in Panda: on_proc_change asid can be different with panda_current_asid(cpu)
-    if (panda_current_asid(cpu) != asid){
+    // use the asid by panda_current_asid_proc_struct(cpu). 
+    // BUG in Panda: on_proc_change asid can be different with panda_current_asid_proc_struct(cpu)
+    if (panda_current_asid_proc_struct(cpu) != asid){
         // printf("%s: WARNING: BUG in Panda: on_proc_change asid not the current asid!!\n", __FUNCTION__);
-        // printf("\t\tcurrent asid: 0x" TARGET_FMT_lx "\n", panda_current_asid(cpu));
+        // printf("\t\tcurrent asid: 0x" TARGET_FMT_lx "\n", panda_current_asid_proc_struct(cpu));
         // printf("\t\tasid by on_proc_change callback: 0x" TARGET_FMT_lx "\n", asid);
-        asid = panda_current_asid(cpu);
+        asid = panda_current_asid_proc_struct(cpu);
         //exit(-1);
     }
     
@@ -4926,7 +5096,7 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
     // get current process before each bb execs
     // which will probably help us actually know the current process
     // Refer: loaded.cpp osi_foo()
-    OsiProc *p = get_current_process(cpu);
+    OsiProc *p;
 
     if (panda_in_kernel(cpu)) {
 
@@ -4955,7 +5125,7 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
             //printf ("np=%d n=%d\n", np, n);
             exit(-1);
         }
-        // target_ulong asid = panda_current_asid(cpu);
+        // target_ulong asid = panda_current_asid_proc_struct(cpu);
         // if (gRunningProcs.count(asid) == 0) {
         printf ("%s: current proc: asid=0x" TARGET_FMT_lx "(p->asid: 0x" TARGET_FMT_lx ") to running procs.  cmd=[%s]  task=0x" TARGET_FMT_lx "\n",
             __FUNCTION__, asid, p->asid, p->name, p->offset);
