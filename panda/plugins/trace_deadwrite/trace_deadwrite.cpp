@@ -3926,6 +3926,9 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
                 target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
                 printf("%s: ERROR: old childBlock under current context has a bigger tb size, for tb->pc: 0x" TARGET_FMT_lx ", asid=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc, asid_cur);
                 printf("%s:\tcontext node addr:  0x" TARGET_FMT_lx "\n", __FUNCTION__, gCurrentContext->address);
+
+                // printf("%s: WARNING: now check to relplace shadowBlock\n", __FUNCTION__);
+                // InitializeBlockShadowMap(cpu, tb);
                 exit(-1);
             }
         }else{
@@ -4264,8 +4267,8 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
         if (gInitiatedCall){
             // printf("%s: good, already found by callstack_instr plugin via handle_on_call\n", __FUNCTION__);
         }else{
-            printf("%s: WARNING: call not found by callstack_instr plugin\n", __FUNCTION__);
-            // gInitiatedCall = true;
+            // printf("%s: WARNING: call not found by callstack_instr plugin\n", __FUNCTION__);
+            gInitiatedCall = true;
         }
     }else if (tb_type == INSTR_RET) {
         // printf("%s: return detected, set InitiatedRet flag\n", __FUNCTION__);
@@ -4273,8 +4276,8 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
         if (gInitiatedRet){
             // printf("%s: good, already found by callstack_instr plugin via handle_on_call\n", __FUNCTION__);
         }else{
-            printf("%s: WARNING: ret not found by callstack_instr plugin\n", __FUNCTION__);
-            // gInitiatedRet = true;
+            // printf("%s: WARNING: ret not found by callstack_instr plugin\n", __FUNCTION__);
+            gInitiatedRet = true;
         }
 
     }else 
