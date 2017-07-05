@@ -717,6 +717,7 @@ bool gTraceKernel=false; //trace all kernel processes; asid=0
 bool gTraceApp=false; // trace all other asids !=0;
 bool gTraceOne = false; //trace only one given ASID, kernel=0, or other asids. If this is true, the 'traceKernel' and 'traceApp' is invalide; If ASID not given, default is 0.
 ADDRINT gTargetAsid=0x0; //target ASID;
+ADDRINT gTargetAsid_struct=0x0; //target ASID;
 //ADDRINT gTargetASID=0x0; //target ASID;
 
 // gIgnoredASIDs < asid1, asid2, .. >:

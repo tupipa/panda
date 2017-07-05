@@ -131,19 +131,28 @@ bool is_target_process_running(CPUState *cpu){
         // process info not available
         // use asid to distinguish, lele: should be abandoned.
 
-        target_ulong asid = panda_current_asid_proc_struct(cpu);
-        if (asid == gTargetAsid){
+        target_ulong asid = panda_current_asid(cpu);
+        if (asid == gTargetAsid || asid == gTargetAsid_struct){
             return true;
         }else{
             gIgnoredASIDs.insert(asid);
             return false;
         }
     }else{
+
         std::string curProc(p->name);
         if (curProc == gProcToMonitor){
+            // found the target proc
+            // update the target asid.
+            gTargetAsid = panda_current_asid(cpu);
+            gTargetAsid_struct = p->asid;
+
             return true;
+
         }else{
+            // keeping track of both p->asid and cpu->cr3
             gIgnoredASIDs.insert(p->asid);
+            gIgnoredASIDs.insert(panda_current_asid(cpu));
             return false;
         }
     }
@@ -201,6 +210,8 @@ OsiProc * get_current_running_process(CPUState *cpu){
             if (gRunningProcs.count(p_)==0){
                 gRunningProcs.insert(p_);
             }
+            // check whether a new proc name.
+            checkNewProc(std::string(p->name));
         }
     }
 
@@ -3050,6 +3061,7 @@ inline target_ulong GetMeasurementBaseCount(){
         // std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(target_asid);
 
         target_ulong target_asid = gTargetAsid;
+        target_ulong target_asid_st = gTargetAsid_struct;
 
         std::tr1::unordered_map<ADDRINT, FileLineInfo *> *asidMap;
 
@@ -3073,10 +3085,28 @@ inline target_ulong GetMeasurementBaseCount(){
                     // __FUNCTION__, ip, func->c_str(), file->c_str(), (*line));
                 return;
             }
+        }else if (gAsidPCtoFileLine.count(target_asid_st) != 0){
+
+            asidMap = gAsidPCtoFileLine[target_asid_st];
+            // std::tr1::unordered_map<ADDRINT, FileLineInfo *>::iterator lineForPcIt = (*asidMap).find(ip);
+            FileLineInfo *lineForPc_ptr;
+            // if (lineForPcIt == (*asidMap).end()){
+            if ((*asidMap).count(ip) != 0){
+
+                // line info exists in *asidMap, check whether changes
+                lineForPc_ptr = (*asidMap)[ip];
+                *line = lineForPc_ptr->lineNum;
+                *file = lineForPc_ptr->fileName;
+                *func = lineForPc_ptr->funName;
+                // printf("%s: get line info from gAsidPCtoFileLine map. ip: 0x" TARGET_FMT_lx ": %s at %s:%lu\n",
+                    // __FUNCTION__, ip, func->c_str(), file->c_str(), (*line));
+                return;
+            }
         }else{
             // create a map for this asid
             asidMap = new std::tr1::unordered_map<ADDRINT, FileLineInfo *>;
             gAsidPCtoFileLine[target_asid] = asidMap;
+            gAsidPCtoFileLine[target_asid_st] = asidMap;
         }
 
         // if cannot find line info from gAsidPCtoFileLine 
@@ -3087,7 +3117,8 @@ inline target_ulong GetMeasurementBaseCount(){
 
         FileLineInfo *lineForPc = new FileLineInfo;
             // 
-        if (getLineInfoForAsidIP(target_asid, ip, lineForPc) < 0){
+        if (getLineInfoForAsidIP(target_asid, ip, lineForPc) < 0 
+            && getLineInfoForAsidIP(target_asid_st, ip, lineForPc) < 0){
             // cannot find by addr2line.
             // printf("%s: WARNING: no asidMap for asid 0x" TARGET_FMT_lx "\n", __FUNCTION__, target_asid);
             lineForPc->valid = true;
@@ -3444,10 +3475,14 @@ VOID printAllProcsFound(){
     }
     printf("\n");
     printf("%s: (last) monitored ASID:\n", __FUNCTION__);
-    if (gAsidToProcIndex.count(gTargetAsid) == 0){
-        printf("\t no proc found for 0x" TARGET_FMT_lx "\n", gTargetAsid);
-    }else{
+    if (gAsidToProcIndex.count(gTargetAsid) != 0 ){
         printf("\t0x" TARGET_FMT_lx ": procName: %s\n", gTargetAsid, gProcs[gAsidToProcIndex[gTargetAsid]].c_str());
+    }
+    if (gAsidToProcIndex.count(gTargetAsid_struct) != 0){
+        printf("\t(struct): 0x" TARGET_FMT_lx ": procName: %s\n", gTargetAsid, gProcs[gAsidToProcIndex[gTargetAsid_struct]].c_str());
+    }
+    if (gAsidToProcIndex.count(gTargetAsid_struct) == 0 && gAsidToProcIndex.count(gTargetAsid) == 0 ){
+        printf("\t no proc found for 0x" TARGET_FMT_lx ", (struct): 0x" TARGET_FMT_lx "\n", gTargetAsid, gTargetAsid_struct);
     }
 }
 // done last step: printing
@@ -4364,6 +4399,10 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
     if (!proc) { return; }
     if (!proc->name) { return; }
 
+
+    target_ulong asid_struct;
+    bool asid_struct_valid = false;
+
     // printf("a valid: %s\n", __FUNCTION__);
     // check to be safe
     // use the asid by panda_current_asid_proc_struct(cpu). 
@@ -4372,7 +4411,8 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
         // printf("%s: WARNING: BUG in Panda: on_proc_change asid not the current asid!!\n", __FUNCTION__);
         // printf("\t\tcurrent asid: 0x" TARGET_FMT_lx "\n", panda_current_asid_proc_struct(cpu));
         // printf("\t\tasid by on_proc_change callback: 0x" TARGET_FMT_lx "\n", asid);
-        asid = panda_current_asid_proc_struct(cpu);
+        asid_struct = panda_current_asid_proc_struct(cpu);
+        asid_struct_valid = true;
         //exit(-1);
     }
     
@@ -4426,6 +4466,7 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
     std::string curProc(proc->name);
     // store the asid<-> procName mappings
      std::tr1::unordered_map<target_ulong, int>::iterator asidProcIt = gAsidToProcIndex.find(asid);
+    
     if (asidProcIt != gAsidToProcIndex.end()){
         // not a new asid. 
         // already a proc name stored. 
@@ -4452,6 +4493,40 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
         }
         gAsidToProcIndex[asid] = procIndex;
     }
+
+    // update gAsidToProcIndex regard to asid_struct.
+    if(asid_struct_valid){
+        std::tr1::unordered_map<target_ulong, int>::iterator asidProcIt_st = gAsidToProcIndex.find(asid_struct);
+
+        if (asidProcIt_st != gAsidToProcIndex.end()){
+            // not a new asid. 
+            // already a proc name stored. 
+            // Now check whether the stored name is the same name as current.
+            if (! (gProcs[asidProcIt_st->second] == curProc)){
+                printf("%s: WARNING::(ERROR): gProcs[%d]='%s' for asid 0x" TARGET_FMT_lx ", but curProcName is '%s' for this asid\n" ,
+                __FUNCTION__, asidProcIt_st->second, gProcs[asidProcIt_st->second].c_str(), asid_struct, proc->name);
+                // exit(-1);
+                //update if changed
+                gProcs[asidProcIt_struct->second] = curProc;
+            }
+        }else{
+            // got a new asid 
+            // now check the name. If name already exists, get the index; if not, insert into gProcs and get the new index;
+            // use index to store asid -- procName mapping.
+            int oldgProcSize = gProcs.size();
+
+            int procIndex=checkNewProc(curProc);
+
+            if (procIndex == oldgProcSize){
+                // gProcs is inserted with a new proc
+                printf("%s: got a new proc: %s, asid(struct): 0x" TARGET_FMT_lx "\n", 
+                __FUNCTION__, curProc.c_str(), asid_struct);
+            }
+            gAsidToProcIndex[asid_struct] = procIndex;
+        }
+        
+     }
+
 
     if (curProc == gProcToMonitor){
         // gTargetAsid = asid;
@@ -4681,14 +4756,16 @@ bool init_plugin(void *self) {
         //gTraceApp=true;
         // gTraceOne=true;
         gTargetAsid = 0;
+        gTargetAsid_struct = 0;
         //gTargetAsid = 0x000000001fb14000;
         //gTargetAsid = 0x0;
     }else{
         // set target asid as input asid.
         // gTraceOne=true;
         gTargetAsid = asid;
+        gTargetAsid_struct = asid;
     }
-    printf("%s: target asid: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gTargetAsid);
+    printf("%s: target asid/asid_struct: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gTargetAsid);
 
     const char *proc_to_monitor = panda_parse_string_req(args, "proc", "name of process to follow with debug info");
 
