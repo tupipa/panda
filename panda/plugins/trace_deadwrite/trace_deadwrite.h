@@ -718,6 +718,8 @@ bool gTraceApp=false; // trace all other asids !=0;
 bool gTraceOne = false; //trace only one given ASID, kernel=0, or other asids. If this is true, the 'traceKernel' and 'traceApp' is invalide; If ASID not given, default is 0.
 ADDRINT gTargetAsid=0x0; //target ASID;
 ADDRINT gTargetAsid_struct=0x0; //target ASID;
+
+bool gIsTargetBlock = false; // used to tracking whether in a block for target process. will be set/reset in before_block_exe and after_block_exe.
 //ADDRINT gTargetASID=0x0; //target ASID;
 
 // gIgnoredASIDs < asid1, asid2, .. >:
@@ -827,6 +829,7 @@ OsiProc * get_current_running_process(CPUState *cpu);
 bool is_target_process_running(CPUState *cpu);
 
 
+int checkNewProc(std::string procName);
 
 // the type for the ppp callback fn that can be passed to string search to be called
 // whenever a string match is observed

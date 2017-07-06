@@ -176,7 +176,7 @@ OsiProc * get_current_running_process(CPUState *cpu){
         // this means we didnt find current task
         if (!p){
             // printf("%s: no process info get, now return 0\n", __FUNCTION__);
-            p=0;
+            return 0;
         }else{
                 
             if (p->offset == 0 || p->name == 0 || ((int) p->pid) == -1) {
@@ -367,10 +367,10 @@ inline void ** GetNextIPVecBuffer(uint32_t size){
 // Analysis routine called on function entry. 
 // If the target IP is a child, make it gCurrentContext, else add one under gCurrentContext and point gCurrentContext to the newly added
 
-//VOID GoDownCallChain(ADDRINT callee){
-VOID GoDownCallChain(CPUState *cpu, TranslationBlock *tb){
+VOID GoDownCallChain(CPUState *cpu, target_ulong callee){
+// VOID GoDownCallChain(CPUState *cpu, TranslationBlock *tb){
     // printf("%s: go down chain, tb->pc = 0x" TARGET_FMT_lx "\n",__FUNCTION__, tb->pc);
-    target_ulong callee=tb->pc;
+    // target_ulong callee=tb->pc;
     // if( ( gContextIter = (gCurrentContext->childContexts).find(callee)) != gCurrentContext->childContexts.end()) {
     if ( (gCurrentContext->childContexts).count(callee) != 0){
         // printf("%s: down to existed context node; bb addr: 0x" TARGET_FMT_lx "\n", __FUNCTION__, callee);
@@ -1995,6 +1995,21 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     // }
 
     if(!is_target_process_running(env)){
+        if(gIsTargetBlock){
+            printf("%s: ERROR: target detected at before_block_exec but not detected here\n", __FUNCTION__);
+            exit(-1);
+        }else{
+            return 1;
+        }
+        // return 1;
+    }else{
+        if (! gIsTargetBlock){
+            printf("%s: ERROR: target not detected at before_block_exec\n", __FUNCTION__);
+        }
+    }
+
+    // reset the flag. will be detect and set again in before_block_exe
+    if(!gIsTargetBlock){
         return 1;
     }
 
@@ -2551,7 +2566,7 @@ int addr2line(std::string debugfile, target_ulong addr, FileLineInfo * lineInfo)
         lineInfo->valid = true;
         lineInfo->extraInfo = tmp;
 
-    }else if (rawLineInfo.find_first_not_of('\n\t ') != std::string::npos){
+    }else if (rawLineInfo.find_first_not_of("\n\t ") != std::string::npos){
 
         printf("get addr2line result:\n\t%s\n\tnow parse it\n", rawLineInfo.c_str());
         //parse and store it as FileLineInfo struct.
@@ -3821,7 +3836,7 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
         uint32_t flags;
         // This retrieves the pc in an architecture-neutral way
         cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
-        // printf("%s: get a function call: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
+        printf("%s: get a function call: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
         //gInitiatedCall=true;
     }else if (tb_type == INSTR_RET) {
         // track the function that gets called
@@ -3829,14 +3844,14 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
         uint32_t flags;
         // This retrieves the pc in an architecture-neutral way
         cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
-        // printf("%s: get a function ret: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
+        printf("%s: get a function ret: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
     }else if (tb_type == INSTR_INT) {
         // track the function that gets called
         target_ulong pc, cs_base;
         uint32_t flags;
         // This retrieves the pc in an architecture-neutral way
         cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
-        // printf("%s: get a interrupt call: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
+        printf("%s: get a interrupt call: <tb->pc,pc>=<%p,%p>\n", __FUNCTION__, (void *)(uintptr_t) tb->pc, (void *)(uintptr_t) pc);
     }else if (tb_type == INSTR_IRET) {
         // track the function that gets called
         target_ulong pc, cs_base;
@@ -4020,39 +4035,105 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 // }
 
 /*
- handle_on_call(CPUState *env, target_ulong func); --> called on after_block_exe
-
- handle_on_ret(CPUState *env, target_ulong func);  --> called on before_block_exe
+ handle_on_call(CPUState *env, target_ulong func);
+    --> called on after_block_exe, which means, this block is not the new block, but next block will be a new block by call.
 
  Refer: callstack_instr.h
 
 */
-void handle_on_call(CPUState *env, target_ulong ip){
-    // target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
-    //  target_ulong asid_cur = panda_current_asid_proc_struct(env);
-    //  if (asid_cur != gTargetAsid){
-    //         return;
-    //  }
+void handle_on_call(CPUState *env,TranslationBlock *src_tb, target_ulong dst_func){
+   
+    // verify the pc of func by callstack_instr.cpp
+    // current pc should be exactly dst_func
+    target_ulong pc, cs_base;
+    uint32_t flags;
+    // This retrieves the pc in an architecture-neutral way
+    cpu_get_tb_cpu_state((CPUArchState*)env->env_ptr, &pc, &cs_base, &flags);
 
-    if(!is_target_process_running(env)){
-        return ;
+    if (pc != dst_func){
+        printf("%s: ERROR in callstack_instr: given func addr is not the current pc\n", __FUNCTION__);
+        exit(-1);
     }
     
-    gInitiatedCall = true;
+     // target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
+    //  target_ulong asid_cur = panda_current_asid_proc_struct(env);
+    //  if (asid_cur != gTargetAsid){
+    //         return;
+    //  }
+
+    if(!is_target_process_running(env)){
+        if(gIsTargetBlock){
+            printf("%s: ERROR: target detected at before_block_exec but not detected here\n", __FUNCTION__);
+            exit(-1);
+        }else{
+            return ;
+        }
+        // return 1;
+    }else{
+        gIsTargetBlock = true;
+    }
+    
+    printf("%s: callstack_instr get a call\n", __FUNCTION__);
+    
+    // 
+    // gInitiatedCall = true;
+
+    // Let GoDownCallChain do the work needed to setup pointers for child nodes.
+    GoDownCallChain(env,dst_func);
 }
 
-// from callstack_instr.h, called before_block_exe
-void handle_on_ret(CPUState *env, target_ulong ip){
+/*
+ handle_on_ret(CPUState *env, target_ulong func);  
+    --> called on before_block_exe, which means this block is already in the new block we ret to.
+
+ Refer: callstack_instr.h
+
+*/
+void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_func){
     // target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
     //  target_ulong asid_cur = panda_current_asid_proc_struct(env);
     //  if (asid_cur != gTargetAsid){
     //         return;
     //  }
-    if(!is_target_process_running(env)){
-        return ;
+
+    if(!is_target_process_running(cpu)){
+       return ;
+    }else{
+        gIsTargetBlock = true;
+        printf("%s: set true to gIsTargetBlock\n", __FUNCTION__);
     }
 
-    gInitiatedRet = true;
+
+    printf("%s: callstack_instr detect a ret to a new block.\n", __FUNCTION__);
+    
+    // 
+    // gInitiatedRet = true;
+
+    // detect the ret depth and call GoUpCallChain
+    // search up to 10 depth, according to callstack_instr.cpp
+    int i = 0;
+    int depth = 0;
+    target_ulong functions[10];
+    int func_cnt = get_functions(functions, 10, cpu);
+    for (i=0 ; i < func_cnt; i ++){
+        if (from_func == functions[i]){
+            break;
+        }
+    }
+    depth = i + 1;
+
+    if (depth > func_cnt){
+        printf("%s: ERROR: BUG in callstack_instr: ret has no matching from functions in func stack\n", __FUNCTION__);
+        exit(-1);
+    }
+
+    printf("%s: go up %d function calls\n", __FUNCTION__, depth);
+
+    for(i=0; i<depth; i++){
+
+        GoUpCallChain();
+
+    }
 }
 
 /**
@@ -4126,6 +4207,9 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
 
     if(!is_target_process_running(cpu)){
         return 1;
+    }else{
+        gIsTargetBlock = true;
+        printf("%s: set true to gIsTargetBlock\n", __FUNCTION__);
     }
 
     // Refer: ManageCallingContext() -> GoUpCallChain().
@@ -4133,38 +4217,42 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     // if(gInitiatedCall || gInitiatedINT) {    
     //     GoDownCallChain(cpu, tb); 
     // }else 
-    if(gInitiatedRet){
+    
+    // detecting and changing calling context tree is moved to the time when we detect a call/ret.
+    // e.g. in after_block_exe, or before_block_exe.
 
-        // printf("%s:get a new function ret.\n", __FUNCTION__);
-        gInitiatedRet=false;
-        GoUpCallChain();
-        //TODO: check if tb->pc is equal with currentIp
-        // printf("%s: go up to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
-        // printf("%s: go up to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
-    }
-    if(gInitiatedIRET){
+    // if(gInitiatedRet){
 
-        // printf("%s:get a new interrupt ret.\n", __FUNCTION__);
-        gInitiatedIRET=false;
-        GoUpCallChain();
-        //TODO: check if tb->pc is equal with currentIp
-        // printf("%s: go up to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
-        // printf("%s: go up to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
+    //     // printf("%s:get a new function ret.\n", __FUNCTION__);
+    //     gInitiatedRet=false;
+    //     GoUpCallChain();
+    //     //TODO: check if tb->pc is equal with currentIp
+    //     // printf("%s: go up to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
+    //     // printf("%s: go up to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
+    // }
+    // if(gInitiatedIRET){
 
-    }
-    if(gInitiatedCall){
-        //Refer: UpdateDataOnFunctionEntry(cpu, tb); // it will reset   gInitiatedCall      
-        // normal function call, so unset gInitiatedCall
-        // printf("%s:get a new function call !\n", __FUNCTION__);
-        gInitiatedCall = false;
+    //     // printf("%s:get a new interrupt ret.\n", __FUNCTION__);
+    //     gInitiatedIRET=false;
+    //     GoUpCallChain();
+    //     //TODO: check if tb->pc is equal with currentIp
+    //     // printf("%s: go up to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
+    //     // printf("%s: go up to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
 
-        // Let GoDownCallChain do the work needed to setup pointers for child nodes.
-        GoDownCallChain(cpu,tb);
-        //TODO: check if tb->pc is equal with currentIp
-        // printf("%s: go down to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
-        // printf("%s: go down to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
+    // }
+    // if(gInitiatedCall){
+    //     //Refer: UpdateDataOnFunctionEntry(cpu, tb); // it will reset   gInitiatedCall      
+    //     // normal function call, so unset gInitiatedCall
+    //     // printf("%s:get a new function call !\n", __FUNCTION__);
+    //     gInitiatedCall = false;
+
+    //     // Let GoDownCallChain do the work needed to setup pointers for child nodes.
+    //     GoDownCallChain(cpu,tb);
+    //     //TODO: check if tb->pc is equal with currentIp
+    //     // printf("%s: go down to context: 0x" TARGET_FMT_lx"\n", __FUNCTION__, gCurrentContext->address);
+    //     // printf("%s: go down to BasicBlock: 0x" TARGET_FMT_lx"\n", __FUNCTION__, tb->pc);
         
-    }
+    // }
 
 
     // Refer: InstrumentTrace() TODO
@@ -4217,7 +4305,22 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     // }
 
     if(!is_target_process_running(cpu)){
-        return 1;
+        if(gIsTargetBlock){
+            printf("%s: ERROR: target detected at before_block_exec but not detected here\n", __FUNCTION__);
+            exit(-1);
+        }else{
+            return 1;
+        }
+        // return 1;
+    }else{
+        if (! gIsTargetBlock){
+            printf("%s: ERROR: target not detected at before_block_exec\n", __FUNCTION__);
+        }
+    }
+
+    // reset the flag. will be detect and set again in before_block_exe
+    if(gIsTargetBlock){
+        gIsTargetBlock = false;
     }
 
     
@@ -4248,31 +4351,31 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     }
     instr_type tb_type = call_cache[tb->pc];
     if (tb_type == INSTR_CALL) {
-        // printf("%s: call detected, set InitiatedCall flag\n", __FUNCTION__);
-        if (gInitiatedCall){
-            // printf("%s: good, already found by callstack_instr plugin via handle_on_call\n", __FUNCTION__);
-        }else{
-            // printf("%s: WARNING: call not found by callstack_instr plugin\n", __FUNCTION__);
-            gInitiatedCall = true;
-        }
+        printf("%s: call detected, but not set InitiatedCall flag\n", __FUNCTION__);
+        // if (gInitiatedCall){
+        //     // printf("%s: good, already found by callstack_instr plugin via handle_on_call\n", __FUNCTION__);
+        // }else{
+        //     // printf("%s: WARNING: call not found by callstack_instr plugin\n", __FUNCTION__);
+        //     // gInitiatedCall = true;
+        // }
     }else if (tb_type == INSTR_RET) {
-        // printf("%s: return detected, set InitiatedRet flag\n", __FUNCTION__);
+        printf("%s: return detected, but not set InitiatedRet flag\n", __FUNCTION__);
         // gInitiatedRet=true;
-        if (gInitiatedRet){
-            // printf("%s: good, already found by callstack_instr plugin via handle_on_call\n", __FUNCTION__);
-        }else{
-            // printf("%s: WARNING: ret not found by callstack_instr plugin\n", __FUNCTION__);
-            gInitiatedRet = true;
-        }
+        // if (gInitiatedRet){
+        //     // printf("%s: good, already found by callstack_instr plugin via handle_on_call\n", __FUNCTION__);
+        // }else{
+        //     // printf("%s: WARNING: ret not found by callstack_instr plugin\n", __FUNCTION__);
+        //     gInitiatedRet = true;
+        // }
 
     }else 
     if (tb_type == INSTR_INT) {
-        printf("%s: interrupt detected, set InitiatedINT flag\n", __FUNCTION__);
-        gInitiatedINT=true;
+        printf("%s: interrupt detected, but not set InitiatedINT flag\n", __FUNCTION__);
+        // gInitiatedINT=true;
     }
     else if (tb_type == INSTR_IRET) {
-        printf("%s: iret detected, set InitiatedIRET flag\n", __FUNCTION__);
-        gInitiatedRet=true;
+        printf("%s: iret detected, but not set InitiatedIRET flag\n", __FUNCTION__);
+        // gInitiatedRet=true;
     }
     return 1;
 }
@@ -4455,7 +4558,7 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
                 __FUNCTION__, asidProcIt_st->second, gProcs[asidProcIt_st->second].c_str(), asid_struct, proc->name);
                 // exit(-1);
                 //update if changed
-                gProcs[asidProcIt_struct->second] = curProc;
+                gProcs[asidProcIt_st->second] = curProc;
             }
         }else{
             // got a new asid 
@@ -4807,8 +4910,8 @@ bool init_plugin(void *self) {
     // use asidstory to find out the asid's of the ProcToMonitor.
 
     PPP_REG_CB("asidstory", on_proc_change, handle_proc_change);
-    PPP_REG_CB("callstack_instr", on_call, handle_on_call);
-    PPP_REG_CB("callstack_instr", on_ret, handle_on_ret);
+    PPP_REG_CB("callstack_instr", on_call2, handle_on_call);
+    PPP_REG_CB("callstack_instr", on_ret2, handle_on_ret);
 
 
     pcb.asid_changed = handle_asid_change;

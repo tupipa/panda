@@ -51,11 +51,16 @@ void uninit_plugin(void *);
 
 PPP_PROT_REG_CB(on_call);
 PPP_PROT_REG_CB(on_ret);
+PPP_PROT_REG_CB(on_call2);
+PPP_PROT_REG_CB(on_ret2);
 
 }
 
 PPP_CB_BOILERPLATE(on_call);
 PPP_CB_BOILERPLATE(on_ret);
+
+PPP_CB_BOILERPLATE(on_call2);
+PPP_CB_BOILERPLATE(on_ret2);
 
 enum instr_type {
   INSTR_UNKNOWN = 0,
@@ -237,10 +242,14 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     // Search up to 10 down
     for (int i = v.size()-1; i > ((int)(v.size()-10)) && i >= 0; i--) {
         if (tb->pc == v[i].pc) {
-            //printf("Matched at depth %d\n", v.size()-i);
+            printf("%s: Matched at depth %d\n",__FUNCTION__, (int) v.size()-i);
             //v.erase(v.begin()+i, v.end());
 
+            // ret to address is the next ip of last call instruction, which is stored in callstack
+            // function_stacks stored all call to function addresses.
+            // for each function addr w[i], corresponding a return address v[i] in the stack.
             PPP_RUN_CB(on_ret, cpu, w[i]);
+            PPP_RUN_CB(on_ret2, cpu, tb, w[i]);
             v.erase(v.begin()+i, v.end());
             w.erase(w.begin()+i, w.end());
 
@@ -267,6 +276,7 @@ int after_block_exec(CPUState* cpu, TranslationBlock *tb) {
         function_stacks[get_stackid(env)].push_back(pc);
 
         PPP_RUN_CB(on_call, cpu, pc);
+        PPP_RUN_CB(on_call2, cpu, tb, pc);
     }
     else if (tb_type == INSTR_RET) {
         //printf("Just executed a RET in TB " TARGET_FMT_lx "\n", tb->pc);
