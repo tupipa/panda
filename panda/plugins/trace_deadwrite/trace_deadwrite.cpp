@@ -382,7 +382,7 @@ VOID GoDownCallChain(CPUState *cpu, target_ulong callee){
         newChild->address = callee;
         (gCurrentContext->childContexts)[callee] = newChild;
         gCurrentContext = newChild;
-        printf("%s: new context node; bb addr: 0x" TARGET_FMT_lx "\n",__FUNCTION__, callee);
+        printf("%s: new context node; func addr: 0x" TARGET_FMT_lx "\n",__FUNCTION__, callee);
     }
 }
 
@@ -817,13 +817,13 @@ VOID InitContextTree(){
     //(*mapIps).reserve(8);
     // (*mapIps)[traceAddr] = -1;
 
-    printf("%s: set shadowMapIps[traceAddr] to false, meaning the array of BB has no traceAddr as write IP yet.\n",__FUNCTION__);
+    // printf("%s: set shadowMapIps[traceAddr] to false, meaning the array of BB has no traceAddr as write IP yet.\n",__FUNCTION__);
     gBlockShadowIPtoSlot[traceAddr] = mapIps;
 
 
 
 
-    printf("done. initialize gBlockShadowMap and gBlockShadowIPtoSlot\n");
+    printf("done initializing gBlockShadowMap and gBlockShadowIPtoSlot\n");
    
 #else // no IP_AND_CCT
     gCurrentContext = gRootContext = new ContextNode();
@@ -4069,7 +4069,7 @@ void handle_on_call(CPUState *env,TranslationBlock *src_tb, target_ulong dst_fun
     //         return;
     //  }
 
-    printf("Now in %s\n", __FUNCTION__);
+    // printf("Now in %s\n", __FUNCTION__);
     if(!is_target_process_running(env)){
         if(gIsTargetBlock){
             printf("%s: ERROR: target detected at before_block_exec but not detected here\n", __FUNCTION__);
@@ -4082,7 +4082,7 @@ void handle_on_call(CPUState *env,TranslationBlock *src_tb, target_ulong dst_fun
         gIsTargetBlock = true;
     }
     
-    printf("%s: callstack_instr get a call\n", __FUNCTION__);
+    printf("%s: callstack_instr get a call from block tb->pc: 0x" TARGET_FMT_lx ", to func 0x" TARGET_FMT_lx " \n", __FUNCTION__, src_tb->pc, dst_func);
     
     // 
     // gInitiatedCall = true;
@@ -4114,7 +4114,7 @@ void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_fu
     }
 
 
-    printf("%s: callstack_instr detect a ret to a new block.\n", __FUNCTION__);
+    printf("%s: callstack_instr detect a ret from func: 0x" TARGET_FMT_lx ", to a target proc's block: tb->pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, from_func, dst_tb->pc);
     
     // 
     // gInitiatedRet = true;
@@ -4787,27 +4787,15 @@ void init_deadspy(const char * prefix){
 
 bool init_plugin(void *self) {
 
-    //lele: step 1. Sys init
-
     panda_arg_list *args;
 
     panda_cb pcb;
 
 
-
-
-    //lele: step 2, parse args
+    //lele: step 1, parse args
 
     args = panda_get_args("trace_deadwrite");
 
-    //step 2.1: args: asid
-    // const char *arg_str = panda_parse_string_opt(args, "asid", "", "a single asid to search for");
-    // size_t arg_len = strlen(arg_str);
-    // if (arg_len > 0) {
-    //     //memcpy(tofind[num_strings], arg_str, arg_len);
-    //     //strlens[num_strings] = arg_len;
-    //     //num_strings++;
-    // }
 
     target_ulong asid = panda_parse_ulong_opt(args, "asid", 0 , "a single asid to search for");
 
@@ -4856,35 +4844,28 @@ bool init_plugin(void *self) {
         printf("%s: WARNING: no debug info path found\n", __FUNCTION__);
     }
 
-    //step 2.2: args: log file name prefix
-    // deleted, simple hardcoded the prefix
-
-
-    //lele: init_deadspy: open log file handlers, print first lines
-
-    const char *prefix="trace_deadwrite_test";
-    init_deadspy(prefix);
-
-    //lele: step 3: sys int: set callstack plugins, enable precise pc, memcb, and set callback functions.
+    //lele: step 2: sys int: set callstack plugins, enable precise pc, memcb, and set callback functions.
 
 
     panda_require("callstack_instr");
-    panda_require("osi");
-    panda_require("osi_linux");
-    panda_require("asidstory");
-
-
     if(!init_callstack_instr_api())
     {
         printf("%s: cannot init callstack_instr\n", __FUNCTION__);
         return false;
     } 
+
+    panda_require("osi");
+    assert(init_osi_api());
+    panda_require("osi_linux");
+    assert(init_osi_linux_api());
+    
+    panda_require("asidstory");
+
     
     // assert(init_callstack_instr_api());
-    assert(init_osi_linux_api());
-    assert(init_osi_api());
     // assert(init_asidstory_api());
     // assert(init_pri_api());
+
 
 //#################################################
 // ADD support of pri_dwarf. get Line Number and Source File Name by PC.
@@ -5014,6 +4995,13 @@ bool init_plugin(void *self) {
     */
     pcb.after_block_exec = after_block_exec;
     panda_register_callback(self, PANDA_CB_AFTER_BLOCK_EXEC, pcb);
+
+
+    //step 3: deadspy init.
+    // 
+    //lele: init_deadspy: open log file handlers, print first lines, create cct tree, etc.
+    const char *prefix="trace_deadwrite_test";
+    init_deadspy(prefix);
 
 
     return true;

@@ -91,6 +91,7 @@ extern "C" {
 #include "asidstory/asidstory.h"
 // #include "asidstory/asidstory_ext.h"
 
+
     bool init_plugin(void *);
     void uninit_plugin(void *);
 
@@ -807,20 +808,23 @@ inline bool IsValidIP(DeadInfo  di);
 
 
 void init_deadspy();
-int mem_write_callback(CPUState *env, target_ulong pc, target_ulong addr, target_ulong size, void *buf);
-int mem_read_callback(CPUState *env, target_ulong pc, target_ulong addr, target_ulong size, void *buf);
+
+extern "C"{
+
+    int mem_write_callback(CPUState *env, target_ulong pc, target_ulong addr, target_ulong size, void *buf);
+    int mem_read_callback(CPUState *env, target_ulong pc, target_ulong addr, target_ulong size, void *buf);
 
 
-int before_block_exec(CPUState *cpu, TranslationBlock *tb) ;
+    int before_block_exec(CPUState *cpu, TranslationBlock *tb) ;
 
-int after_block_exec(CPUState *cpu, TranslationBlock *tb) ;
+    int after_block_exec(CPUState *cpu, TranslationBlock *tb) ;
 
-int handle_asid_change(CPUState *cpu, target_ulong old_asid, target_ulong new_asid);
+    int handle_asid_change(CPUState *cpu, target_ulong old_asid, target_ulong new_asid);
 
 
-int handle_proc_change(CPUState *cpu, target_ulong old_asid, target_ulong new_asid);
+    int handle_proc_change(CPUState *cpu, target_ulong old_asid, target_ulong new_asid);
 
-void  panda_GetSourceLocation(ADDRINT ip, unsigned long *line, std::string *file, std::string *func);
+}
 
 target_ulong panda_current_asid_proc_struct(CPUState *cpu);
 
@@ -828,8 +832,9 @@ OsiProc * get_current_running_process(CPUState *cpu);
 
 bool is_target_process_running(CPUState *cpu);
 
-
 int checkNewProc(std::string procName);
+
+void  panda_GetSourceLocation(ADDRINT ip, unsigned long *line, std::string *file, std::string *func);
 
 // the type for the ppp callback fn that can be passed to string search to be called
 // whenever a string match is observed
