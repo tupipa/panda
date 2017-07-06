@@ -3525,6 +3525,12 @@ ins_type disas_block_dw(CPUArchState* env, target_ulong pc, int size) {
 #elif defined(TARGET_ARM) || defined(TARGET_PPC)
     csh handle = csh_hd_32;
 #endif
+    // csh handle;
+    
+    // if (get_capstone_handle((CPUArchState *)env, &handle)<0){
+    //     printf("%s: cannot get capstone handle from callstack_instr\n", __FUNCTION__);
+    //     exit(-1);
+    // }
 
     cs_insn *insn;
     cs_insn *end;
@@ -4868,12 +4874,17 @@ bool init_plugin(void *self) {
     panda_require("asidstory");
 
 
+    if(!init_callstack_instr_api())
+    {
+        printf("%s: cannot init callstack_instr\n", __FUNCTION__);
+        return false;
+    } 
+    
     // assert(init_callstack_instr_api());
     assert(init_osi_linux_api());
     assert(init_osi_api());
     // assert(init_asidstory_api());
     // assert(init_pri_api());
-    if(!init_callstack_instr_api()) return false;
 
 //#################################################
 // ADD support of pri_dwarf. get Line Number and Source File Name by PC.

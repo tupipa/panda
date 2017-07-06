@@ -333,6 +333,7 @@ int after_block_exec(CPUState* cpu, TranslationBlock *tb) {
         PPP_RUN_CB(on_call, cpu, pc);
         PPP_RUN_CB(on_call2, cpu, tb, pc);
     }
+    // TODO: we might need also detect INSTR_INT
     else if (tb_type == INSTR_RET) {
         //printf("Just executed a RET in TB " TARGET_FMT_lx "\n", tb->pc);
         //if (next) printf("Next TB: " TARGET_FMT_lx "\n", next->pc);
@@ -430,6 +431,32 @@ void get_prog_point(CPUState* cpu, prog_point *p) {
     p->pc = cpu->panda_guest_pc;
 }
 
+int get_capstone_handle(CPUArchState* env, csh *handle_ptr){
+
+#if defined(TARGET_I386)
+    *handle_ptr = (env->hflags & HF_LMA_MASK) ? cs_handle_64 : cs_handle_32;
+#elif defined(TARGET_ARM)
+    *handle_ptr = cs_handle_32;
+
+    if (env->thumb){
+        if (cs_option(*handle_ptr, CS_OPT_MODE, CS_MODE_THUMB) != CS_ERR_OK){
+            printf("ERROR cs_option ARM thumb\n");
+            return -1;
+        }
+    }
+    else {
+        if (cs_option(*handle_ptr, CS_OPT_MODE, CS_MODE_ARM) != CS_ERR_OK){
+            printf("ERROR cs_option ARM ARM\n");
+            return -1;
+        }
+    }
+
+#elif defined(TARGET_PPC)
+    *handle_ptr = cs_handle_32;
+#endif
+
+    return 0;
+}
 
 
 bool init_plugin(void *self) {

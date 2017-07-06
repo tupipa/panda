@@ -23,5 +23,8 @@ Panda__CallStack *pandalog_callstack_create(void);
 // free that data structure
 void pandalog_callstack_free(Panda__CallStack *cs);
 
+// get capstone handle  
+// return -1 if failed.
+// int get_capstone_handle(CPUArchState *env, csh *handle_ptr);
 
 #endif

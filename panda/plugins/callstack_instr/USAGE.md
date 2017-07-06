@@ -53,6 +53,15 @@ Description: Called every time a function call returns in guest (e.g., at the `r
     // right now to have a "utilities" library, this will have to do
     void get_prog_point(CPUState *env, prog_point *p);
 
+    // get capstone handle from the callstack_instr
+    // -- capstone disasm instance can only have one instance. So if other plugin
+    //  needs to use capstone, it might get the handle directly from here, instead
+    //  of create a new one. 
+    // -- If other plugin re-initialize capstone after the callstack_instr initialized
+    //  here, the old capstone here in this plugin will not work. cs_option will failed 
+    //  every time when we set
+    <!--csh get_capstone_handle(CPUArchState* env, csh * handle_ptr)-->
+
 There are also functions available for getting callstack information in [pandalog format](docs/pandalog.md):
 
     // Create pandalog message for callstack info 
