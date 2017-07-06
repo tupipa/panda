@@ -1993,7 +1993,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     //     // no filters
     //     printf("\n All: Mem op for ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
     // }
-
+    printf("Now in %s\n", __FUNCTION__);
     if(!is_target_process_running(env)){
         if(gIsTargetBlock){
             printf("%s: ERROR: target detected at before_block_exec but not detected here\n", __FUNCTION__);
@@ -3479,17 +3479,17 @@ void init_capstone(CPUState *cpu) {
 
     #if defined(TARGET_I386)
         printf("%s: i386 arch.\n", __FUNCTION__);
-        if (cs_open(CS_ARCH_X86, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
+        if (cs_open(CS_ARCH_X86, CS_MODE_32, &csh_hd_32) != CS_ERR_OK)
         #if defined(TARGET_X86_64)
             printf("%s: x86_64 arch.\n", __FUNCTION__);
-            if (cs_open(CS_ARCH_X86, CS_MODE_64, &cs_handle_64) != CS_ERR_OK)
+            if (cs_open(CS_ARCH_X86, CS_MODE_64, &csh_hd_64) != CS_ERR_OK)
         #endif
     #elif defined(TARGET_ARM)
         printf("%s: ARM arch.\n", __FUNCTION__);
-        if (cs_open(CS_ARCH_ARM, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
+        if (cs_open(CS_ARCH_ARM, CS_MODE_32, &csh_hd_32) != CS_ERR_OK)
     #elif defined(TARGET_PPC)
         printf("%s: PPC arch.\n", __FUNCTION__);
-        if (cs_open(CS_ARCH_PPC, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
+        if (cs_open(CS_ARCH_PPC, CS_MODE_32, &csh_hd_32) != CS_ERR_OK)
     #endif
          {
             printf("ERROR initializing capstone\n");
@@ -3497,12 +3497,12 @@ void init_capstone(CPUState *cpu) {
          }   
 
         // Need details in capstone to have instruction groupings
-        if (cs_option(cs_handle_32, CS_OPT_DETAIL, CS_OPT_ON) != CS_ERR_OK){
+        if (cs_option(csh_hd_32, CS_OPT_DETAIL, CS_OPT_ON) != CS_ERR_OK){
             printf("ERROR cs_option 32 bit\n");
             return ;
         }
     #if defined(TARGET_X86_64)
-        if (cs_option(cs_handle_64, CS_OPT_DETAIL, CS_OPT_ON) != CS_ERR_OK){
+        if (cs_option(csh_hd_64, CS_OPT_DETAIL, CS_OPT_ON) != CS_ERR_OK){
             printf("ERROR cs_optin for x86_64\n");
             return ;
         }
@@ -3514,16 +3514,16 @@ void init_capstone(CPUState *cpu) {
 //
 //
 
-instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
+ins_type disas_block_dw(CPUArchState* env, target_ulong pc, int size) {
     unsigned char *buf = (unsigned char *) malloc(size);
     int err = panda_virtual_memory_rw(ENV_GET_CPU(env), pc, buf, size, 0);
     if (err != 0) printf("Couldn't read TB memory!\n");
-    instr_type res = INSTR_UNKNOWN;
+    ins_type res = INSTR_UNKNOWN;
 
 #if defined(TARGET_I386)
-    csh handle = (env->hflags & HF_LMA_MASK) ? cs_handle_64 : cs_handle_32;
+    csh handle = (env->hflags & HF_LMA_MASK) ? csh_hd_64 : csh_hd_32;
 #elif defined(TARGET_ARM) || defined(TARGET_PPC)
-    csh handle = cs_handle_32;
+    csh handle = csh_hd_32;
 #endif
 
     cs_insn *insn;
@@ -3603,7 +3603,7 @@ instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
         // printf("%s: detect a ret\n", __FUNCTION__);
     } else if (cs_insn_group(handle, end, CS_GRP_INT)){
         res = INSTR_INT;
-        // printf("%s: detect a interrupt\n", __FUNCTION__);
+        printf("%s: detect a interrupt\n", __FUNCTION__);
     } else if (cs_insn_group(handle, end, CS_GRP_IRET)){
         res = INSTR_IRET;
         printf("%s: detect a interrupt return\n", __FUNCTION__);
@@ -3810,6 +3810,7 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     //     printf("\n%s: a block for ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
     // }
 
+    printf("Now in %s\n", __FUNCTION__);
     if(!is_target_process_running(cpu)){
         return 1;
     }
@@ -3825,11 +3826,11 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     if (!init_capstone_done) init_capstone(cpu);
 
     CPUArchState* env = (CPUArchState*)cpu->env_ptr;
-    call_cache[tb->pc] = disas_block(env, tb->pc, tb->size);
+    block_cache[tb->pc] = disas_block_dw(env, tb->pc, tb->size);
 
     // detect the last instruction type
 
-    instr_type tb_type = call_cache[tb->pc];
+    ins_type tb_type = block_cache[tb->pc];
     if (tb_type == INSTR_CALL) {
         // track the function that gets called
         target_ulong pc, cs_base;
@@ -4043,6 +4044,7 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 */
 void handle_on_call(CPUState *env,TranslationBlock *src_tb, target_ulong dst_func){
    
+    printf("Now in %s\n", __FUNCTION__);
     // verify the pc of func by callstack_instr.cpp
     // current pc should be exactly dst_func
     target_ulong pc, cs_base;
@@ -4061,6 +4063,7 @@ void handle_on_call(CPUState *env,TranslationBlock *src_tb, target_ulong dst_fun
     //         return;
     //  }
 
+    printf("Now in %s\n", __FUNCTION__);
     if(!is_target_process_running(env)){
         if(gIsTargetBlock){
             printf("%s: ERROR: target detected at before_block_exec but not detected here\n", __FUNCTION__);
@@ -4096,6 +4099,7 @@ void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_fu
     //         return;
     //  }
 
+    printf("Now in %s\n", __FUNCTION__);
     if(!is_target_process_running(cpu)){
        return ;
     }else{
@@ -4205,6 +4209,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     // }
 
 
+    printf("Now in %s\n", __FUNCTION__);
     if(!is_target_process_running(cpu)){
         return 1;
     }else{
@@ -4304,6 +4309,7 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     //     printf("%s: a block for ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
     // }
 
+    printf("Now in %s\n", __FUNCTION__);
     if(!is_target_process_running(cpu)){
         if(gIsTargetBlock){
             printf("%s: ERROR: target detected at before_block_exec but not detected here\n", __FUNCTION__);
@@ -4345,11 +4351,11 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     // reset slot index, so that in next basic block, we count mem R/W from the begining.
     gCurrentSlot = 0;
 
-    if(call_cache.count(tb->pc) == 0){
+    if(block_cache.count(tb->pc) == 0){
         // printf("%s: WARNING: no disasemble cache available for tb->pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
         return 1;
     }
-    instr_type tb_type = call_cache[tb->pc];
+    ins_type tb_type = block_cache[tb->pc];
     if (tb_type == INSTR_CALL) {
         printf("%s: call detected, but not set InitiatedCall flag\n", __FUNCTION__);
         // if (gInitiatedCall){
@@ -4862,7 +4868,7 @@ bool init_plugin(void *self) {
     panda_require("asidstory");
 
 
-    assert(init_callstack_instr_api());
+    // assert(init_callstack_instr_api());
     assert(init_osi_linux_api());
     assert(init_osi_api());
     // assert(init_asidstory_api());

@@ -202,14 +202,62 @@ instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
     cs_insn *insn;
     cs_insn *end;
     size_t count = cs_disasm(handle, buf, size, pc, 0, &insn);
-    if (count <= 0) goto done2;
+
+
+    cs_err err_= cs_errno(handle);
+    if (err_ != CS_ERR_OK){
+        printf("ERROR in cs_disasm: ");
+        switch(err_){
+            case CS_ERR_MEM:
+                printf("Out-Of-Memory error: cs_disasm\n");
+                break;
+            case CS_ERR_CSH:
+                printf("Invalid csh argument: cs_close(), cs_errno(), cs_option()\n");
+                break;
+            case CS_ERR_DETAIL:
+                printf("Information is unavailable because detail option is OFF\n") ;  // Information is unavailable because detail option is OFF
+                break;
+            case CS_ERR_MEMSETUP:
+                printf("Dynamic memory management uninitialized \n"); // Dynamic memory management uninitialized (see CS_OPT_MEM)
+                break;
+            case CS_ERR_VERSION:
+                printf(" Unsupported version (bindings)\n");
+                break;
+            case CS_ERR_DIET:
+                printf("Access irrelevant data in diet engine\n");  
+                break;
+            case CS_ERR_SKIPDATA: 
+                printf("Access irrelevant data for data instruction in SKIPDATA mode\n");
+                break;
+            case CS_ERR_X86_ATT:
+                printf("X86 AT&T syntax is unsupported (opt-out at compile time)\n");
+                break;
+            case CS_ERR_X86_INTEL:
+                printf("X86 Intel syntax is unsupported (opt-out at compile time)\n");
+                break;
+            default: 
+                printf("ERROR no: %d\n", err_);
+        }
+    }
+    if (count <= 0) {
+        printf("%s: callstack_instr: no disasm result for TB %p\n", __FUNCTION__, (void*)(uintptr_t)pc);
+        goto done2;
+    }
 
     for (end = insn + count - 1; end >= insn; end--) {
         if (!cs_insn_group(handle, end, CS_GRP_INVALID)) {
             break;
         }
     }
-    if (end < insn) goto done;
+    if (end < insn) {
+        printf("%s:No available instruction disasembled\n", __FUNCTION__);
+        goto done;
+    }
+
+    if (pc != insn->address){
+        printf("block address is not equal to its first intruction's address!!!\n");
+        exit(-1);
+    }
 
     if (cs_insn_group(handle, end, CS_GRP_CALL)) {
         res = INSTR_CALL;
@@ -230,10 +278,13 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     CPUArchState* env = (CPUArchState*)cpu->env_ptr;
     call_cache[tb->pc] = disas_block(env, tb->pc, tb->size);
 
+    printf("%s: callstack_instr plugin\n", __FUNCTION__);
+
     return 1;
 }
 
 int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
+    printf("%s: callstack_instr plugin\n", __FUNCTION__);
     CPUArchState* env = (CPUArchState*)cpu->env_ptr;
     std::vector<stack_entry> &v = callstacks[get_stackid(env)];
     std::vector<target_ulong> &w = function_stacks[get_stackid(env)];
@@ -261,10 +312,14 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
 }
 
 int after_block_exec(CPUState* cpu, TranslationBlock *tb) {
+    printf("%s: callstack_instr plugin, tb->pc: 0x" TARGET_FMT_lx "\n",__FUNCTION__, tb->pc);
     CPUArchState* env = (CPUArchState*)cpu->env_ptr;
     instr_type tb_type = call_cache[tb->pc];
 
+    printf("%s: bb instr_type: %d\n", __FUNCTION__, (int)tb_type);
+    
     if (tb_type == INSTR_CALL) {
+        printf("%s:%s: callstack_instr, detect a call\n", __FILE__, __FUNCTION__);
         stack_entry se = {tb->pc+tb->size,tb_type};
         callstacks[get_stackid(env)].push_back(se);
 
@@ -391,9 +446,18 @@ bool init_plugin(void *self) {
         return false;
 
     // Need details in capstone to have instruction groupings
-    cs_option(cs_handle_32, CS_OPT_DETAIL, CS_OPT_ON);
+    // cs_option(cs_handle_32, CS_OPT_DETAIL, CS_OPT_ON);
+
+    if (cs_option(cs_handle_32, CS_OPT_DETAIL, CS_OPT_ON) != CS_ERR_OK){
+        printf("ERROR cs_option 32 bit\n");
+        return false;
+    }
 #if defined(TARGET_X86_64)
-    cs_option(cs_handle_64, CS_OPT_DETAIL, CS_OPT_ON);
+    // cs_option(cs_handle_64, CS_OPT_DETAIL, CS_OPT_ON);
+    if (cs_option(cs_handle_64, CS_OPT_DETAIL, CS_OPT_ON) != CS_ERR_OK){
+            printf("ERROR cs_optin for x86_64\n");
+            return false;
+    }
 #endif
 
     panda_cb pcb;

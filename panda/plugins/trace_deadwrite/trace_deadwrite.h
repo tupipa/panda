@@ -371,7 +371,7 @@ gPartiallyDeadBytes##size += deadBytes;\
 //###########################
 // BEGAIN: capstone related BB disas
 
-enum instr_type {
+enum ins_type {
   INSTR_UNKNOWN = 0,
   INSTR_CALL,
   INSTR_RET,
@@ -383,8 +383,8 @@ enum instr_type {
   INSTR_IRET,
 };
 
-csh cs_handle_32;
-csh cs_handle_64;
+csh csh_hd_32;
+csh csh_hd_64;
 
 bool init_capstone_done = false;
 // Track the different stacks we have seen to handle multiple threads
@@ -401,7 +401,7 @@ bool init_capstone_done = false;
 // std::tr1::unordered_map<target_ulong,int> tb_insns_count;
 // std::tr1::unordered_map<target_ulong,cs_insn *> tb_insns;
 
-std::tr1::unordered_map<target_ulong, instr_type> call_cache;  //
+std::tr1::unordered_map<target_ulong, ins_type> block_cache;  //
 
 // END: done capstone related BB disas.
 //##################################################
