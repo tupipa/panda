@@ -166,7 +166,7 @@ OsiProc * get_current_running_process(CPUState *cpu){
     OsiProc *p=0;
     // target_ulong asid;
 
-    if (panda_in_kernel(cpu)) { // Lele: why have to be in kernel????
+    // if (panda_in_kernel(cpu)) { // Lele: why have to be in kernel????
 
         // printf("%s: calling get_current_process\n", __FUNCTION__);
         p = get_current_process(cpu);
@@ -213,7 +213,7 @@ OsiProc * get_current_running_process(CPUState *cpu){
             // check whether a new proc name.
             checkNewProc(std::string(p->name));
         }
-    }
+    // }
 
     return p;
 
@@ -222,84 +222,32 @@ OsiProc * get_current_running_process(CPUState *cpu){
 
 /* panda_current_asid_proc_struct
     - use process's task struct to get the asid value.
-    - 
+    - if cannot get task struct, use cpu->cr3 by panda_current_asid()
 */
 
 target_ulong panda_current_asid_proc_struct(CPUState *cpu){
 
     target_ulong asid;
+    
 
-// #if defined(TARGET_X86_64)
     // the asid got from cpu->cr3 is usually different than the asid got from the task struct.
     // therefore, we use task struct to get the asid in the first priority.
     // - also use cpu->cr3 if we failed to get it from task struct.
 
     // printf("Now in %s\n", __FUNCTION__);
     OsiProc *p;
-    if (panda_in_kernel(cpu)) {
 
-        // printf("%s: calling get_current_process\n", __FUNCTION__);
-        p = get_current_process(cpu);
+    p = get_current_running_process(cpu);
 
-        // printf("%s: calling get_current_process, done.\n", __FUNCTION__);
-        //some sanity checks on what we think the current process is
-        // this means we didnt find current task
-        if (!p){
-            goto cpu_cr3;
-        }
-        if (p->offset == 0 || p->name == 0 || ((int) p->pid) == -1) {
-            // printf("%s: ERROR get current proc, lacking offset/name/pid\n", __FUNCTION__);
-            // exit(-1);
-            goto cpu_cr3;
-        }
-        if(p->asid == 0){
-            goto cpu_cr3;
-        }
+    if (p != 0){
+        asid = p-> asid;
 
-        // printf("%s: good, has offset/name/pid.\n", __FUNCTION__);
-        uint32_t n = strnlen(p->name, 32);
-        // name is one char?
-        if (n<2) {
-            // printf("%s: ERROR get current proc name(length < 2): %s\n", __FUNCTION__, p->name);
-            // exit(-1);
-            goto cpu_cr3;
-        }
-        uint32_t np = 0;
-        for (uint32_t i=0; i<n; i++) {
-            np += (isprint(p->name[i]) != 0);
-        }
-        // name doesnt consist of solely printable characters
-        //        printf ("np=%d n=%d\n", np, n);
-        if (np != n) {
-            // printf("%s: name doesnt consist of solely printable characters\n", __FUNCTION__);
-            //printf ("np=%d n=%d\n", np, n);
-            // exit(-1);
-            goto cpu_cr3;
-        }
-        asid = p->asid;
-        ProcID p_ = {p};
-        if (gRunningProcs.count(p_)==0){
-            gRunningProcs.insert(p_);
-        }
-        // else{
-        //     free_osiproc(p);
-        // }
-
-        // printf ("%s: current proc: p->asid: 0x" TARGET_FMT_lx ", cmd=[%s]  task=0x" TARGET_FMT_lx ", pid = %d, ppid = %d\n",
-            // __FUNCTION__, p->asid, p->name, p->offset, (int)p->pid, (int)p->ppid);
-
-        return asid;
+    }else{
+        // printf("%s: WARNING: p is null, using cpu->cr3 to get asid\n", __FUNCTION__);
+        asid = panda_current_asid(cpu);
     }
-
-cpu_cr3:
-
-// #endif // TARGET_X86_64
-    // printf("%s: WARNING: p is null, using cpu->cr3 to get asid\n", __FUNCTION__);
-    asid = panda_current_asid(cpu);
-
-    // printf("%s: done.\n", __FUNCTION__);
-    return asid;
-
+        // printf("%s: done.\n", __FUNCTION__);
+        return asid;
 }
 
 
