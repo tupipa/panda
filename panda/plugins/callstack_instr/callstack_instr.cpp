@@ -84,6 +84,8 @@ struct stack_entry {
 csh cs_handle_32;
 csh cs_handle_64;
 
+bool init_capstone_done = false;
+
 // Track the different stacks we have seen to handle multiple threads
 // within a single process.
 std::map<target_ulong,std::set<target_ulong>> stacks_seen;
@@ -177,6 +179,96 @@ static stackid get_stackid(CPUArchState* env) {
 #endif
 }
 
+
+
+void init_capstone(CPUState *cpu) {
+//     cs_arch arch;
+//     cs_mode mode;
+//     CPUArchState* env = (CPUArchState *) cpu->env_ptr;
+// #ifdef TARGET_I386
+//     arch = CS_ARCH_X86;
+//     mode = env->hflags & HF_LMA_MASK ? CS_MODE_64 : CS_MODE_32;
+// #elif defined(TARGET_ARM)
+//     arch = CS_ARCH_ARM;
+//     mode = env->thumb ? CS_MODE_THUMB : CS_MODE_ARM;
+// #endif
+
+//     if (cs_open(arch, mode, &handle) != CS_ERR_OK) {
+//         printf("ERROR initializing capstone\n");
+//     }
+
+#if defined(TARGET_I386)
+    printf("callstack_instr: %s: i386 arch.\n", __FUNCTION__);
+    if (cs_open(CS_ARCH_X86, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
+#if defined(TARGET_X86_64)
+    printf("callstack_instr: %s: x86_64 arch.\n", __FUNCTION__);
+    if (cs_open(CS_ARCH_X86, CS_MODE_64, &cs_handle_64) != CS_ERR_OK)
+#endif
+#elif defined(TARGET_ARM)
+    printf("callstack_instr: %s: ARM arch.\n", __FUNCTION__);
+    if (cs_open(CS_ARCH_ARM, CS_MODE_ARM, &cs_handle_32) != CS_ERR_OK)
+#elif defined(TARGET_PPC)
+    printf("callstack_instr: %s: PPC arch.\n", __FUNCTION__);
+    if (cs_open(CS_ARCH_PPC, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
+#endif
+    {
+    printf("ERROR initializing capstone\n");
+    return ;
+    }   
+
+    // Need details in capstone to have instruction groupings
+    // cs_option(cs_handle_32, CS_OPT_DETAIL, CS_OPT_ON);
+
+    if (cs_option(cs_handle_32, CS_OPT_DETAIL, CS_OPT_ON) != CS_ERR_OK){
+        printf("ERROR cs_option 32 bit\n");
+        return false;
+    }
+#if defined(TARGET_X86_64)
+    // cs_option(cs_handle_64, CS_OPT_DETAIL, CS_OPT_ON);
+    if (cs_option(cs_handle_64, CS_OPT_DETAIL, CS_OPT_ON) != CS_ERR_OK){
+            printf("ERROR cs_optin for x86_64\n");
+            return false;
+    }
+#endif
+
+
+    // #if defined(TARGET_I386)
+    //     printf("%s: i386 arch.\n", __FUNCTION__);
+    //     if (cs_open(CS_ARCH_X86, CS_MODE_32, &csh_hd_32) != CS_ERR_OK)
+    //     #if defined(TARGET_X86_64)
+    //         printf("%s: x86_64 arch.\n", __FUNCTION__);
+    //         if (cs_open(CS_ARCH_X86, CS_MODE_64, &csh_hd_64) != CS_ERR_OK)
+    //     #endif
+    // #elif defined(TARGET_ARM)
+    //     printf("%s: ARM arch.\n", __FUNCTION__);
+    //     if (cs_open(CS_ARCH_ARM, CS_MODE_32, &csh_hd_32) != CS_ERR_OK)
+    // #elif defined(TARGET_PPC)
+    //     printf("%s: PPC arch.\n", __FUNCTION__);
+    //     if (cs_open(CS_ARCH_PPC, CS_MODE_32, &csh_hd_32) != CS_ERR_OK)
+    // #endif
+    //      {
+    //         printf("ERROR initializing capstone\n");
+    //         return ;
+    //      }   
+
+    //     // Need details in capstone to have instruction groupings
+    //     if (cs_option(csh_hd_32, CS_OPT_DETAIL, CS_OPT_ON) != CS_ERR_OK){
+    //         printf("ERROR cs_option 32 bit\n");
+    //         return ;
+    //     }
+    // #if defined(TARGET_X86_64)
+    //     if (cs_option(csh_hd_64, CS_OPT_DETAIL, CS_OPT_ON) != CS_ERR_OK){
+    //         printf("ERROR cs_optin for x86_64\n");
+    //         return ;
+    //     }
+    // #endif
+
+    printf("callstack_instr: %s: done initializing capstone.\n", __FUNCTION__);
+    init_capstone_done = true;
+}
+
+
+
 instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
     unsigned char *buf = (unsigned char *) malloc(size);
     int err = panda_virtual_memory_rw(ENV_GET_CPU(env), pc, buf, size, 0);
@@ -240,7 +332,7 @@ instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
         }
     }
     if (count <= 0) {
-        printf("%s: callstack_instr: no disasm result for TB %p\n", __FUNCTION__, (void*)(uintptr_t)pc);
+        printf("callstack_instr plugin: %s: no disasm result for TB %p\n", __FUNCTION__, (void*)(uintptr_t)pc);
         goto done2;
     }
 
@@ -250,12 +342,12 @@ instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
         }
     }
     if (end < insn) {
-        printf("%s:No available instruction disasembled\n", __FUNCTION__);
+        printf("callstack_instr plugin: %s:No available instruction disasembled\n", __FUNCTION__);
         goto done;
     }
 
     if (pc != insn->address){
-        printf("block address is not equal to its first intruction's address!!!\n");
+        printf("callstack_instr plugin: block address is not equal to its first intruction's address!!!\n");
         exit(-1);
     }
 
@@ -263,6 +355,12 @@ instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
         res = INSTR_CALL;
     } else if (cs_insn_group(handle, end, CS_GRP_RET)) {
         res = INSTR_RET;
+    } else if (cs_insn_group(handle, end, CS_GRP_INT)){
+        res = INSTR_INT;
+        // printf("%s: detect an interrupt\n", __FUNCTION__);
+    } else if (cs_insn_group(handle, end, CS_GRP_IRET)){
+        res = INSTR_IRET;
+        // printf("%s: detect an interrupt return\n", __FUNCTION__);
     } else {
         res = INSTR_UNKNOWN;
     }
@@ -275,16 +373,19 @@ done2:
 }
 
 int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
+    
+    if (!init_capstone_done) init_capstone(cpu);
+
     CPUArchState* env = (CPUArchState*)cpu->env_ptr;
     call_cache[tb->pc] = disas_block(env, tb->pc, tb->size);
 
-    printf("%s: callstack_instr plugin\n", __FUNCTION__);
+    // printf("%s: callstack_instr plugin: disas a block.\n", __FUNCTION__);
 
     return 1;
 }
 
 int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
-    printf("%s: callstack_instr plugin\n", __FUNCTION__);
+    // printf("callstack_instr plugin: %s:\n", __FUNCTION__);
     CPUArchState* env = (CPUArchState*)cpu->env_ptr;
     std::vector<stack_entry> &v = callstacks[get_stackid(env)];
     std::vector<target_ulong> &w = function_stacks[get_stackid(env)];
@@ -312,14 +413,13 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
 }
 
 int after_block_exec(CPUState* cpu, TranslationBlock *tb) {
-    printf("%s: callstack_instr plugin, tb->pc: 0x" TARGET_FMT_lx "\n",__FUNCTION__, tb->pc);
+    // printf("callstack_instr plugin: %s: tb->pc: 0x" TARGET_FMT_lx "\n",__FUNCTION__, tb->pc);
     CPUArchState* env = (CPUArchState*)cpu->env_ptr;
     instr_type tb_type = call_cache[tb->pc];
-
-    printf("%s: bb instr_type: %d\n", __FUNCTION__, (int)tb_type);
+    // printf("callstack_instr plugin: %s: bb instr_type: %d\n", __FUNCTION__, (int)tb_type);
     
     if (tb_type == INSTR_CALL) {
-        printf("%s:%s: callstack_instr, detect a call\n", __FILE__, __FUNCTION__);
+        printf("%s:%s: detect a call\n", __FILE__, __FUNCTION__);
         stack_entry se = {tb->pc+tb->size,tb_type};
         callstacks[get_stackid(env)].push_back(se);
 
@@ -331,6 +431,19 @@ int after_block_exec(CPUState* cpu, TranslationBlock *tb) {
         function_stacks[get_stackid(env)].push_back(pc);
 
         PPP_RUN_CB(on_call, cpu, pc);
+        PPP_RUN_CB(on_call2, cpu, tb, pc);
+    }else if (tb_type == INSTR_INT) {
+        printf("%s:%s: detect an interrupt\n", __FILE__, __FUNCTION__);
+        stack_entry se = {tb->pc+tb->size,tb_type};
+        callstacks[get_stackid(env)].push_back(se);
+
+        // Also track the function that gets called
+        target_ulong pc, cs_base;
+        uint32_t flags;
+        // This retrieves the pc in an architecture-neutral way
+        cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
+        function_stacks[get_stackid(env)].push_back(pc);
+
         PPP_RUN_CB(on_call2, cpu, tb, pc);
     }
     // TODO: we might need also detect INSTR_INT
@@ -460,32 +573,33 @@ int get_capstone_handle(CPUArchState* env, csh *handle_ptr){
 
 
 bool init_plugin(void *self) {
-#if defined(TARGET_I386)
-    if (cs_open(CS_ARCH_X86, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
-#if defined(TARGET_X86_64)
-    if (cs_open(CS_ARCH_X86, CS_MODE_64, &cs_handle_64) != CS_ERR_OK)
-#endif
-#elif defined(TARGET_ARM)
-    if (cs_open(CS_ARCH_ARM, CS_MODE_ARM, &cs_handle_32) != CS_ERR_OK)
-#elif defined(TARGET_PPC)
-    if (cs_open(CS_ARCH_PPC, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
-#endif
-        return false;
 
-    // Need details in capstone to have instruction groupings
-    // cs_option(cs_handle_32, CS_OPT_DETAIL, CS_OPT_ON);
+// #if defined(TARGET_I386)
+//     if (cs_open(CS_ARCH_X86, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
+// #if defined(TARGET_X86_64)
+//     if (cs_open(CS_ARCH_X86, CS_MODE_64, &cs_handle_64) != CS_ERR_OK)
+// #endif
+// #elif defined(TARGET_ARM)
+//     if (cs_open(CS_ARCH_ARM, CS_MODE_ARM, &cs_handle_32) != CS_ERR_OK)
+// #elif defined(TARGET_PPC)
+//     if (cs_open(CS_ARCH_PPC, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
+// #endif
+//         return false;
 
-    if (cs_option(cs_handle_32, CS_OPT_DETAIL, CS_OPT_ON) != CS_ERR_OK){
-        printf("ERROR cs_option 32 bit\n");
-        return false;
-    }
-#if defined(TARGET_X86_64)
-    // cs_option(cs_handle_64, CS_OPT_DETAIL, CS_OPT_ON);
-    if (cs_option(cs_handle_64, CS_OPT_DETAIL, CS_OPT_ON) != CS_ERR_OK){
-            printf("ERROR cs_optin for x86_64\n");
-            return false;
-    }
-#endif
+//     // Need details in capstone to have instruction groupings
+//     // cs_option(cs_handle_32, CS_OPT_DETAIL, CS_OPT_ON);
+
+//     if (cs_option(cs_handle_32, CS_OPT_DETAIL, CS_OPT_ON) != CS_ERR_OK){
+//         printf("ERROR cs_option 32 bit\n");
+//         return false;
+//     }
+// #if defined(TARGET_X86_64)
+//     // cs_option(cs_handle_64, CS_OPT_DETAIL, CS_OPT_ON);
+//     if (cs_option(cs_handle_64, CS_OPT_DETAIL, CS_OPT_ON) != CS_ERR_OK){
+//             printf("ERROR cs_optin for x86_64\n");
+//             return false;
+//     }
+// #endif
 
     panda_cb pcb;
 
