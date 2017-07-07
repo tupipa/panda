@@ -2105,6 +2105,13 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
         // is target process
         if (! gIsTargetBlock){
             printf("%s: WARNING: target not detected at before_block_exec, but detected here, might a process switch??\n", __FUNCTION__);
+
+            printf("\tWARNING: now only trust the judge by proc struct\n", __FUNCTION__);
+            if (!judge_by_struct) return 1;
+
+
+            printf("%s: WARNING: target not detected at before_block_exec, but detected here, must be a process switch??\n", __FUNCTION__);
+            exit(-1);
         }
 
         // // print judge metric, for debug
