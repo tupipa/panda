@@ -2020,9 +2020,9 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
 
     // reset the flag. will be detect and set again in before_block_exe
-    if(!gIsTargetBlock){
-        return 1;
-    }
+    // if(!gIsTargetBlock){
+    //     return 1;
+    // }
 
 // #if defined(TARGET_I386) && !defined(TARGET_X86_64)
     // getAndSetSrcInfo(env, pc, addr, is_write, asid_cur);
