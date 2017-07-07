@@ -2046,14 +2046,15 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
         // is target process
         if (! gIsTargetBlock){
             printf("%s: WARNING: target not detected at before_block_exec, but detected here, might a process switch??\n", __FUNCTION__);
-            // print judge metric, for debug
-            if(judge_by_struct)
-                printf("\t\tjudge by name in struct: %s, target name: %s\n",
-                    judge_proc->name, gProcToMonitor.c_str());
-            else{
-                printf("\t\tjudge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n",
-                   judge_asid, gTargetAsid);
-            }
+        }
+
+        // print judge metric, for debug
+        if(judge_by_struct)
+            printf("\t\tjudge by name in struct: %s, target name: %s\n",
+                judge_proc->name, gProcToMonitor.c_str());
+        else{
+            printf("\t\tjudge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n",
+                judge_asid, gTargetAsid);
         }
     }
 
