@@ -2001,19 +2001,23 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     //     printf("\n All: Mem op for ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
     // }
     printf("Now in %s\n", __FUNCTION__);
+
     if(!is_target_process_running(env)){
+        // not target process.
         if(gIsTargetBlock){
-            printf("%s: ERROR: target detected at before_block_exec but not detected here\n", __FUNCTION__);
-            exit(-1);
+            printf("%s: WARNING: target detected at before_block_exec but not detected here, might a process switch??\n", __FUNCTION__);
+            // exit(-1);
         }else{
             return 1;
         }
-        // return 1;
+        return 1;
     }else{
+        // is target process
         if (! gIsTargetBlock){
-            printf("%s: ERROR: target not detected at before_block_exec but detected here\n", __FUNCTION__);
+            printf("%s: WARNING: target not detected at before_block_exec, but detected here, might a process switch??\n", __FUNCTION__);
         }
     }
+
 
     // reset the flag. will be detect and set again in before_block_exe
     if(!gIsTargetBlock){
@@ -4078,15 +4082,19 @@ void handle_on_call(CPUState *env,TranslationBlock *src_tb, target_ulong dst_fun
 
     // printf("Now in %s\n", __FUNCTION__);
     if(!is_target_process_running(env)){
+        // not target process.
         if(gIsTargetBlock){
-            printf("%s: ERROR: target detected at before_block_exec but not detected here\n", __FUNCTION__);
-            exit(-1);
+            printf("%s: WARNING: target detected at before_block_exec but not detected here, might a process switch??\n", __FUNCTION__);
+            // exit(-1);
         }else{
             return ;
         }
-        // return 1;
+        return ;
     }else{
-        gIsTargetBlock = true;
+        if (! gIsTargetBlock){
+            printf("%s: WARNING: target not detected at before_block_exec, but detected here\n", __FUNCTION__);
+            gIsTargetBlock = true;
+        }
     }
     
     printf("%s: callstack_instr get a call from block tb->pc: 0x" TARGET_FMT_lx ", to func 0x" TARGET_FMT_lx " \n", __FUNCTION__, src_tb->pc, dst_func);
@@ -4324,16 +4332,17 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
 
     printf("Now in %s\n", __FUNCTION__);
     if(!is_target_process_running(cpu)){
+        // not target process.
         if(gIsTargetBlock){
-            printf("%s: ERROR: target detected at before_block_exec but not detected here\n", __FUNCTION__);
-            exit(-1);
+            printf("%s: WARNING: target detected at before_block_exec but not detected here, might a process switch??\n", __FUNCTION__);
+            // exit(-1);
         }else{
             return 1;
         }
-        // return 1;
+        return 1;
     }else{
         if (! gIsTargetBlock){
-            printf("%s: ERROR: target not detected at before_block_exec\n", __FUNCTION__);
+            printf("%s: WARNING: target not detected at before_block_exec, but detected here, might a process switch??\n", __FUNCTION__);
         }
     }
 
