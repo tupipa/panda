@@ -2135,41 +2135,17 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
     //     return 1;
     // }
 
-// #if defined(TARGET_I386) && !defined(TARGET_X86_64)
-    // getAndSetSrcInfo(cpu, pc, addr, is_write, asid_cur);
-// #endif
-
-    // return 0;
-//    string_pos &sp = text_tracker[p];
-
-//     if(p.cr3 == 0){
-
-// 	//printf("%s\t" TARGET_FMT_lx
-//  	//		"\t %lu \t" TARGET_FMT_lx 
-// 	//		"\t" TARGET_FMT_lx 
-// 	//		"\n",
-//         //    (is_write ? "W" : "R"), addr, 
-// 	//		rr_get_guest_instr_count(), p.caller,
-// 	//		p.pc);
-
-
-    //######################################################################################################
-    //######################################################################################################
-    //######################################################################################################
-    //######################################################################################################
-    //######################################################################################################
-    //######################################################################################################
-    //######################################################################################################
-    //######################################################################################################
-    //######################################################################################################
-    //######################################################################################################
+    //##################################################################################
     // lele: ported from Instruction() from Deadspy
     // Basic: find deadwrite to the position
     // - first: get last access, R W
     // - second: if w-w, report it.
 
-    //######################################################################################################
+    // details steps:
+    // 1, count write ops according to write size;
+    // 2, update gBlockShadowMap and 
 
+    //###############################################################################
     
     uint32_t slot = 0; // only used for write op.
 
@@ -2255,12 +2231,13 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
         // printf("%s: record write pc: %p, addr: %p (%d bytes).\n",
         //     __FUNCTION__, (void*)(uintptr_t)pc, (void *)(uintptr_t)addr, (int)size);
 
-        // uint32_t slot = gCurrentTraceBlock->nSlots;
-
         //update ipShadow slot when write detected
-        // For each Basic block, only update once.
-        // use flag gBlockShadowMapDone[tb->pc] to mark it done at after_block_exe
-
+        // For each Basic block, in general case, only update once.
+        //  - use flag gBlockShadowMapDone[tb->pc] to mark it done at after_block_exe
+        // In some corner case, also should update gBlockShadowMap for some old Blocks:
+        //  - a new write pc for the old block.
+        //  - block size change to be larger then the old size.
+        
         // first, get the shadowMap and its current total slots counts;
         // printf("%s: get currentTraceShadowMap for current tb: 0x" TARGET_FMT_lx "\n", 
         //     __FUNCTION__, gCurrentTraceBlock->address);
@@ -2305,9 +2282,8 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
                 
                 // pc not in gBlockShadowMap
 
-                // printf("%s: WARNING::::::::::::::::::::::::::::::::::::\n in an old block, but gBlockShadowMap[0x" 
-                //     TARGET_FMT_lx "] has no pc: 0x" TARGET_FMT_lx ", need add it.\n",
-                //     __FUNCTION__, gCurrentTraceBlock->address, pc);
+                printf("%s: WARNING::::::::::::::::::::::::::::::::::::\n in an old block, but gBlockShadowMap[0x" TARGET_FMT_lx "] has no pc: 0x" TARGET_FMT_lx ", need add it.\n",
+                    __FUNCTION__, gCurrentTraceBlock->address, pc);
 
                 //Now update the gBlockShadowMap
                 //check if we have enough space left
@@ -2371,8 +2347,10 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
 //        }
 
 
-        //Third, update gCurrentTraceBlock->childIPs if a new Trace;
-        //      also update gCurrentTraceIpVector if a new Trace.
+        //Third,  if a new BlockNode, 
+        //  - update gCurrentTraceBlock->childIPs;
+        //  - also update gCurrentTraceIpVector;
+        // if not a new BlockNode, but need update due to a new write pc in a old BlockNode.
 
         if (gNewBlockNode || needUpdateTraceBlock || gCurrentTraceBlock->childIPs == 0){
             // UpdateTraceIPs is splited into two steps:
@@ -4541,7 +4519,7 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     if(!is_target){
         // not target process.
         if(gIsTargetBlock){
-            printf("%s: WARNING: target detected at before_block_exec but not detected here, might a process switch??\n", __FUNCTION__);
+            printf("%s: WARNING: target detected at before_block_exec but not detected here, might a process switch??, tb->pc: 0x " TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
             // exit(-1);
         }else{
             return 1;
@@ -4549,7 +4527,7 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
         return 1;
     }else{
         if (! gIsTargetBlock){
-            printf("%s: WARNING: target not detected at before_block_exec, but detected here, might a process switch??\n", __FUNCTION__);
+            printf("%s: WARNING: target not detected at before_block_exec, but detected here, might a process switch??, tb->pc: 0x " TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
         }
     }
 
