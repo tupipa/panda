@@ -122,16 +122,34 @@ inline void  print_proc_info(OsiProc *proc)
 
 inline void print_proc_info(OsiProc *proc){
 
-    printf("\tproc name: %s,\tpid: " TARGET_FMT_lu ",\tppid: " TARGET_FMT_lu 
-            "\n", proc->name, proc->pid, proc->ppid);
+    printf("\tproc name: %s,", proc->name);
 
-    printf("\t\tproc asid: 0x" TARGET_FMT_lx "\n",
-            proc->asid);
+    if(proc->pid){
+        printf("\tpid: " TARGET_FMT_lu, proc->pid);
+    }else{
+        printf("\tpid: N/A");
+    }
 
-    printf("\t\tproc offset: 0x" TARGET_FMT_lx "\n", proc->offset);
-    
-    if (proc->pages){
-        printf("\t\t page start: 0x" TARGET_FMT_lx ", page len: " TARGET_FMT_lu " \n",   
+    if(proc->ppid){
+        printf("\tppid: " TARGET_FMT_lu , proc->ppid);
+    }else{
+        printf("\tppid: N/A");
+    }
+
+    if(proc->asid){
+        printf("\tp->asid: 0x" TARGET_FMT_lx , proc->asid);
+    }else{
+        printf("\tp->asid: N/A");
+    }
+
+    if(proc->offset){
+        printf("\t\tp->offset: 0x" TARGET_FMT_lx , proc->offset);
+    }else{
+        printf("\tp->offset: N/A");
+    }
+
+    if (proc->pages && proc->pages->start && proc->pages->len ){
+        printf("\t page start: 0x" TARGET_FMT_lx ", page len: " TARGET_FMT_lu " \n",   
             proc->pages->start, proc->pages->len);
     }
 }
