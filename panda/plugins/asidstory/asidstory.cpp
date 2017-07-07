@@ -288,7 +288,7 @@ uint64_t num_seq_bb = 0;
 // from now back to last asid change
 int asidstory_asid_changed(CPUState *env, target_ulong old_asid, target_ulong new_asid) {
     // some fool trying to use asidstory for boot? 
-    if (new_asid == 0) return 0;
+    // if (new_asid == 0) return 0;
 
     // lele: panda BUG: when asid didn't change, we can still reach here...
     if(new_asid == old_asid){
