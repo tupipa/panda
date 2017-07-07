@@ -152,6 +152,8 @@ inline void print_proc_info(OsiProc *proc){
         printf("\t page start: 0x" TARGET_FMT_lx ", page len: " TARGET_FMT_lu " \n",   
             proc->pages->start, proc->pages->len);
     }
+    
+    printf("\n\n");
 }
 
 
