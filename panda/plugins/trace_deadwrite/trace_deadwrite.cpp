@@ -133,18 +133,19 @@ bool is_target_process_running(CPUState *cpu){
         // process info not available
         // use asid to distinguish, lele: should be abandoned.
         target_ulong asid = panda_current_asid(cpu);
-        printf("\t%s: judge by asid: 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid);
+        printf("\t judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n",asid, gTargetAsid);
 
-        if (asid == gTargetAsid || asid == gTargetAsid_struct){
+        // if (asid == gTargetAsid || asid == gTargetAsid_struct){
+        if (asid == gTargetAsid ){
             is_target = true;
         }else{
             gIgnoredASIDs.insert(asid);
             is_target = false;
         }
     }else{
-        printf("\t%s: judge by proc name: %s\n", __FUNCTION__, p->name);
+        printf("\t judge by name: %s, or struct_asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n", p->name, p->asid, gTargetAsid_struct);
         std::string curProc(p->name);
-        if (curProc == gProcToMonitor){
+        if (curProc == gProcToMonitor || p->asid == gTargetAsid_struct){
             // found the target proc
             // update the target asid.
             gTargetAsid = panda_current_asid(cpu);
@@ -2000,7 +2001,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
     //     // no filters
     //     printf("\n All: Mem op for ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
     // }
-    printf("Now in %s\n", __FUNCTION__);
+    // printf("Now in %s\n", __FUNCTION__);
 
     if(!is_target_process_running(env)){
         // not target process.
@@ -3827,7 +3828,7 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     //     printf("\n%s: a block for ASID: 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid_cur);
     // }
 
-    printf("Now in %s\n", __FUNCTION__);
+    // printf("Now in %s\n", __FUNCTION__);
     if(!is_target_process_running(cpu)){
         return 1;
     }
@@ -4061,7 +4062,7 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 */
 void handle_on_call(CPUState *env,TranslationBlock *src_tb, target_ulong dst_func){
    
-    printf("Now in %s\n", __FUNCTION__);
+    // printf("Now in %s\n", __FUNCTION__);
     // verify the pc of func by callstack_instr.cpp
     // current pc should be exactly dst_func
     target_ulong pc, cs_base;
@@ -4120,7 +4121,7 @@ void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_fu
     //         return;
     //  }
 
-    printf("Now in %s\n", __FUNCTION__);
+    // printf("Now in %s\n", __FUNCTION__);
     if(!is_target_process_running(cpu)){
        return ;
     }else{
@@ -4230,7 +4231,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     // }
 
 
-    printf("Now in %s\n", __FUNCTION__);
+    // printf("Now in %s\n", __FUNCTION__);
     if(!is_target_process_running(cpu)){
         return 1;
     }else{
