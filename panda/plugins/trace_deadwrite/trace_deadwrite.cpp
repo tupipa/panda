@@ -143,9 +143,11 @@ bool is_target_process_running(CPUState *cpu){
             is_target = false;
         }
     }else{
-        printf("\t judge by name: %s, or struct_asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n", p->name, p->asid, gTargetAsid_struct);
+        // printf("\t judge by name: %s, or struct_asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n", p->name, p->asid, gTargetAsid_struct);
+        printf("\t judge by name: %s\n", p->name);
         std::string curProc(p->name);
-        if (curProc == gProcToMonitor || p->asid == gTargetAsid_struct){
+        // if (curProc == gProcToMonitor || p->asid == gTargetAsid_struct){
+        if (curProc == gProcToMonitor){
             // found the target proc
             // update the target asid.
             gTargetAsid = panda_current_asid(cpu);
