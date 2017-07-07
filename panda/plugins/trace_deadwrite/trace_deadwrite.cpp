@@ -4480,12 +4480,15 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
     // use the asid by panda_current_asid_proc_struct(cpu). 
     // BUG in Panda: on_proc_change asid can be different with panda_current_asid_proc_struct(cpu)
 
+    // just check to be safe.
+    
+    // asid_struct should be the same as proc->asid.
     asid_struct = panda_current_asid_proc_struct(cpu);
-
     if(asid_struct != proc->asid){
         printf("%s: WARNING: BUG in Panda: on_proc_change asid not the struct asid!!\n", __FUNCTION__);
         printf("\t\tstruct asid: 0x" TARGET_FMT_lx "\n", asid_struct);
         printf("\t\ton_proc_change callback asid: 0x" TARGET_FMT_lx "\n", asid);
+        exit(-1);
     }
 
     if (asid_struct != asid){
@@ -4494,49 +4497,17 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
     }
     
 
-    // get current process before each bb execs
-    // which will probably help us actually know the current process
-    // Refer: loaded.cpp osi_foo()
-    // OsiProc *p = get_current_running_process(cpu);
+    printf("%s: proc_change: asid: 0x" TARGET_FMT_lx "(p->asid: 0x" TARGET_FMT_lx 
+            "), name: %s, pid: " TARGET_FMT_lu ", ppid: " TARGET_FMT_lu 
+            "\n",
+        __FUNCTION__, asid, proc->asid, proc->name, proc->pid,proc->ppid);
 
-    // if (panda_in_kernel(cpu)) {
+    printf("\t\t offset: 0x" TARGET_FMT_lx "\n", proc->offset);
 
-    //     p = get_current_process(cpu);
-
-    //     //some sanity checks on what we think the current process is
-    //     // this means we didnt find current task
-    //     if (p->offset == 0 || p->name == 0 || ((int) p->pid) == -1) {
-    //         printf("%s: ERROR get current proc, lacking offset/name/pid\n", __FUNCTION__);
-    //         exit(-1);
-    //     }
-    //     uint32_t n = strnlen(p->name, 32);
-    //     // name is one char?
-    //     if (n<2) {
-    //         printf("%s: ERROR get current proc name(length < 2) \n", __FUNCTION__);
-    //         exit(-1);
-    //     }
-    //     uint32_t np = 0;
-    //     for (uint32_t i=0; i<n; i++) {
-    //         np += (isprint(p->name[i]) != 0);
-    //     }
-    //     // name doesnt consist of solely printable characters
-    //     //        printf ("np=%d n=%d\n", np, n);
-    //     if (np != n) {
-    //         printf("%s: name doesnt consist of solely printable characters\n", __FUNCTION__);
-    //         //printf ("np=%d n=%d\n", np, n);
-    //         exit(-1);
-    //     }
-    //     // target_ulong asid = panda_current_asid_proc_struct(cpu);
-    //     // if (gRunningProcs.count(*p) == 0) {
-    //     printf ("%s: current proc: asid=0x" TARGET_FMT_lx "(p->asid: 0x" TARGET_FMT_lx ") to running procs.  cmd=[%s]  task=0x" TARGET_FMT_lx "\n",
-    //         __FUNCTION__, asid, p->asid, p->name, p->offset);
-    //         // assert(asid == p->asid);
-    //     // }
-    //     gRunningProcs.insert(*p);
-    // }
-
-    printf("%s: proc_change: asid: 0x" TARGET_FMT_lx "(p->asid: 0x" TARGET_FMT_lx "), cmd: %s, pid: " TARGET_FMT_lu ", offset: 0x" TARGET_FMT_lx " \n",
-        __FUNCTION__, asid, proc->asid, proc->name, proc->pid, proc->offset);
+    if (proc->pages){
+        printf("\t\t page start: 0x" TARGET_FMT_lx " , page len: " TARGET_FMT_lu " \n",   
+            proc->pages->start, proc->pages->len);
+    }
 
     // assert(asid == proc->asid);
 
