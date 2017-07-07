@@ -394,7 +394,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     // Search up to 10 down
     for (int i = v.size()-1; i > ((int)(v.size()-10)) && i >= 0; i--) {
         if (tb->pc == v[i].pc) {
-            printf("%s: Matched at depth %d\n",__FUNCTION__, (int) v.size()-i);
+            // printf("%s: Matched at depth %d\n",__FUNCTION__, (int) v.size()-i);
             //v.erase(v.begin()+i, v.end());
 
             // ret to address is the next ip of last call instruction, which is stored in callstack
@@ -419,7 +419,7 @@ int after_block_exec(CPUState* cpu, TranslationBlock *tb) {
     // printf("callstack_instr plugin: %s: bb instr_type: %d\n", __FUNCTION__, (int)tb_type);
     
     if (tb_type == INSTR_CALL) {
-        printf("%s:%s: detect a call\n", __FILE__, __FUNCTION__);
+        // printf("%s:%s: detect a call\n", __FILE__, __FUNCTION__);
         stack_entry se = {tb->pc+tb->size,tb_type};
         callstacks[get_stackid(env)].push_back(se);
 
