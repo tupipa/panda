@@ -834,7 +834,7 @@ target_ulong panda_current_asid_proc_struct(CPUState *cpu);
 
 OsiProc * get_current_running_process(CPUState *cpu);
 
-bool is_target_process_running(CPUState *cpu);
+inline bool is_target_process_running(CPUState *cpu);
 
 int checkNewProc(std::string procName);
 

@@ -116,6 +116,28 @@ PANDAENDCOMMENT */
 // ######################################################
 
 /*
+inline void  print_proc_info(OsiProc *proc)
+
+*/
+
+inline void print_proc_info(OsiProc *proc){
+
+    printf("\tproc name: %s,\tpid: " TARGET_FMT_lu ",\tppid: " TARGET_FMT_lu 
+            "\n", proc->name, proc->pid, proc->ppid);
+
+    printf("\t\tproc asid: 0x" TARGET_FMT_lx "\n",
+            proc->asid);
+
+    printf("\t\tproc offset: 0x" TARGET_FMT_lx "\n", proc->offset);
+    
+    if (proc->pages){
+        printf("\t\t page start: 0x" TARGET_FMT_lx ", page len: " TARGET_FMT_lu " \n",   
+            proc->pages->start, proc->pages->len);
+    }
+}
+
+
+/*
  is_target_process_running
     - return true if the target process is running at this time point the function is called.
 
@@ -123,7 +145,7 @@ PANDAENDCOMMENT */
 
 */
 
-bool is_target_process_running(CPUState *cpu, bool *judge_by_struct, target_ulong *asid_ret, OsiProc **p_ret){
+inline bool is_target_process_running(CPUState *cpu, bool *judge_by_struct, target_ulong *asid_ret, OsiProc **p_ret){
 
     bool is_target = false;
 
@@ -2014,9 +2036,12 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
     bool is_target = is_target_process_running(cpu, &judge_by_struct, &judge_asid, &judge_proc);
 
     // print judge metric, for debug
-    if(judge_by_struct)
-        printf("%s: judge by name in struct: %s, target name: %s\n",
-            __FUNCTION__, judge_proc->name, gProcToMonitor.c_str());
+    if(judge_by_struct){
+        printf("%s: judge by name in struct. \n\ttarget name: %s\n",
+            __FUNCTION__, gProcToMonitor.c_str());
+        //print full info of proc
+        print_proc_info(judge_proc);
+    }
     else{
         printf("%s: judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n",
             __FUNCTION__, judge_asid, gTargetAsid);
@@ -2029,9 +2054,13 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
             printf("%s: WARNING: target detected at before_block_exec but not detected here, might a process switch??\n", __FUNCTION__);
 
             // // print judge metric, for debug
-            // if(judge_by_struct)
-            //     printf("\t\tjudge by name in struct: %s, target name: %s\n",
-            //         judge_proc->name, gProcToMonitor.c_str());
+            // if(judge_by_struct){
+
+            //     printf("%s: judge by name in struct. \n\ttarget name: %s\n",
+            //         __FUNCTION__, gProcToMonitor.c_str());
+            //     //print full info of proc
+            //     print_proc_info(judge_proc);
+            // }
             // else{
             //     printf("\t\tjudge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n",
             //         judge_asid, gTargetAsid);
@@ -2049,9 +2078,13 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
         }
 
         // // print judge metric, for debug
-        // if(judge_by_struct)
-        //     printf("\t\tjudge by name in struct: %s, target name: %s\n",
-        //         judge_proc->name, gProcToMonitor.c_str());
+        // if(judge_by_struct){
+
+        //     printf("%s: judge by name in struct. \n\ttarget name: %s\n",
+        //         __FUNCTION__, gProcToMonitor.c_str());
+        //     //print full info of proc
+        //     print_proc_info(judge_proc);
+        // }
         // else{
         //     printf("\t\tjudge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n",
         //         judge_asid, gTargetAsid);
@@ -3874,13 +3907,18 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     bool is_target = is_target_process_running(cpu, &judge_by_struct, &judge_asid, &judge_proc);
 
     // print judge metric, for debug
-    if(judge_by_struct)
-        printf("%s: judge by name in struct: %s, target name: %s\n",
-            __FUNCTION__, judge_proc->name, gProcToMonitor.c_str());
-    else{
-        printf("%s: judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n",
-            __FUNCTION__, judge_asid, gTargetAsid);
-    }
+   
+    // if(judge_by_struct){
+
+    //     printf("%s: judge by name in struct. \n\ttarget name: %s\n",
+    //         __FUNCTION__, gProcToMonitor.c_str());
+    //     //print full info of proc
+    //     print_proc_info(judge_proc);
+    // }
+    // else{
+    //     printf("%s: judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n",
+    //         __FUNCTION__, judge_asid, gTargetAsid);
+    // }
 
     if(!is_target){
         return 1;
@@ -4140,10 +4178,14 @@ void handle_on_call(CPUState *cpu,TranslationBlock *src_tb, target_ulong dst_fun
     OsiProc *judge_proc;
     bool is_target = is_target_process_running(cpu, &judge_by_struct, &judge_asid, &judge_proc);
 
-    // // print judge metric, for debug
-    // if(judge_by_struct)
-    //     printf("%s: judge by name in struct: %s, target name: %s\n",
-    //         __FUNCTION__, judge_proc->name, gProcToMonitor.c_str());
+    // // // print judge metric, for debug
+    // if(judge_by_struct){
+
+    //     printf("%s: judge by name in struct. \n\ttarget name: %s\n",
+    //         __FUNCTION__, gProcToMonitor.c_str());
+    //     //print full info of proc
+    //     print_proc_info(judge_proc);
+    // }
     // else{
     //     printf("%s: judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n",
     //         __FUNCTION__, judge_asid, gTargetAsid);
@@ -4194,10 +4236,14 @@ void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_fu
     OsiProc *judge_proc;
     bool is_target = is_target_process_running(cpu, &judge_by_struct, &judge_asid, &judge_proc);
 
-    // // print judge metric, for debug
-    // if(judge_by_struct)
-    //     printf("%s: judge by name in struct: %s, target name: %s\n",
-    //         __FUNCTION__, judge_proc->name, gProcToMonitor.c_str());
+    // // // print judge metric, for debug
+    // if(judge_by_struct){
+
+    //     printf("%s: judge by name in struct. \n\ttarget name: %s\n",
+    //         __FUNCTION__, gProcToMonitor.c_str());
+    //     //print full info of proc
+    //     print_proc_info(judge_proc);
+    // }
     // else{
     //     printf("%s: judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n",
     //         __FUNCTION__, judge_asid, gTargetAsid);
@@ -4319,9 +4365,13 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     bool is_target = is_target_process_running(cpu, &judge_by_struct, &judge_asid, &judge_proc);
 
     // // print judge metric, for debug
-    // if(judge_by_struct)
-    //     printf("%s: judge by name in struct: %s, target name: %s\n",
-    //         __FUNCTION__, judge_proc->name, gProcToMonitor.c_str());
+    // if(judge_by_struct){
+
+    //     printf("%s: judge by name in struct. \n\ttarget name: %s\n",
+    //         __FUNCTION__, gProcToMonitor.c_str());
+    //     //print full info of proc
+    //     print_proc_info(judge_proc);
+    // }
     // else{
     //     printf("%s: judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n",
     //         __FUNCTION__, judge_asid, gTargetAsid);
@@ -4432,10 +4482,14 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     OsiProc *judge_proc;
     bool is_target = is_target_process_running(cpu, &judge_by_struct, &judge_asid, &judge_proc);
 
-    // // print judge metric, for debug
-    // if(judge_by_struct)
-    //     printf("%s: judge by name in struct: %s, target name: %s\n",
-    //         __FUNCTION__, judge_proc->name, gProcToMonitor.c_str());
+    // // // print judge metric, for debug
+    // if(judge_by_struct){
+
+    //     printf("%s: judge by name in struct. \n\ttarget name: %s\n",
+    //         __FUNCTION__, gProcToMonitor.c_str());
+    //     //print full info of proc
+    //     print_proc_info(judge_proc);
+    // }
     // else{
     //     printf("%s: judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n",
     //         __FUNCTION__, judge_asid, gTargetAsid);
