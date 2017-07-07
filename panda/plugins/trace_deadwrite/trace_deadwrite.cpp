@@ -124,35 +124,35 @@ inline void print_proc_info(OsiProc *proc){
 
     printf("\tproc name: %s,", proc->name);
 
-    if(proc->pid){
+    // if(proc->pid){
         printf("\tpid: " TARGET_FMT_lu, proc->pid);
-    }else{
-        printf("\tpid: N/A");
-    }
+    // }else{
+    //     printf("\tpid: N/A");
+    // }
 
-    if(proc->ppid){
+    // if(proc->ppid){
         printf("\tppid: " TARGET_FMT_lu , proc->ppid);
-    }else{
-        printf("\tppid: N/A");
-    }
+    // }else{
+        // printf("\tppid: N/A");
+    // }
 
-    if(proc->asid){
+    // if(proc->asid){
         printf("\tp->asid: 0x" TARGET_FMT_lx , proc->asid);
-    }else{
-        printf("\tp->asid: N/A");
-    }
+    // }else{
+    //     printf("\tp->asid: N/A");
+    // }
 
-    if(proc->offset){
+    // if(proc->offset){
         printf("\t\tp->offset: 0x" TARGET_FMT_lx , proc->offset);
-    }else{
-        printf("\tp->offset: N/A");
-    }
+    // }else{
+    //     printf("\tp->offset: N/A");
+    // }
 
     if (proc->pages && proc->pages->start && proc->pages->len ){
         printf("\t page start: 0x" TARGET_FMT_lx ", page len: " TARGET_FMT_lu " \n",   
             proc->pages->start, proc->pages->len);
     }
-    
+
     printf("\n\n");
 }
 
