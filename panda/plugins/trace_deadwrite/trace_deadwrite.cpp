@@ -125,37 +125,44 @@ PANDAENDCOMMENT */
 
 bool is_target_process_running(CPUState *cpu){
 
+    bool is_target = false;
+
     OsiProc *p = get_current_running_process(cpu);
 
     if (p==0){
         // process info not available
         // use asid to distinguish, lele: should be abandoned.
-
         target_ulong asid = panda_current_asid(cpu);
+        printf("\t%s: judge by asid: 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid);
+
         if (asid == gTargetAsid || asid == gTargetAsid_struct){
-            return true;
+            is_target = true;
         }else{
             gIgnoredASIDs.insert(asid);
-            return false;
+            is_target = false;
         }
     }else{
-
+        printf("\t%s: judge by proc name: %s\n", __FUNCTION__, p->name);
         std::string curProc(p->name);
         if (curProc == gProcToMonitor){
             // found the target proc
             // update the target asid.
             gTargetAsid = panda_current_asid(cpu);
             gTargetAsid_struct = p->asid;
-
-            return true;
+            is_target = true;
 
         }else{
             // keeping track of both p->asid and cpu->cr3
             gIgnoredASIDs.insert(p->asid);
             gIgnoredASIDs.insert(panda_current_asid(cpu));
-            return false;
+            is_target = false;
         }
     }
+
+    if (is_target && !gProcFound){
+        printf("\t%s: WARNING: target process set to be running here but not found in 'handle_proc_change'\n", __FUNCTION__);
+    }
+    return is_target;
 }
 
 /*  
@@ -2004,7 +2011,7 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
         // return 1;
     }else{
         if (! gIsTargetBlock){
-            printf("%s: ERROR: target not detected at before_block_exec\n", __FUNCTION__);
+            printf("%s: ERROR: target not detected at before_block_exec but detected here\n", __FUNCTION__);
         }
     }
 
@@ -4434,12 +4441,12 @@ int handle_asid_change(CPUState *cpu, target_ulong old_asid, target_ulong new_as
         printf("%s: TODO: handle kernel binaries here\n", __FUNCTION__);
         return 0;
     }else{
-        // printf("%s: asid change: old: 0x" TARGET_FMT_lx ", new: 0x" TARGET_FMT_lx "\n", 
-        //     __FUNCTION__, old_asid, new_asid);
+        printf("%s: asid change: old: 0x" TARGET_FMT_lx ", new: 0x" TARGET_FMT_lx "\n", 
+            __FUNCTION__, old_asid, new_asid);
         
         return 0;
     }
-
+    // gAsidJustChanged = true; //TODO: might be used to reduce overhead of detecting current process name during mem_callback, or before/after_block_exe
     return 0;
 }
 
@@ -4463,19 +4470,26 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
     if (!proc->name) { return; }
 
 
+    printf("%s: new proc's asid: 0x" TARGET_FMT_lx ", struct_asid: 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid, proc->asid);
+
     target_ulong asid_struct;
-    bool asid_struct_valid = false;
+    bool asid_struct_diff = false;
 
     // printf("a valid: %s\n", __FUNCTION__);
     // check to be safe
     // use the asid by panda_current_asid_proc_struct(cpu). 
     // BUG in Panda: on_proc_change asid can be different with panda_current_asid_proc_struct(cpu)
-    if (panda_current_asid_proc_struct(cpu) != asid){
-        // printf("%s: WARNING: BUG in Panda: on_proc_change asid not the current asid!!\n", __FUNCTION__);
-        // printf("\t\tcurrent asid: 0x" TARGET_FMT_lx "\n", panda_current_asid_proc_struct(cpu));
-        // printf("\t\tasid by on_proc_change callback: 0x" TARGET_FMT_lx "\n", asid);
-        asid_struct = panda_current_asid_proc_struct(cpu);
-        asid_struct_valid = true;
+
+    asid_struct = panda_current_asid_proc_struct(cpu);
+
+    if(asid_struct != proc->asid){
+        printf("%s: WARNING: BUG in Panda: on_proc_change asid not the struct asid!!\n", __FUNCTION__);
+        printf("\t\tstruct asid: 0x" TARGET_FMT_lx "\n", asid_struct);
+        printf("\t\ton_proc_change callback asid: 0x" TARGET_FMT_lx "\n", asid);
+    }
+
+    if (asid_struct != asid){
+        asid_struct_diff = true;
         //exit(-1);
     }
     
@@ -4557,20 +4571,20 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
         gAsidToProcIndex[asid] = procIndex;
     }
 
-    // update gAsidToProcIndex regard to asid_struct.
-    if(asid_struct_valid){
-        std::tr1::unordered_map<target_ulong, int>::iterator asidProcIt_st = gAsidToProcIndex.find(asid_struct);
+    // update gAsidToProcIndex regard to asid_struct if different with asid.
+    if(asid_struct_diff){
 
-        if (asidProcIt_st != gAsidToProcIndex.end()){
+        if (gAsidToProcIndex.count(asid_struct)!=0){
             // not a new asid. 
             // already a proc name stored. 
             // Now check whether the stored name is the same name as current.
-            if (! (gProcs[asidProcIt_st->second] == curProc)){
-                printf("%s: WARNING::(ERROR): gProcs[%d]='%s' for asid 0x" TARGET_FMT_lx ", but curProcName is '%s' for this asid\n" ,
-                __FUNCTION__, asidProcIt_st->second, gProcs[asidProcIt_st->second].c_str(), asid_struct, proc->name);
+            std::string old_procName = gProcs[gAsidToProcIndex[asid_struct]];
+            if (! ( old_procName== curProc)){
+                printf("%s: WARNING:(ERROR): struct asid proc name diff: gProcs[%d]='%s' for asid 0x" TARGET_FMT_lx ", but curProcName is '%s' for this asid\n" ,
+                __FUNCTION__, gAsidToProcIndex[asid_struct], old_procName.c_str(), asid_struct, proc->name);
                 // exit(-1);
                 //update if changed
-                gProcs[asidProcIt_st->second] = curProc;
+                gProcs[gAsidToProcIndex[asid_struct]] = curProc;
             }
         }else{
             // got a new asid 
@@ -4598,7 +4612,14 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
         if (!gProcFound){
             // this is the monitored process.
             gProcFound = true;
+            printf("%s: setting gProcFound to be true\n", __FUNCTION__);
         }
+        // keeping the target asid/struct in the same pace.
+        gTargetAsid = asid;
+        gTargetAsid_struct = asid_struct;
+    }else{
+        gProcFound = false;
+        printf("%s: setting gProcFound to be false\n", __FUNCTION__);
     }
 
 
@@ -4626,8 +4647,14 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
             int procIndex = checkNewProc(std::string(ms->module[i].name));
             if (oldgProcSize == procIndex){
                 // a new proc found
-                printf("%s: a new dynamic lib name found %s, base: " TARGET_FMT_lx "\n",
-                    __FUNCTION__, ms->module[i].name, ms->module[i].base);
+                printf("%s: a new dynamic lib found\n\toffset:\t0x" TARGET_FMT_lx "\tbase:\t0x" TARGET_FMT_lx "\tsize:\t0x" TARGET_FMT_lx 
+                "\n\tname:\t%s\n\tfile:\t%s\n",
+                    __FUNCTION__, 
+                    ms->module[i].offset,
+                    ms->module[i].base,
+                    ms->module[i].size,
+                    ms->module[i].name,  
+                    ms->module[i].file);
             }
             gAsidToProcIndex[ ms->module[i].base ] = procIndex;
         }
@@ -4646,8 +4673,15 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
             int procIndex = checkNewProc(std::string(kms->module[i].name));
             if (oldgProcSize == procIndex){
                 // a new proc found
-                printf("%s: a new kernel module name found %s, base: " TARGET_FMT_lx "\n",
-                    __FUNCTION__, kms->module[i].name, kms->module[i].base);
+
+                printf("%s: a new kernel module found\n\toffset:\t0x" TARGET_FMT_lx "\tbase:\t0x" TARGET_FMT_lx "\tsize:\t0x" TARGET_FMT_lx 
+                "\n\tname:\t%s\n\tfile:\t%s\n",
+                    __FUNCTION__, 
+                    kms->module[i].offset,
+                    kms->module[i].base,
+                    kms->module[i].size,
+                    kms->module[i].name,  
+                    kms->module[i].file);
             }
             gAsidToProcIndex[ kms->module[i].base ] = procIndex;
         }

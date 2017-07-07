@@ -680,6 +680,10 @@ std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, int> *> gBlock
 std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *> gAsidPCtoFileLine;
 
 std::string gProcToMonitor;
+
+// gProcFound:  in handle_proc_change, set to true when found the target, to false otherwise. 
+//  this will be used in other places to check the consistent. like in is_target_process_running.
+//  e.g. there will be inconsistent if gProcFound is false, but is_target_proc_running return true.
 bool gProcFound;
 //store all debug file paths
 std::vector<std::string> gDebugFiles;
