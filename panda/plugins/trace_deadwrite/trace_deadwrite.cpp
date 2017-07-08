@@ -453,8 +453,8 @@ VOID GoDownCallChain(CPUState *cpu, target_ulong callee){
 // Analysis routine called on function return. 
 // Point gCurrentContext to its parent, if we reach the root, set gInitiatedCall.//lele: why?
 
-inline VOID GoUpCallChain(){
-#ifdef IP_AND_CCT
+inline VOID GoUpCallChain(CPUState *cpu, TranslationBlock *dst_tb,  target_ulong from_func, int depth){
+// #ifdef IP_AND_CCT
     //assert(gCurrentContext->parent && "NULL PARENT CTXT");
     if (gCurrentContext == gRootContext){
         printf("%s: WARNING: RootContext got a return, don't change context node.\n",__FUNCTION__);
@@ -464,13 +464,21 @@ inline VOID GoUpCallChain(){
     //     // gInitiatedCall = true;//lele: why?
     //     printf("lele: ret to root context node\n");
     // }
-    gCurrentContext = gCurrentContext->parent;
-    
+    // go up 'depth' nodes.
+    int i;
+    for (i = 0; i< depth && gCurrentContext != gRootContext; i++){
+        gCurrentContext = gCurrentContext -> parent;
+    }
+    if (gCurrentContext == gRootContext){
+        printf("%s: go up %d call path and reached root\n", __FUNCTION__);
+    }
+    // call go down call chain to exec the new basic block: dst_tb.
+    GoDownCallChain(cpu, dst_tb->pc);
     // RET & CALL end a trace hence the target should trigger a new trace entry for us ... pray pray.
     
-#else    // no IP_AND_CCT
-    gCurrentContext = gCurrentContext->parent;
-#endif    //end IP_AND_CCT
+// #else    // no IP_AND_CCT
+//     gCurrentContext = gCurrentContext->parent;
+// #endif    //end IP_AND_CCT
 
     // printf("%s: up to parent context: bb addr: 0x" TARGET_FMT_lx "\n",__FUNCTION__, gCurrentContext->address);
     
@@ -2065,14 +2073,16 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
 
     // print judge metric, for debug
     if(judge_by_struct){
-        printf("%s: judge by name in struct. \n\ttarget name: %s\n",
-            __FUNCTION__, gProcToMonitor.c_str());
+        // printf("--%s: judge by name in struct. \n\ttarget name: %s\n",
+        //     __FUNCTION__, gProcToMonitor.c_str());
+        printf("--%s: judge by name in struct. \n",
+            __FUNCTION__);
         printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
         //print full info of proc
         print_proc_info(judge_proc);
     }
     else{
-        printf("%s: judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n",
+        printf("--%s: judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n",
             __FUNCTION__, judge_asid, gTargetAsid);
     }
 
@@ -2080,13 +2090,13 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
         // not target process.
 
         if(gIsTargetBlock){
-            printf("%s: WARNING: target detected at before_block_exec but not detected here, might a process switch??\n", __FUNCTION__);
+            printf("--%s: WARNING: target detected at before_block_exec but not detected here, might a process switch??\n", __FUNCTION__);
 
             // // print judge metric, for debug
             // if(judge_by_struct){
 
-            //     printf("%s: judge by name in struct. \n\ttarget name: %s\n",
-            //         __FUNCTION__, gProcToMonitor.c_str());
+            //     printf("%s: judge by name in struct. \n",
+            //         __FUNCTION__);
             //     printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
             //     //print full info of proc
             //     print_proc_info(judge_proc);
@@ -2104,21 +2114,21 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
     }else{
         // is target process
         if (! gIsTargetBlock){
-            printf("%s: WARNING: target not detected at before_block_exec, but detected here, might a process switch??\n", __FUNCTION__);
+            printf("%s: WARNING: target not detected at before_block_exec, but detected here, might a process switch, or cr3 overlap??\n", __FUNCTION__);
 
-            printf("\tWARNING: now only trust the judge by proc struct\n");
             if (!judge_by_struct) return 1;
 
+            printf("\tWARNING: judge by proc struct!\n");    
+            printf("\t------- not cr3 overlap, must be a process switch??\n", __FUNCTION__);
 
-            printf("%s: WARNING: target not detected at before_block_exec, but detected here, must be a process switch??\n", __FUNCTION__);
             exit(-1);
         }
 
         // // print judge metric, for debug
         // if(judge_by_struct){
 
-        //     printf("%s: judge by name in struct. \n\ttarget name: %s\n",
-        //         __FUNCTION__, gProcToMonitor.c_str());
+        //     printf("%s: judge by name in struct. \n",
+        //         __FUNCTION__);
         // printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
         //     //print full info of proc
         //     print_proc_info(judge_proc);
@@ -3926,8 +3936,8 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
    
     // if(judge_by_struct){
 
-    //     printf("%s: judge by name in struct. \n\ttarget name: %s\n",
-    //         __FUNCTION__, gProcToMonitor.c_str());
+    //     printf("%s: judge by name in struct. \n",
+    //         __FUNCTION__);
         // printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
     //     //print full info of proc
     //     print_proc_info(judge_proc);
@@ -4198,8 +4208,8 @@ void handle_on_call(CPUState *cpu,TranslationBlock *src_tb, target_ulong dst_fun
     // // // print judge metric, for debug
     // if(judge_by_struct){
 
-    //     printf("%s: judge by name in struct. \n\ttarget name: %s\n",
-    //         __FUNCTION__, gProcToMonitor.c_str());
+    //     printf("%s: judge by name in struct. \n",
+    //         __FUNCTION__);
         // printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
     //     //print full info of proc
     //     print_proc_info(judge_proc);
@@ -4257,8 +4267,8 @@ void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_fu
     // // // print judge metric, for debug
     // if(judge_by_struct){
 
-    //     printf("%s: judge by name in struct. \n\ttarget name: %s\n",
-    //         __FUNCTION__, gProcToMonitor.c_str());
+    //     printf("%s: judge by name in struct. \n",
+    //         __FUNCTION__);
         // printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
     //     //print full info of proc
     //     print_proc_info(judge_proc);
@@ -4301,11 +4311,8 @@ void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_fu
 
     printf("%s: go up %d function calls\n", __FUNCTION__, depth);
 
-    for(i=0; i<depth; i++){
+    GoUpCallChain(cpu, dst_tb, from_func, depth);
 
-        GoUpCallChain();
-
-    }
 }
 
 /**
@@ -4386,8 +4393,8 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     // // print judge metric, for debug
     // if(judge_by_struct){
 
-    //     printf("%s: judge by name in struct. \n\ttarget name: %s\n",
-    //         __FUNCTION__, gProcToMonitor.c_str());
+    //     printf("%s: judge by name in struct. \n",
+    //         __FUNCTION__);
         // printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
     //     //print full info of proc
     //     print_proc_info(judge_proc);
@@ -4401,7 +4408,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
         return 1;
     }else{
         gIsTargetBlock = true;
-        printf("%s: set true to gIsTargetBlock\n", __FUNCTION__);
+        printf("%s: detect a block for the target process: tb->pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
     }
 
     // Refer: ManageCallingContext() -> GoUpCallChain().
@@ -4505,8 +4512,8 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     // // print judge metric, for debug
     // if(judge_by_struct){
 
-    //     printf("%s: judge by name in struct. \n\ttarget name: %s\n",
-    //         __FUNCTION__, gProcToMonitor.c_str());
+    //     printf("%s: judge by name in struct. \n",
+    //         __FUNCTION__);
     //     printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
     //     //print full info of proc
     //     print_proc_info(judge_proc);
