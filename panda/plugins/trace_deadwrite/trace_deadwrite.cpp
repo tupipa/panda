@@ -470,7 +470,7 @@ inline VOID GoUpCallChain(CPUState *cpu, TranslationBlock *dst_tb,  target_ulong
         gCurrentContext = gCurrentContext -> parent;
     }
     if (gCurrentContext == gRootContext){
-        printf("%s: go up %d call path and reached root\n", __FUNCTION__);
+        printf("%s: go up %d call path and reached root\n", __FUNCTION__, i);
     }
     // call go down call chain to exec the new basic block: dst_tb.
     GoDownCallChain(cpu, dst_tb->pc);
