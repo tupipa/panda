@@ -4271,19 +4271,21 @@ void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_fu
     OsiProc *judge_proc;
     bool is_target = is_target_process_running(cpu, &judge_by_struct, &judge_asid, &judge_proc);
 
-    // // // print judge metric, for debug
-    // if(judge_by_struct){
+    // // print judge metric, for debug
+    if(judge_by_struct){
 
-    //     printf("%s: judge by name in struct. \n",
-    //         __FUNCTION__);
-        // printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
-    //     //print full info of proc
-    //     print_proc_info(judge_proc);
-    // }
-    // else{
-    //     printf("%s: judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n",
-    //         __FUNCTION__, judge_asid, gTargetAsid);
-    // }
+        printf("%s: judge by name in struct. \n",
+            __FUNCTION__);
+        printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
+        //print full info of proc
+        print_proc_info(judge_proc);
+    }
+    else{
+
+        printf("%s: **** judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n; will not trust this here**** ",
+            __FUNCTION__, judge_asid, gTargetAsid);
+        return 1;
+    }
     
     if(!is_target){
        return ;
