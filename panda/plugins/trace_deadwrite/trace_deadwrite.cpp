@@ -2121,7 +2121,16 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
             printf("\tWARNING: judge by proc struct!\n");    
             printf("\t------- not cr3 overlap, must be a process switch??\n");
 
-            exit(-1);
+            // TODO: 
+            // since we only detected the target process here in mem_callback but not in before_block_exec: we don't have the gBlockShadowMap and gTraceBlockNode allocated yet.
+            // So, we need a solution to keep track of this.
+            // TODO: need one global flag for each <asid,blockID> pair:
+            //  - gFoundProcStruct[asid, blockID] --> only set true, when there is a judge by struct for this <asid, block>.
+            //  - before_block_exe: no matter target or not, we allocate a temporary gBlockShadowMap, and TraceNode to track it's deadwrites in mem_callback
+            //  - in before_block_exe, mem_callback, we update gFoundProcStruct[asid, blockID] if we found the target.
+            //  - in after_block_exe, using gFoundProcStruct[asid, blockID], we decide whether we can add the temporary gBlockShadowMap and TraceNode to our targets. If not free them.
+
+            // exit(-1);
         }
 
         printf("%s: good, before_block_exec has set gIsTargetBlock=true; here we are in the target Proc!\n", __FUNCTION__);
@@ -4284,7 +4293,7 @@ void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_fu
 
         printf("%s: **** judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n; will not trust this here**** ",
             __FUNCTION__, judge_asid, gTargetAsid);
-        return 1;
+        return ;
     }
     
     if(!is_target){
