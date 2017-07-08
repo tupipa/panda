@@ -2119,7 +2119,7 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
             if (!judge_by_struct) return 1;
 
             printf("\tWARNING: judge by proc struct!\n");    
-            printf("\t------- not cr3 overlap, must be a process switch??\n", __FUNCTION__);
+            printf("\t------- not cr3 overlap, must be a process switch??\n");
 
             exit(-1);
         }
@@ -4230,7 +4230,13 @@ void handle_on_call(CPUState *cpu,TranslationBlock *src_tb, target_ulong dst_fun
         return ;
     }else{
         if (! gIsTargetBlock){
-            printf("%s: WARNING: target not detected at before_block_exec, but detected here\n", __FUNCTION__);
+            printf("%s: WARNING: target not detected at before_block_exec, but detected here, now check whether it's probably a cr3 overlap\n", __FUNCTION__);
+
+            if (!judge_by_struct) return;
+
+            printf("\tCongratulations! judge by proc struct!\n");    
+            printf("\t------- not cr3 overlap, must be a process switch??\n");
+            // exit(-1);
             gIsTargetBlock = true;
         }
     }
@@ -4534,7 +4540,12 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
         return 1;
     }else{
         if (! gIsTargetBlock){
-            printf("%s: WARNING: target not detected at before_block_exec, but detected here, might a process switch??, tb->pc: 0x " TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+            printf("%s: WARNING: target not detected at before_block_exec, but detected here, might a process switch??, or cr3 overlap?? tb->pc: 0x " TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+
+            if (!judge_by_struct) return;
+
+            printf("\tCongratulations! judge by proc struct!\n");    
+            printf("\t------- not cr3 overlap ! must be a process switch??\n");
         }
     }
 
