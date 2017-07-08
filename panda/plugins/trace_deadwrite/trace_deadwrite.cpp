@@ -4542,7 +4542,7 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
         if (! gIsTargetBlock){
             printf("%s: WARNING: target not detected at before_block_exec, but detected here, might a process switch??, or cr3 overlap?? tb->pc: 0x " TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
 
-            if (!judge_by_struct) return;
+            if (!judge_by_struct) return 1;
 
             printf("\tCongratulations! judge by proc struct!\n");    
             printf("\t------- not cr3 overlap ! must be a process switch??\n");
