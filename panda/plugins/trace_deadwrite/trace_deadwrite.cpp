@@ -4802,6 +4802,8 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
         // keeping the target asid/struct in the same pace.
         gTargetAsid = asid;
         gTargetAsid_struct = asid_struct;
+
+        printf("%s: reset target asid 0x" TARGET_FMT_lx ", and target asid_struct: 0x" TARGET_FMT_lx "\n",__FUNCTION__, asid, asid_struct);
     }else{
         gProcFound = false;
         printf("%s: setting gProcFound to be false\n", __FUNCTION__);
