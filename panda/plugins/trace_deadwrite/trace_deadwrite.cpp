@@ -253,7 +253,7 @@ OsiProc * get_current_running_process(CPUState *cpu){
             uint32_t n = strnlen(p->name, 32);
             // name is one char?
             if (n<2) {
-                printf("%s: ERROR get current proc name(length < 2): %s\n", __FUNCTION__, p->name);
+                printf("%s: ERROR get current proc name(length < 2): %s, pid: " TARGET_FMT_lu ", ppid " TARGET_FMT_lu "\n", __FUNCTION__, p->name, p->pid, p->ppid);
                 // exit(-1);
                 return 0;
             }
@@ -2071,6 +2071,7 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
     OsiProc *judge_proc;
     bool is_target = is_target_process_running(cpu, &judge_by_struct, &judge_asid, &judge_proc);
 
+    printf("%s: pc: 0x" TARGET_FMT_lx ",\taddr: 0x" TARGET_FMT_lx "\n" , __FUNCTION__, pc, addr);
     // print judge metric, for debug
     if(judge_by_struct){
         // printf("--%s: judge by name in struct. \n\ttarget name: %s\n",

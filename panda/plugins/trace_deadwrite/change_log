@@ -1,0 +1,2416 @@
+
+TODO:
+
+- A KEY problem: recognization of the target process we need to monitor. In the granularity of basic block and of single instruction.
+
+	Panda is used to monitor a qemu guest running a whole operating system. The whole operating system contains various processes and different programs. However, for deadspy based on PIN, there is only one target program which is running on PIN platform. Therefore, there is no need to decide the target process for PIN. But here in Panda, we need to find the right way to find the target process.
+	
+	One point we can step in is the execution of every basic block. Before or after each basic block starts or ends, we can get the current process information or the CPU's ASID register. So that we can recognize which process we are running on.
+	
+	However, during the execution of a basic block for process A, it's possible that the CPU will be switched to process B and running process B's basic block. So during the exec of process A's basic block, we cannot assume that all the instructions between the block's start and end belong to this basic block of process A. We also need to determine where each instruction is come from.
+	
+- Problem 2: detection of call stacks. 
+
+	The solution callstack_instr plugin detects a function call by disasmbling every basic block's machine code and searches the 'call' instruction after block execution. Then based on this, it builds the call stack. To detect ret, it searches the block address in the call stack before every block executes. If block address exists in the call stack, it reports as a ret. This mechanisms might have the following drawbacks:
+
+	- In Linux, some call to a new function can be done without a 'call' instruction. For example, by manipulating the call stack and using ret, we can also use 'ret' to run a new function instead of using 'call' to run a new function. For example, the system call: clone(fn, arg, flags, child_stack, ...), will create a lightweight process running the given function 'fn'. However, it does not issue a 'call' instruction to call the 'fn', instead, it put the args and the address of fn onto its stack. When clone() terminates, the cpu will fetch and executes the new function 'fn(args)'.
+
+- Problem 3: use addr2line/libdwarf with kernel module/lib symbols.
+
+	In the call stack of the target program, it seems there are lots of instruction addresses from libraries or kernel modules. So, inside a program, we need to decide the layout of its address space. So, that given the virtual address, we know where we can find the symbols, i.e. from app binaries, libraries, or even kernel modules. 
+	
+	- we need the virtual memory layout from the target program's binary. We might refer to pri_dwarf, which prints the Lib.lowpc, and Lib.highpc during the uninit_plugin.
+
+
+- technical problems:
+	- partial name in process task struct. see commit: git-093498668
+		- we can get the processes' name by reading the kernel's task struct in OSI plugin. However, during the runtime, there is some points that we could only read parts of the processes name. E.g., for name 'array_test_deb7', on a series of mem_callback, we can get the processes struct name as 'a', 'ar', 'arr', 'arra', 'array', 'array_', 'array_t', ... , 'array_test_deb', 'array_test_deb7'.
+		Might caused by processes 'fork()' function, while cloning the process's info?
+		
+		- so, don't use the name in the struct.
+
+	- 
+		
+--Solution:
+
+	1, use pid/ppid in struct instead of the proc name in struct. 
+	i.e. use ProcID <pid, ppid, asid> to distinguish a process.
+
+	2, use BlockID <procID, tb->pc> to distinguish a block. ( necessary? )
+
+	3, monitor every asid_change, a new flag gASID_TARGET_FLAG. If useful, the info would be used to direct every mem_callback to determine whether its current process. If asid changes, we detect the new asid, and set
+	the target flag accordingly.
+
+	4, at every mem_callback, detect target process, by using ProcID, or asid_change status, or BlockID.
+
+	
+1,  gBlockShadowMap:
+		
+		   - debug size, pcs
+		   - Might to use <tb->pc, tb->size> as an ID for each block for the asid.
+		   - or, more generally, we could use <asid, tb->pc, tb->size> as the ID of a block.
+		
+		   - e.g. struct BlockID{ asid, pc, size}
+			- operation definition: ==, <
+			- can be used as a key for gBlockShadowMap[blockID], etc,
+		
+2, since we only detected the target process here in mem_callback but not in before_block_exec: we don't have the gBlockShadowMap and gTraceBlockNode allocated yet. git-
+So, we need a solution to keep track of this.
+ --- need one global flag for each <asid,blockID> pair:
+            //  - gFoundProcStruct[asid, blockID] --> only set true, when there is a judge by struct for this <asid, block>.
+            //  - before_block_exe: no matter target or not, we allocate a temporary gBlockShadowMap, and TraceNode to track it's deadwrites in mem_callback
+            //  - in before_block_exe, mem_callback, we update gFoundProcStruct[asid, blockID] if we found the target.
+            //  - in after_block_exe, using gFoundProcStruct[asid, blockID], we decide whether we can add the temporary gBlockShadowMap and TraceNode to our targets. If not free them.
+            	
+--------------------------------------------------------------------
+v0.6: 
+
+	
+--------------------------------------------------------------------
+
+	
+	
+	commit 9c5553c94bc0dd455f7ca1ecd0609f32cb7dcf13
+	Author: lele-srv <tupipa0929@gmail.com>
+	Date:   Fri Jul 7 23:38:27 2017 -0400
+
+		TODO:
+		
+		1,  gBlockShadowMap:
+		
+		   - debug size, pcs
+		   - Might to use <tb->pc, tb->size> as an ID for each block for the asid.
+		   - or, more generally, we could use <asid, tb->pc, tb->size> as the ID of a block.
+		
+		   - e.g. struct BlockID{ asid, pc, size}
+			- operation definition: ==, <
+			- can be used as a key for gBlockShadowMap[blockID], etc,
+		
+		2, since we only detected the target process here in mem_callback but not in before_block_exec: we don't have the gBlockShadowMap and gTraceBlockNode allocated yet.
+		So, we need a solution to keep track of this.
+		 --- need one global flag for each <asid,blockID> pair:
+		            //  - gFoundProcStruct[asid, blockID] --> only set true, when there is a judge by struct for this <asid, block>.
+		            //  - before_block_exe: no matter target or not, we allocate a temporary gBlockShadowMap, and TraceNode to track it's deadwrites in mem_callback
+		            //  - in before_block_exe, mem_callback, we update gFoundProcStruct[asid, blockID] if we found the target.
+		            //  - in after_block_exe, using gFoundProcStruct[asid, blockID], we decide whether we can add the temporary gBlockShadowMap and TraceNode to our targets. If not free them.
+
+	commit a421741fd2da38c8be481cdd213091dcf7ef3a30
+	Author: lele-srv <tupipa0929@gmail.com>
+	Date:   Fri Jul 7 23:21:18 2017 -0400
+
+		in handle_on_ret: this happens 'before_block_exe', so we also only trust the 'judge_by_struct',
+		don't trust judge by asid.
+		
+		TODO: gBlockShadowMap:
+		      - debug size, pcs
+		      - Might to use <tb->pc, tb->size> as an ID for each block?
+
+	commit ba1fa2a00cfc18a123ee1242e2a9b9631287c8d3
+	Author: lele-srv <tupipa0929@gmail.com>
+	Date:   Fri Jul 7 23:15:28 2017 -0400
+
+		in handle_proc_change, print info when we reset target asid/struct.
+
+	commit c1a88730b4aea8be53838bd7c93fa82c9830d9ea
+	Author: lele-srv <tupipa0929@gmail.com>
+	Date:   Fri Jul 7 23:11:42 2017 -0400
+
+		before_block_exec:
+		 only trust the judge by struct.
+
+	commit 04a9385a21f7f411c46f0afa3ab8e8dae9aa07da
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Fri Jul 7 22:24:47 2017 -0400
+
+		debug: return value in mem_callback
+
+	commit 8f36720037be1a0c955f86b4baf18de4681c4893
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Fri Jul 7 22:23:31 2017 -0400
+
+		dbg, printings
+
+	commit da4b35802ae070f4032d984d877e2ef009d8ee36
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Fri Jul 7 22:13:55 2017 -0400
+
+		In handle_proc_change, after_block_exec, and mem_callback:
+		If  "target not detected at before_block_exec, but detected here", we
+		need to avoid 'judge by asid' to avoid the cpu->cr3 overlap (e.g. between
+		bash and array_test_deb7). Instead, we only trust the 'judge_by_struct'.
+
+	commit d7f4c2acc4a3f2583434c2b0670b47475796de87
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Fri Jul 7 22:01:20 2017 -0400
+
+		Modify: GoUpCallChain:
+		 - when we get a return, we are already in the new basic block we have returned to.
+		 - So, the CCT should including a), go up call chain for 'depth' nodes, and b), go
+		   down call chain to our current basic block.
+
+	commit 5ab99de33bfd58e4947d2fbba6753f3b67daa3fa
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Fri Jul 7 17:13:08 2017 -0400
+
+		TODO: gBlockShadowMap:
+		  - debug size, pcs
+		  - Might to use <tb->pc, tb->size> as an ID for each block?
+
+	commit b94afe6445a055bb3d0c1e66693c69f05be8c016
+	Author: lele-srv <tupipa0929@gmail.com>
+	Date:   Fri Jul 7 16:50:37 2017 -0400
+
+		debug \n
+
+	commit 43922fdaddfc3d83690dbf7702715a6f523f6a37
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Fri Jul 7 16:35:48 2017 -0400
+
+		if target not detected at before_block_exe, but detected during mem_callback, only trust the judge by proc struct.
+		
+		TODO: if judge is good, we should update CCT corresponding to this instruction.
+
+	commit 7ef66376d511885b06e830d94154ab21196356e7
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Fri Jul 7 16:28:57 2017 -0400
+
+		don't check target_ulong var when printing proc info
+
+	commit 9b19ed2ff8728e5d7772dd58865de69b63d8a1c2
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Fri Jul 7 16:22:59 2017 -0400
+
+		add \n
+
+	commit a73f98a546f9d4c75e91f09fe782599abfef8c14
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Fri Jul 7 16:20:18 2017 -0400
+
+		check before print
+
+	commit f0f0a7ef6d66a378863b6c92f040ad3bd697ac9c
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Fri Jul 7 15:39:13 2017 -0400
+
+		also print current cpu->cr3 asid when print procInfo
+
+	commit cf0d994090aaf523329a777b46ce56ae2ba5272c
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Fri Jul 7 12:04:48 2017 -0400
+
+		add
+		inline void  print_proc_info(OsiProc *proc)
+
+	commit 7c4e53f46205ef5f67185549048930002ca55eb9
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Fri Jul 7 11:40:31 2017 -0400
+
+		print metrics on every mem_callback: since the metrics can be wrong, we need to keep track of it.
+		- sometimes, we can get OsiProc for target process, but the name string is not complete. So in this case, to judge by name is wrong;
+		- sometimes, we cannot get OsiProc for target process, but by only given asid can also be wrong, when other process has the same asid during the target process is not running.
+
+	commit 4cc900cb142471c737f0cf85609a94e66d0dfb11
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Fri Jul 7 11:24:59 2017 -0400
+
+		print metrics whenever we found the target
+
+	commit b5db98dbd3906cfbdc4fc37a4fbb9174dfffeeef
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Fri Jul 7 11:20:24 2017 -0400
+
+		reduce log printings: only prints metrics when some warning cases happen
+
+	
+
+	
+--------------------------------------------------------------------
+v0.5: 
+	
+	- detect current process using two judge metrics:
+		- OsiProc's task struct, from OsiProc::name, or
+		- cpu->cr3, from panda_current_asid(cpu)
+	
+	- use (the changed version) of callstack_instr, register callback of 
+	'on_ret', 'on_call'
+	
+	- how to change callstack_instr: capstone initalization is put 
+	and checked before every block exec. To make sure init again if 
+	failed at first time.
+	
+	- 'on_proc_change' from asidstory plugin.
+	
+	- add 'asid_changed' from panda.
+	
+	- add supports to use multiple possible debug files, including
+	kernel debug files.
+	
+--------------------------------------------------------------------
+
+
+	commit 093498668168d0245c0868f6a4f05dc005d69b84
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Fri Jul 7 10:56:52 2017 -0400
+
+		1, is_target_process_running: add 3 more parameters, indicating the metric we use to judge the target, either by struct or not, return the metric of asid or OsiProc;
+		2, don't print the judge metric every time we call is_target_process_running. Instead, print it according to where we call it by putting the prints outside of the is_target_process_running.
+
+	commit d1bae138f236c81d2c8c4bee142a3aa36a66edbe
+	Author: lele-srv <tupipa0929@gmail.com>
+	Date:   Fri Jul 7 00:12:59 2017 -0400
+
+		don't use struct_asid to detect whether it's target when proc info is available
+
+	commit 478cf07ae7547203c9002de766c754d3bdd5ed87
+	Author: lele-srv <tupipa0929@gmail.com>
+	Date:   Fri Jul 7 00:07:41 2017 -0400
+
+		is target running:
+		 - when proc info not available, only use gTargetAsid
+		 - when available, use procName or gTargetAsid_struct
+
+	commit 0678d07c5024c63bc579391e32e0175a50cf93e3
+	Author: lele-srv <tupipa0929@gmail.com>
+	Date:   Thu Jul 6 23:54:24 2017 -0400
+
+		in mem_callback:
+		   detect current process at runtime, don't rely on 'gIsTargetBlock' flag which is set before_block_exe. considering the possible 'context switch'
+
+	commit c32ebca485a73e376aae83f1b90a5b184cd3bbf6
+	Author: lele-srv <tupipa0929@gmail.com>
+	Date:   Thu Jul 6 23:51:49 2017 -0400
+
+		don't exit when we detect a possible 'context switch'
+
+	commit 6bc003897b87033130304c834093271a4419914a
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Thu Jul 6 23:11:10 2017 -0400
+
+		check pages pointer before print proc info.
+		
+		TODO: mem_callback: ERROR: target detected at before_block_exec but not detected here
+
+	commit 2280f17d56f85e1686e5e34a5fca1bdefcf23125
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Thu Jul 6 22:57:03 2017 -0400
+
+		1, split asid and asid_struct; process them in parallel in most cases.
+		
+		2, also store the asid_stuct the same as asid when struct not available.
+
+	commit 79a673e35f1f057fb64d78399a871732c3079704
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Thu Jul 6 22:09:08 2017 -0400
+
+		set asidstory proc_change also effect on kernel asid changes
+
+	commit d229c532f645f75a0a25c99f76a972d84b31266d
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Thu Jul 6 17:23:20 2017 -0400
+
+		debug callstack_instr with printings and extern 'C' functions/headers.
+
+	commit 5ab1e65e28cd7db80d5bc41f9e01ecaef1809015
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Thu Jul 6 17:22:06 2017 -0400
+
+		check init_capstone before every use of disas.
+		
+		avoid the failure in init_plugin.
+
+	commit c8103961cb40ed61a07773b0ad99eb4cf79ac72b
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Thu Jul 6 13:28:15 2017 -0400
+
+		1, add a api for callstack_instr, but failed to compile.
+		
+		    // get capstone handle from the callstack_instr
+		    // -- capstone disasm instance can only have one instance. So if other plugin
+		    //  needs to use capstone, it might get the handle directly from here, instead
+		    //  of create a new one.
+		    // -- If other plugin re-initialize capstone after the callstack_instr initialized
+		    //  here, the old capstone here in this plugin will not work. cs_option will failed
+		    //  every time when we set
+		    <!--csh get_capstone_handle(CPUArchState* env, csh * handle_ptr)-->
+		
+		2, try to debug the capstone init of callstack_instr
+
+	commit 643b0d542239684fcb4ad463f194765332c85998
+	Author: lele-srv <tupipa0929@gmail.com>
+	Date:   Wed Jul 5 23:40:37 2017 -0400
+
+		TODO: callstack_instr cannot use capstone.
+		
+		cs_option failed.
+
+	commit 16a334978221b99060bc6be3d253073a3b880fd5
+	Author: lele-srv <tupipa0929@gmail.com>
+	Date:   Wed Jul 5 22:45:08 2017 -0400
+
+		1, add on_ret2, on_call2 callback for callstack_instr plugin. Add one more parameter based on the original callback func.
+		
+		2, use entirely on callstack_instr to detect call and ret. except the int and iret.
+		
+		3, TODO: how to maintain the gTargetAsid(struct) and generate the right cct.
+
+	commit da74846c3bc96e7cd158cc4b84df1c996528ffcf
+	Author: lele-srv <tupipa0929@gmail.com>
+	Date:   Wed Jul 5 20:30:22 2017 -0400
+
+		In
+		 panda_current_asid_proc_struct
+		, first try to use
+		 get_current_running_process(cpu);
+		to get process, and return p->asid; if failed, return cpu->cr3
+
+	commit f8d4bb2a2c0a37ea33e9bbfe6cef6c8ebbee7924
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Wed Jul 5 17:39:27 2017 -0400
+
+		1, use gTargetAsid and gTargetAsid_struct in parallel;
+		
+		1.1, update gAsidToProcIndex[] for the two asids.
+		
+		TODO: update all other usage senario for gTargetAsid.
+
+	commit 84fbc92eb090de08d24771e71e6f4028c7514e64
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Wed Jul 5 16:53:42 2017 -0400
+
+		return -1 if only black spaces.
+
+	commit 359515e98af6d74d58eeaf398c60759fa5255247
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Wed Jul 5 16:52:35 2017 -0400
+
+		if addr2line returns only black strings, then ignore it.
+
+	commit 088eeb85a40c672e98989718def76858d653fd09
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Wed Jul 5 16:03:46 2017 -0400
+
+		combine callstack_instr and disasm in trace_deadwrite to detect call/ret
+		 - in order to avoid the old traceBlockSize bigger than its original size.
+
+	commit 440ff193b0b16b2f5ebb019c1e7481c96509ae3e
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Wed Jul 5 11:32:07 2017 -0400
+
+		don't initiate a call if not found by callstack_instr
+
+	commit 33c9e25c18a4f0381eea6f7d1ecb165e967807fa
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Wed Jul 5 11:30:06 2017 -0400
+
+		debug == functio for ProcID
+
+	commit 341cdca1020b0ac190f29b29645f17cf4400ba6d
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Wed Jul 5 11:01:16 2017 -0400
+
+		1, add struct
+		
+		struct ProcID{
+		    OsiProc *proc;
+		} with its overload functions of == < and hash func.
+		
+		2, use ProcID to store all running procs
+
+	commit e1357fa5454624f8c6b60444a27905b417ae9d0a
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Wed Jul 5 10:06:55 2017 -0400
+
+		move all #includes and declaration/definition of macros/structs/variables/function headers to the header file
+
+	commit c96ecd7eaed88cb0bbde923a003643637ce32f60
+	Author: lele-srv <tupipa0929@gmail.com>
+	Date:   Wed Jul 5 00:49:23 2017 -0400
+
+		1, add ignored asid to sets.
+		2, remove re-getting the current process stop in handle_proc_change
+
+	commit f5189e0fe4f6432c11a22884cd05999c15be0808
+	Author: lele-srv <tupipa0929@gmail.com>
+	Date:   Wed Jul 5 00:30:33 2017 -0400
+
+		debug get_current_running_process
+
+	commit 266b5d9cfc08616d8f15bf69cd878269221101ef
+	Author: lele-srv <tupipa0929@gmail.com>
+	Date:   Wed Jul 5 00:23:03 2017 -0400
+
+		1, use is_target_process_running(cpu) to detect the target in all callbacks
+
+	commit 2bdfca7f6dfbfcee0a1276ce112627ec3aeb1968
+	Author: lele-srv <tupipa0929@gmail.com>
+	Date:   Wed Jul 5 00:08:43 2017 -0400
+
+		1, add
+		target_ulong panda_current_asid_proc_struct(CPUState *cpu);
+		
+		to get process asid/name from task struct, aiming to replace panda_current_asid, which gets asid from cpu->cr3.
+		
+		Most of time, the two asid is different. (seems from cpu->cr3 is smaller, related to physical memory size?)
+		
+		2, add
+		OsiProc * get_current_running_process(CPUState *cpu);
+		
+		a helper that can return an available process info.
+		
+		3, add
+		bool is_target_process_running(CPUState *cpu);
+		
+		work as a wrapper to test wether current running state is in target program or asid.
+
+	commit 08abe602920e4c526b3faf52c52f66b527bb6143
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Tue Jul 4 17:07:50 2017 -0400
+
+		check whether given asid has proc found at last
+
+	commit 5f6b320275315a9ab010e86ba2b71f90a03fbcd7
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Tue Jul 4 16:48:45 2017 -0400
+
+		compare proc asid with current asid. for x86_64 debug
+
+	commit ac07217c94da719e11012a435167e4cd65e85bc2
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Tue Jul 4 16:14:40 2017 -0400
+
+		1. use on_call and on_ret of callstack_instr to detect call and ret. Hope to be more accurate?
+		
+		2. Panda BUG: under x86_64 : on_proc_change: current asid and proc's base address is not equal.
+		
+		TODO: we might need to use proc's base addr?
+
+	commit 5f8f58d874d2c8eaef9c95ba06edc8a0ed2b80b2
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Tue Jul 4 14:14:08 2017 -0400
+
+		print monitored proc and last asid
+
+	commit 71a09785f56f5b962eb679833d89390eb15da998
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Tue Jul 4 14:11:26 2017 -0400
+
+		1, rename gCurrentASID to gTargetAsid
+		
+		2, also reset gTargetAsid if found the proc name is the same as gProcToMonitor
+
+	commit 149136d58faa7a8492b9c1d0a3a655265188c71f
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Tue Jul 4 12:12:34 2017 -0400
+
+		debug: addr2line, parse ?? ??:? more accurate
+
+	commit 7e0ef2ca47985173af98a5e04da46029e5a1a8c7
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Mon Jul 3 22:32:11 2017 -0400
+
+		put
+		    void  panda_GetSourceLocation(target_ulong target_asid, ADDRINT ip, unsigned long *line, std::string *file, std::string *func)
+		to header declaration
+
+	commit 8c7e1e860799a41e0d3277cf56e9ef30327a6708
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Mon Jul 3 22:30:21 2017 -0400
+
+		TODO: debug, printing line info, missing one dead report.
+
+	commit b4c47b4943aaecccd954cbdbc31a8e7a6a88ad1a
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Mon Jul 3 21:36:44 2017 -0400
+
+		1, avoid bug in panda: checking asid change or not at callback_support of asid_changed, in panda/src/callback_support.c
+		
+		2, avoid printings.
+		
+		TODO: debugfile for asid not accurate, need debug.
+
+	commit 5aa0d361eff65bc15e4fedc6e6113f353a1f26fc
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Mon Jul 3 20:57:23 2017 -0400
+
+		1. in trace_deadwrite: handle_proc_change comment out
+		    -// free_osiproc(proc); // this will cause seg fault after asid_changed, before calling handle_proc_change func..
+		
+		2, in panda callback: asid_changed: BUG: will also call this if asid has not been changed.
+
+	commit 15520fdeff417457f1609f5f86f8cdd9ca79eed2
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Mon Jul 3 14:45:42 2017 -0400
+
+		debug, seg fault after asid change:
+		- add callstack_instr plugin, proceed more executions but still seg fault after asid change
+
+	commit 0105e738f857b297eb3d990cf28abe0990665bc5
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Mon Jul 3 14:28:13 2017 -0400
+
+		1, avoid all pri_ related included headers
+		
+		2, use only osi and asid_story plugin.
+		
+		TODO: still get seg fault after asid_change
+
+	commit b1e35c9f0b7dba75305430e447d459a754e7e196
+	Author: lele-srv <tupipa0929@gmail.com>
+	Date:   Mon Jul 3 13:34:12 2017 -0400
+
+		avoid pri_dwarf for i386 arch
+
+	commit bff4b6c4a69ee281c771eefde3cfacb7a1e208a9
+	Author: lele-srv <tupipa0929@gmail.com>
+	Date:   Mon Jul 3 10:59:12 2017 -0400
+
+		set FileLineInfo valid to be true whenever we create and fill a new struct.
+
+	commit a437cdbf17c3d3a8e3e557166f76e57b9bf42b15
+	Author: lele-srv <tupipa0929@gmail.com>
+	Date:   Mon Jul 3 00:56:09 2017 -0400
+
+		add init osi during init_plugin
+		
+		debug printings.
+		
+		check current_process in on_proc_change.
+		
+		TODO: debug core dump after asid change detected in x86_64
+
+	commit e5d6f16ac4875c2967798a5e794905bcf58b3de4
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Sun Jul 2 18:00:11 2017 -0400
+
+		amend prints
+
+	commit 2d4ab0b1ffc72a81955caca1df04cdd5858cd2c6
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Sun Jul 2 17:56:58 2017 -0400
+
+		debug, print func name
+
+	commit 0149e057ac2fd91d6d861f05f0d51d2d34a61284
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Sun Jul 2 17:54:49 2017 -0400
+
+		debug
+
+	commit 1e044faf8e71ac233be567ee2d353cd958affe3d
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Sun Jul 2 17:52:57 2017 -0400
+
+		debug: on proc change: asid with panda_current_asid differs.
+
+	commit 799ce18ae305f78f5a2e6b5eeaf06eca4155590f
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Sun Jul 2 17:49:08 2017 -0400
+
+		also prints kernel modules of proc.
+		
+		try to catch asid changes to kernel.
+		
+		debug prints.
+
+	commit d415145ae0019c5683a1c059f0e7a3e515cfefbc
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Sun Jul 2 17:01:22 2017 -0400
+
+		searchDebugFilesForProcName:
+		    - for asid with IP, search all debugfiles that can return the lineInfo for this ip.
+		    - debug files stored in a vector of strings
+		    - mark the gProcToDebugDone[procName] as done if found one available lineInfo from a file.
+		    - TODO: might be other ways to find debugfiles for a procName,
+		    -    e.g. list in the txt file statically, or search here more intelligently
+		
+		int checkNewProc (std::string procName)
+		    - check whether procName is in gProcs,
+		    - if does not exist, add it to gProcs and return its index;
+		    - if exists, nothing change and return its index.
+
+	commit e644dada5188e9d1f383052aeee0197f5faf8385
+	Author: lele-srv <tupipa0929@gmail.com>
+	Date:   Sun Jul 2 14:37:48 2017 -0400
+
+		getLineInfoForAsidIP:
+		
+		    - given asid, and ip, trying to find proper debug file and call addr2line to get the line info
+		
+		    -
+		TODO
+		   - here only one debug file possible for each asid;
+		     in the future, might we need to create and maintain a debug file vector for each asid <-> debugfiles ???
+
+	commit 9e6cdb7a2ac3cf4fe5098382f7820c5a287ab8df
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Sun Jul 2 12:22:56 2017 -0400
+
+		Debug.
+		
+		Remove method getFileLineInfoFinal, since it's not the proper place to get every dead write IPs for the target_asid.
+		
+		Use getLineInfoForAsid instead, given asid, and IP, return lineInfo.
+
+	commit c2cecf226d88388a37609625d1950e304eb149e4
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Fri Jun 30 23:35:13 2017 -0400
+
+		base, asid
+
+	commit b3bb9f2c3c2ac93b82b0641ac0dff35896c561d9
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Fri Jun 30 23:30:20 2017 -0400
+
+		add on_proc_change callback by plugin of asidstory.
+		TODO: also get libraries as in osi_test plugin, in order to get the exe/lib file path, as well as the asid of libs.
+
+	commit 132b7dbb392eacc8ba5f3ff85489a3070d42ae53
+	Author: lele-srv <tupipa0929@gmail.com>
+	Date:   Fri Jun 30 20:51:27 2017 -0400
+
+		add getFileLineInfoFinal, to get line info after replay finished.
+		
+		read debug paths list from a given txt file from option.
+
+	commit 34b9b2cf8c29f0c4d466bd2ee3af051a3edb4afe
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Fri Jun 30 17:57:57 2017 -0400
+
+		add addr2line util.
+		run bash command from c++ code.
+		TODO:
+		 - add support inside trace_deadwrite.cpp.
+		 - add support for debug file of different asids.
+
+--------------------------------------------------------------------
+v0.4: print Src LineInfo on every deadwrite pc and call stack.
+		App only.
+		
+	TODO:
+	add kernel debug symbol support
+--------------------------------------------------------------------
+
+	commit d7b371e8b177d34e1a4f854c5eda2898cf1dc338
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Thu Jun 29 22:04:23 2017 -0400
+
+		print Src LineInfo on every deadwrite pc and call stack.
+		App only.
+		
+		TODO:
+		add kernel debug symbol support
+
+	commit 35895a208e51532dc778cf4ef15130583256d71b
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Thu Jun 29 11:50:31 2017 -0400
+
+		suc, get line info, on trace_deadwrite
+
+	commit 05b77214f9f14f4e6ea645949569369048625016
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Thu Jun 29 11:11:15 2017 -0400
+
+		add support PPC arch.
+
+	commit b92e002d8e2af3423679178c1719dbf597df9d68
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Thu Jun 29 10:39:25 2017 -0400
+
+		add suport for x86_64 for pri_dwarf.cpp:
+		  - change from
+		
+			#if defined(TARGET_I386) && !defined(TARGET_X86_64)
+		    to
+			#if defined(TARGET_I386)
+		  - some minor printing format changes for arch based format: TARGET_FMT_lx, or TARGET_FMT_lu
+
+	commit 86f3a69b85e51ae9319e5fdd527d3b35ed4b2fd1
+	Author: lele-srv <tupipa0929@gmail.com>
+	Date:   Thu Jun 29 09:28:36 2017 -0400
+
+		debug: pri_simple into trace_deadwrite, Makefile change
+
+	commit 303b91a9e5a67aed64da650214fb9aae99426f6e
+	Author: lele-srv <tupipa0929@gmail.com>
+	Date:   Wed Jun 28 23:43:24 2017 -0400
+
+		debug: pri_dwarf not work in trace_deadwrite.cpp
+		
+			getLineInfo-> pri_get_pc_source_info(cpu, pc, &info)
+		
+		gets segment fault.
+		
+		Now what have done:
+			- comment out all other parts of trace_deadwrite.cpp, keep only pri_dwarf functions(as in pri_simple).
+			- avoid using namespace std/std:tr1/__gnu_cxx.
+			- add comments on pri/pri_dwarf/pri_simple.cpp
+		
+		TODO: still get seg fault whenever call pri_get_pc_source_info.
+
+	commit cfa54dc06ba28469eb97e12c931d9678cb7ef086
+	Author: lele-lap <tupipa0929@gmail.com>
+	Date:   Wed Jun 28 17:22:01 2017 -0400
+
+		gAsid, TODO
+
+	commit 0bd35bc8df612c198fe76450ec884be691fc9a49
+	Merge: dae7755 2dba2dd
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Wed Jun 28 17:01:44 2017 -0400
+
+		Merge branch 'deadspyCCT' of ssh://lelema.org:2341/home/git/gitreps/panda into deadspyCCT
+
+	commit dae7755e073f90ec261635b891806ae1c1b99788
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Wed Jun 28 17:00:08 2017 -0400
+
+		add method: getLineInfo
+		add struct: LineInfo
+		add global map: gAsidPCtoFileLine: <asid, <pc, fileLine>>
+
+	commit 2dba2dd523161b9e9abefd1b18cd1c10ef8a85fd
+	Author: lele-srv <tupipa0929@gmail.com>
+	Date:   Wed Jun 28 16:28:32 2017 -0400
+
+		pri_simple, enable on_line_change
+
+	commit 5471ae693a5720463611f2c295a97e2d6a337f85
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Tue Jun 27 17:59:13 2017 -0400
+
+		avoid prints when report.
+		(until now, log reduced to <100MB)
+
+	commit c3c18c512336c2b5ffc7697a44ebdd4bc870701f
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Tue Jun 27 17:19:31 2017 -0400
+
+		avoid printings
+
+	commit 9ecf3a3ab12a0655da9ada072f815e2cbf8b537d
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Tue Jun 27 17:06:10 2017 -0400
+
+		also print size of DeadMap at last. For good view.
+
+	commit 52137e45495710a10687da1f63b28e3b660bae45
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Tue Jun 27 17:03:36 2017 -0400
+
+		avoid printings: no prints for read/write mem ops. To reduce log size.
+
+	commit 5a82a1c206f5e24ce58b9baa571ee9a6956bf8cf
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Tue Jun 27 17:00:54 2017 -0400
+
+		avoid more printings, reduce log size
+
+	commit 3a1ab19906366901d317e01ae513f634fdd7d9d0
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Tue Jun 27 16:42:21 2017 -0400
+
+		avoid unused vars
+
+	commit 7576953b9bc2107b29124f91d617493af3b8acbf
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Tue Jun 27 16:39:08 2017 -0400
+
+		1, before_block_exe: add size check for an old childBlocks of current context node.
+		
+		2, avoid printings, in order to reduce log size.
+
+	commit 475f9133db388dc8679eaa2a8bd462a39606d49b
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Tue Jun 27 15:38:22 2017 -0400
+
+		Don't store disassembled instructions by capstone, save memory.
+		
+		no need to clear insns at last
+
+	commit 71cc069785882637359951f06169a57f108e31fc
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Tue Jun 27 15:36:16 2017 -0400
+
+		Don't store disassembled instructions by capstone, save memory.
+
+	commit 2edaba2ea5d65cb4c734505842d7fe44a012597e
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Mon Jun 26 17:23:14 2017 -0400
+
+		add PPC arch support. Refer to callstack_instr plugin.
+
+	commit e2007903dc6472eabb2889282ed695730d1663b2
+	Merge: 024e13d bdc9632
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Mon Jun 26 16:35:03 2017 -0400
+
+		Merge branch 'master' of https://github.com/panda-re/panda into deadspy
+
+	commit 024e13d4fa2492cd760a497baead10568eed9cde
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 26 16:13:20 2017 -0400
+
+		use lu instead of lx for numbers
+
+	commit 77c36fff17bce8af225fc2b6565171127ce7c5cd
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 26 15:58:47 2017 -0400
+
+		reduce printings:
+			- avoid disas instructions
+
+	commit 1aec14991eae1dd93c4ae82e07ba72a6f5284f88
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 26 15:51:47 2017 -0400
+
+		comments, check ShadowMap size/slots during mem_callback
+
+	commit 86833574f6e711bb3fdd46d16c1dac9f61154e8b
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 26 15:47:00 2017 -0400
+
+		Detect size of ShadowMap[tb] and size of basic block at before block exe.
+		If ShadowMap size is smaller, then reset it to be the new size of tb->size.
+		
+		InitializeBlockShadowMap()
+		    // create the gBlockShadowMap for a basic block. This can be called at the time of :
+		    //  - newly translated basic block,
+		    //  - newly executed basic block,
+		    //  - old basic block, but has larger size detected in before block execution, if so, the map is replaced.
+
+	commit 35f82ad2588cbf3dce555c56bb14886fd2191255
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 26 11:36:34 2017 -0400
+
+		if need replace old gBlockShadowMap, also copy the old map to new map before free the old map.
+
+	commit f4880876dbea3eedc1214522b71f2945904888b7
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 26 11:30:54 2017 -0400
+
+		before block exe:
+			check gBlockShadowMap[tb] size and tb size.
+			recreate the gBlockShadowMap if tb size is bigger than the old gBlockShadowMap[tb]
+
+	commit 5ad000f021fbcd3e063fe2f4748fb4448bc1d52d
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 26 10:54:55 2017 -0400
+
+		default asid as 0;
+		set element type of gIgnoredASIDs to target_ulong
+
+	commit cfe1c27310127fb9fccf1239860b82965e800a23
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 26 10:24:39 2017 -0400
+
+		debug: mapSize set to uint64_t
+		
+		rr_log.c: avoid unnecessary printings.
+
+	commit 410893f795ab772f8a923cf677f9e91c4331e01b
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 26 10:16:41 2017 -0400
+
+		check DeadMap size before report it.
+		
+		rename:
+		 - ImageUnload() -> ExtractDeadMap()
+
+	commit 6e5476ae40704e4cd5e7770f563f2fdbcfa38ff6
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 26 09:59:53 2017 -0400
+
+		allow input option asid;
+		set target asid accroding to option
+
+	commit 6d09997bb3b56043182b4096157659f9573a36a9
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 26 09:46:12 2017 -0400
+
+		gIgnoredASIDs < asid1, asid2, .. >:
+		  - store ignored asids, as well as the basic block of this asid's last occurance.
+		  - print all ignored asids after replay finished.
+		
+		unordered_set<ADDRINT> gIgnoredASIDs;
+
+	commit f88a3acaed219c940a563202adb5bf2520192c79
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Mon Jun 26 07:44:25 2017 -0400
+
+		avoid prints for blocks that has been filtered out.
+		
+		only prints for targeted blocks.
+
+	commit 293c1f2b68072eb735021651a33cba3867c89ef6
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Sun Jun 25 22:44:29 2017 -0400
+
+		flush tb and disable block chaining
+
+	commit 40c498cb25e2bc11b07a18992215a6f9d07e21a1
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Sun Jun 25 18:45:33 2017 -0400
+
+		debug, reset nSlot once in mem_callback
+
+	commit 743737cb7e2fa4b6e7a7ce32016c2703b5eb709f
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Sun Jun 25 18:41:09 2017 -0400
+
+		mem_callback:
+		   update slot pc in gBlockShadowMap.
+		   - if pc not in slot, add it to gBlockShadowMap.
+		   - don't use gBlockShadowMapDone anymore. BUG Panda: after execution of a block, _after_block_exec will not run in some cases. This will cause gBlockShadowMapDone not be set to true even if block exe finishes.
+		   - now since we don't use gBlockShadowMapDone, so we must check gBlockShadowMap on every mem_callback, this cause more overhead, but safer.
+
+	commit 8a49af9ef17a5de17b76bef777c7a7b93aab9fb5
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Sun Jun 25 17:19:20 2017 -0400
+
+		check blockSize with the nSlots: nSlots <= blockSize
+
+	commit 142078752f609db5d476fa0d3dc77bb69a4b505d
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Sun Jun 25 17:07:27 2017 -0400
+
+		1, for every new TraceBlock, allocate tb->size of IPVecBuffer at initialization time, instead of allocating one by one at mem_callback,
+		this allows the dynamically changing of the write IPs in the same basic block.
+		2, when initialization a new TraceBlock, we don't rely on the recordedSize in gTraceShadowMap.
+
+	commit 5fb88077331f071c9049fca451de118d7205a181
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Sun Jun 25 16:25:08 2017 -0400
+
+		use needUpdateTraceBlock to trigger the updating of an old gCurrentTraceBlockNode->childIPs when we found an old block has new mem writes in mem_callback
+
+	commit df475d6e0c041b2e80de7cc7f722e5f56e412d04
+	Merge: a0f8f20 d09f781
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Sun Jun 25 15:47:37 2017 -0400
+
+		in mem_callback: check gBlockShadowIPtoSlot to determine whether pc already inside the Map.
+
+	commit d09f781849d3a386bb26691491304066a7bd6a89
+	Merge: b81c8b3 663f149
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Sat Jun 24 23:10:32 2017 -0400
+
+		Merge branch 'deadspy' of ssh://lelema.org:2341/home/git/gitreps/panda into deadspy
+
+	commit b81c8b3a94063baa36142f02f37dd031d8260ca2
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Sat Jun 24 23:06:01 2017 -0400
+
+		1, gBlockShadowIPtoSlot, allows dynamically changing and realtime slot querying of gBlockShadowMap
+		
+		2, in order to support the dynamically changing size  of gCurrentTraceBlock->childIPs (rare case , don't know why yet, different exe times has different mem ops for same block)
+		
+		// Lele: for a gCurrentTraceBlock, the size of its childIPs could be changing during the execution.
+		// this function can adjust the size of IPVecBuffer that has already allocated to the gCurrentTraceBlock previously.
+		inline void ** AdjustIPVecBuffer(BlockNode ** currentTraceBlock, uint32_t size){
+		    void ** ret = (void **) currentTraceBlock;
+		    uint64_t oldIndex = (uint64_t) (ret - gPreAllocatedContextBuffer);
+		    gCurPreAllocatedContextBufferIndex = oldIndex + size;
+		    assert( gCurPreAllocatedContextBufferIndex  < (PRE_ALLOCATED_BUFFER_SIZE)/(sizeof(void **)));
+		    return ret;
+		}
+
+	commit 663f14970ee8ecb4f9bfcfe818fdc474a80eae30
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Sat Jun 24 23:06:01 2017 -0400
+
+		// Lele: for a gCurrentTraceBlock, the size of its childIPs could be changing during the execution.
+		// this function can adjust the size of IPVecBuffer that has already allocated to the gCurrentTraceBlock previously.
+		inline void ** AdjustIPVecBuffer(BlockNode ** currentTraceBlock, uint32_t size){
+		    void ** ret = (void **) currentTraceBlock;
+		    uint64_t oldIndex = (uint64_t) (ret - gPreAllocatedContextBuffer);
+		    gCurPreAllocatedContextBufferIndex = oldIndex + size;
+		    assert( gCurPreAllocatedContextBufferIndex  < (PRE_ALLOCATED_BUFFER_SIZE)/(sizeof(void **)));
+		    return ret;
+		}
+
+	commit c23a777d9fcfbdabca7cda36eea892811b54985f
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Sat Jun 24 22:30:12 2017 -0400
+
+		rollback to an older solution with tiny improvement: use gTraceShadowMapIps[tb->pc] = <IP, int slot> instead of <IP, bool>.
+		Get slot index at runtime(mem_callback) when update the gCurrentTrace->childIPs[slot].
+		
+		The new solution 2 is not going to be implemented so far.
+		
+		Jun 24: in order to avoid the situation:
+		    // where for same basic block, execution in different times could have different write pcs.
+		    // Solution 1 (current): tracking whether we have stored a write pc in the ShadowMap for that block.
+		    //  - use a subMap for each basic block, gTraceShadowMapIps[tb->pc]=< target_ulong IP, int slot >. If tb->pc has pc has its IP stored in ShadowMap, we set the int value as positive number as its slot index..
+		    //  - for gTraceNode->childIPs, whenever we need to report the deadInfo with the IP's slot index, we get the slot from gTraceShadowMapIps
+		    //
+		    // Solution 2 (not implemented yet) : inside each basic block, assign a static slot for every PC.
+		    //  - only one slot will be assigned for one pc;
+		    //  - every different basic block has it's own map;
+		    //  - slot can be assigned at the time we found the basic block: either after translation, or before execution, or during execution, but not after execution.;
+		    //  - slots should be checked after execution;
+		    //  - In order to get the slot number quickly by its pc, we add a subMap for each basic block: gTraceShadowMapIps[tb->pc] = < IP, slot >
+
+	commit a0f8f206e3675244b735727c5ddcc48cb3345726
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Sat Jun 24 21:30:15 2017 -0400
+
+		 // TODO: in order to avoid the situation:
+		        // where for same basic block, execution in different times could have different write pcs.
+		        // Now TODO: add gTmpBlockIpShadow as an temperal shadowMap:
+		        // gBlockShadowMap:
+		        //  - after translation, only initialize gBlockShadowMap[pc]
+		        //  - during block execution(mem_callback), don't update gBlockShadowMap[pc].
+		        //  - before block execution, initialize gBlockShadowMap[pc] only if pc is not there;
+		        // gTmpBlockIpShadow:
+		        //  - before block execution, initialize it
+		        //  - during mem_callback, store all mem_writes <slot, pc> in gTmpBlockIpShadow
+		        //  - after block execution, compare gBlockShadowMap[pc] with gTmpBlockIpShadow, merge them with increasing sorted pc, and maximum tb size.
+
+	commit 52c7ca53874fbe3090b0cd66e4a00e0a564abda6
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Sat Jun 24 18:17:44 2017 -0400
+
+		    // TODO: in order to avoid the situation:
+		    // where for same basic block, execution in different times could have different write pcs.
+		    // Now TODO: add gTmpBlockIpShadow as an temperal shadowMap:
+		    // gBlockShadowMap:
+		    //  - after translation, only initialize gBlockShadowMap[pc]
+		    //  - during block execution(mem_callback), don't update gBlockShadowMap[pc].
+		    //  - before block execution, initialize gBlockShadowMap[pc] only if pc is not there;
+		    // gTmpBlockIpShadow:
+		    //  - before block execution, initialize it
+		    //  - during mem_callback, store all mem_writes <slot, pc> in gTmpBlockIpShadow
+		    //  - after block execution, compare gBlockShadowMap[pc] with gTmpBlockIpShadow, merge them with increasing sorted pc, and maximum tb size.
+
+	commit de5c21427b5c68f2420e087d7bdb38b3efa2750d
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Sat Jun 24 17:09:57 2017 -0400
+
+		rename gCurrentIpVector to gCurrentTraceIpVector
+
+	commit 170bb8b55dba2363180c584c4afadadff6639682
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Sat Jun 24 16:52:43 2017 -0400
+
+		rename gTraceShadowMapDoen to gBlockShadowMapDone
+
+	commit 68d6b8deede99cc08ed8cd553bacaeba3301752a
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Sat Jun 24 16:03:10 2017 -0400
+
+		in every mem_callback, Update the TraceBlock's slot index with current Slot, this should be independent with the slot number in gTraceShadowMap.
+
+	commit e95825804142054fe304ab975b719e6c3a71c3d1
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Sat Jun 24 13:02:32 2017 -0400
+
+		debug
+
+	commit adf23f176cb7610a64835daacf421f221d86d7a8
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Sat Jun 24 12:57:38 2017 -0400
+
+		 in mem_callback:
+		
+		use gNewBasicBlock to track the update of ShadowMap[tb]
+		use gNewBlockNode to track the update of gCurrentBlockNode, and gCurrentIpVector
+
+	commit ccb31786bfd64c4981507985385a651455dc2093
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Sat Jun 24 12:31:21 2017 -0400
+
+		debug gCurrentIpVector[slot] == nil
+
+	commit adbfdde27ed053b2e27caa2052500e22319ff381
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Sat Jun 24 12:05:09 2017 -0400
+
+		rename TraceNode to BlockNode
+
+	commit fe38e3107dba6db25d42f4f30aa65fa6450e776d
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Sat Jun 24 12:02:48 2017 -0400
+
+		rename gTraceShadowMap as 'gBlockShadowMap'
+
+	commit dbd8bc3ddcd26c5fa2658ab0e9624d3d6a8e60e3
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Sat Jun 24 11:54:06 2017 -0400
+
+		rename childTraces to childBlocks
+
+	commit 36953385e8a67d8bc8a0dc1c73f0fb38199d4ec5
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Sat Jun 24 11:37:20 2017 -0400
+
+		1, use new instead of malloc to create unordered_map
+		cite: https://stackoverflow.com/questions/37662841/floating-point-error-when-accessing-stdunordered-map-in-array-of-structs
+		
+		2, PANDA BUG: some block cannot be caught in after_block_translate, but can be caught in before_exe_block. So, we need:
+		   create and initialize gTraceShadowMap accordingly if we found no gTraceShadowMap for that BB in before_block_exe
+
+	commit bdc96328f5ef2ac8775feb4c50920ac39f218a60
+	Author: Brendan Dolan-Gavitt <brendandg@nyu.edu>
+	Date:   Sat Jun 24 11:16:01 2017 -0400
+
+		Fix to support more DWARF from Hu Zhenghao
+
+	commit 27960ea28308380a10bcf8b4dfaea9c4c73ab98d
+	Author: Ray Wang <raywang@mit.edu>
+	Date:   Fri Jun 23 17:41:30 2017 -0400
+
+		PowerPC replay in LLVM (#184)
+		
+		* Implemented macro for add2_i32 and sub2_i32
+		* Fixed bug that allowed function to return bitwidth longer than expected
+		* Added assert when storing value into ptr of wrong bitwidth
+
+	commit ce5fc2274dc0be52845c6acb1c9d5bd9af78756d
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Fri Jun 23 00:35:31 2017 -0400
+
+		floating point exception
+
+	commit 17d83f6ef7daacf1ef6cc78ae0730ac6be4fd972
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Fri Jun 23 00:31:10 2017 -0400
+
+		debug:
+		  use *mapIps[pc] instead of mapIps[pc]
+
+	commit 32257e5f80f0d970c535ccef40eb55c1c46a50e1
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Fri Jun 23 00:23:26 2017 -0400
+
+		/*
+		InitializeTraceShadowMap()
+		    // create the gTraceShadowMap for each newly translated basic block
+		    //  - only one pair stored in gTraceShadowMap for one basic block with tb->pc as key.
+		    //  - initialized here but filled at mem_callback during block exe
+		    //  - might be filled during different iterations of block exe, since for same block, block exe could have different mem behaviors.
+		    //    --> we use gTraceShadowMapIps to track whether we have an IP in the gTraceShadowMap, if we have, no need to update gTraceShadowMap, if not, we'll update it.
+		    //    --> So we don't use gTraceShadowMapDone to indicate whether we need to udpate gTraceShadowMap anymore. We only use this to trigger the checking of gTraceShadowMapIps.
+		
+		    //  - for a new Translation of the previously translated block, we will compare its size with the older translated version, store the larger size as the final.
+		*/
+
+	commit 07db3216ee668c8921be55097ba5ea9d59a3e4f6
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Thu Jun 22 18:11:29 2017 -0400
+
+		BUG in PANDA?: translations for the same block have different disasm codes and mem behaviors.
+		
+		for one app where asid!=0.
+		
+		Now change kernel asid=0 to test.
+
+	commit 60212ab3e05cfe1e79a4514d91722c99e45f786c
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Thu Jun 22 17:39:55 2017 -0400
+
+		track every change of gCurrentIpVector
+
+	commit bf5301b75d3508141fa095ee3241ec273d5e38f6
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Thu Jun 22 17:24:51 2017 -0400
+
+		after initialized the new traceNode, reset gCurrentIpVector:
+			gCurrentIpVector = gCurrentTrace->childIPs; // 0 if new basic block, non-zero if reused basic block.
+
+	commit a66cf91885d999121e4951c07c8681fd39e9220d
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Thu Jun 22 17:11:56 2017 -0400
+
+		allow reuse of gTraceShadowMap for a re-executed basic block. Still create new TraceNode under contextNode.
+
+	commit 59632d3f54786b471534f7a04695cf487e0abc13
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Thu Jun 22 16:52:02 2017 -0400
+
+		1, split gTraceShadowMap creating and TraceNode creating:
+		
+			- a new TraceNode didn't require a new gTraceShadowMap of a basic block:
+			A basic block should have only one area stored in gTraceShadowMap, but could have multiple
+			TraceNodes stored under different ContextNode.
+		
+			- InstrumentTraceEntry(): According flag gTraceShadowMapDone[tb->pc] to determine whether
+			There is already a gTraceShadowMap built for a basic block;
+
+	commit cefc37171fbff6d33bf7d1ff732b3ea106c4ebf2
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Thu Jun 22 16:26:55 2017 -0400
+
+		simplify prints. debug gIpVector;
+
+	commit 65ebd096e9a6dd8e894170d0ae42063cc210ae96
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Thu Jun 22 16:07:11 2017 -0400
+
+		1, create gTraceShadowMap in InstrumentTraceEntry, put it together with the creation of a new TraceNode.
+		
+		2, disable flush tb
+
+	commit 59b6001d9978575d38583c112aab8224d9bae0c9
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Thu Jun 22 15:33:28 2017 -0400
+
+		track only with one app asid, for deb03
+
+	commit 99e3bd18671c25d3f16c9ee787bc748b7295615e
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Thu Jun 22 15:32:11 2017 -0400
+
+		check with only asid == 0
+
+	commit fffff53899411e3c39a976346d90654d1cf4b8b7
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Thu Jun 22 15:14:09 2017 -0400
+
+		debug. CPUState name, env->cpu
+
+	commit f1a6e4aa479556063a5f374deea707c2cf217e29
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Thu Jun 22 15:11:03 2017 -0400
+
+		check asid on all callbacks:
+		   mem_callback, after_block_translate, before_block_exe, after_block_exe.
+
+	commit 66895726598f2795b3048cd271939a832ff55295
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Thu Jun 22 12:37:15 2017 -0400
+
+		each time a new trace node is created, set gTraceShadowMapDone[currentIP] as false;
+
+	commit 1cbabaf6c43fbc5123adc8bfdd75c96c03e6d5fe
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Thu Jun 22 12:30:00 2017 -0400
+
+		add check
+
+	commit 6928f5ec30cbb71f7e009a5cbea1af3bb2b7a705
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Thu Jun 22 12:06:39 2017 -0400
+
+		set gCurrentIpVector once gCurrentTrace->childIPs is set in mem_callback
+
+	commit 9f47da06b1f13f021309ab282175857f386a46c5
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Thu Jun 22 11:59:03 2017 -0400
+
+		prints
+
+	commit b367b26815b50ce82b631a7f624cef3d69908c66
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Thu Jun 22 11:33:04 2017 -0400
+
+		cmt
+
+	commit b9521773fc06cc747ad9235713fd30133f723b22
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Thu Jun 22 11:32:29 2017 -0400
+
+		 // UpdateTraceIPs is splited into two steps:
+		            //  1, at at the InstrumentTraceEntry:
+		            //      initialize as 0 in coutinuous mode.
+		            //      or allocate all IPs as tb->size (Non-continuous)
+		            //  2, fill it during mem_callback, at the same time when we fill gTraceShadowMap
+		            //       - Allocate one slot in gPreAllocatedContextBuffer one by one during mem_callback.
+		            //  --> in this way, we could use the &gCurrentIpVector[slot] (or &(gCurrentTrace->childIPs[slot])) to report as dead context.
+		            //  This way, the gCurrentTrace->childIPs will be filled in the same pace with gTraceShadowMap.
+		            //
+
+	commit 93e990bfc08d7729f062a32fcc0c48e2f4002bf6
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Thu Jun 22 11:05:48 2017 -0400
+
+		debug ctxt1 nil.
+		Track hashValue used to report dead and read when print report
+
+	commit f01308f09692522ee17060882cbfa37b05de2f8a
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Thu Jun 22 10:57:41 2017 -0400
+
+		UpdateTraceIPs is splited into two steps:
+		  1, allocate all IPs as tb->size at the InstrumentTraceEntry
+		  2, fill it during mem_callback, at the same time when we fill gTraceShadowMap
+		In this way, we could use the &gCurrentIpVector[i] (or &(gCurrentTrace->childIPs[i])) to report as dead context.
+		This also means, the gCurrentTrace->childIPs will be filled in the same pace with gTraceShadowMap.
+		    //
+
+	commit df8d8c8c0ffb3da9948bcd5637192915126d458d
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Thu Jun 22 10:13:13 2017 -0400
+
+		track gCurrentIpVector
+
+	commit 07b313eac68a49034c2c91667d887392018a689c
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Thu Jun 22 09:45:27 2017 -0400
+
+		del the old ManageCallingContext
+
+	commit 3e54a6ad5020916f8b0807ebd8d33702b834a0a6
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Wed Jun 21 23:52:18 2017 -0400
+
+		debug seg fault when reporting
+
+	commit 7d83cb0153dee170710f3ffcd39139ac15a11d73
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Wed Jun 21 23:45:54 2017 -0400
+
+		check side case: return from root context node
+
+	commit 7395ccce92b2401f575043613068ce03185511c7
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Wed Jun 21 23:40:20 2017 -0400
+
+		mark traceMapDone after exe
+
+	commit b4b60ef7ee964ca946227a3fd5baadc0b233c02e
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Wed Jun 21 23:39:34 2017 -0400
+
+		mark traceMapDone after exe
+
+	commit fd84896f960a11d94d7fe5238191130cae498c47
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Wed Jun 21 23:33:52 2017 -0400
+
+		debug prints
+
+	commit d6d00c6e9cfbe1a6f10ba974349e45f2e0ea0dff
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Wed Jun 21 23:23:37 2017 -0400
+
+		1, reset gCurrentSlot each time we finish running a block.
+		2, each mem callback update gCurrentSlot.
+		3, only use gCurrentSlot at two places.
+		
+		4, only build one time for each basic block in gTraceShadowMap[tb->pc], use gTraceShadowMapDone to track this.
+		5, create gTraceShadowMap[tb->pc] before exe, fill it during mem_callback.
+		
+		6, update TraceIPs after block executed. This is because only after execution , we could know the total slots for a basic block, (step 5).
+
+	commit 7c53673c49c0f4958c79a12261e9f82131689937
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Wed Jun 21 21:20:07 2017 -0400
+
+		1, check all context change flags in before_block_exe;
+		2, after using flags, reset to false;
+		3, invalide UpdateDataOnFunctionEntry(), since its function is replace by step 1.
+
+	commit 75b1654e87959157fc929313269d05c9a9715b27
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Wed Jun 21 20:42:26 2017 -0400
+
+		bug:
+		    call Record1ByteMemRead((VOID *)(uintptr_t)pc) ==> should use addr instead of pc.
+		
+		    changed to Record1ByteMemRead((VOID *)(uintptr_t)addr);
+
+	commit fdfeaf9130417034cf1b88c85b04eb3d579c4bbe
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Wed Jun 21 17:14:27 2017 -0400
+
+		debug prints: tracking dead detection
+
+--------------------------------------------------------------------
+v0.3: add callback for after_block_trans, before_block_exe, and after_block_exe.
+ 	- use capstone to disas block 'after_block_trans'
+ 	- port more funcs from deadspy and find the right place to put the code.
+--------------------------------------------------------------------
+
+	commit b8c817f54ab967d4eafcd32c94558a86b5610125
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Wed Jun 21 15:52:42 2017 -0400
+
+		combined use of after_block_trans, before_block_exe, and after_block_exe:
+		1, InstrumentTraceEntry as before_block_exe. Call GoDown/Up, and allocate gShadowMap according to BB size (got filled in mem call back).
+		2, mem_callback: update slot and write pc in gShadowMap.
+		3, gInitiatedCall/Ret/INT/IRET: in after_block_exec, set flag according to the last instruction of this block. Then next block got run would be the new func.
+		TODO: 3 might be not right in multi thread env.
+
+	commit d832666d9cdb4ca115da44e8309d029de696dbe0
+	Author: Tim Leek <tleek@ll.mit.edu>
+	Date:   Wed Jun 21 14:36:20 2017 -0400
+
+		disabling byte swap opt stuff bc it puts inline assembly in helper fns and then getting llvm bitcode of them becomes impossible since llvm jit is crap
+
+	commit cc0e02b52b296b4fdabb12dde5e1769ee3733354
+	Merge: 7e28e1b ab9728d
+	Author: Ray Wang <raywang@mit.edu>
+	Date:   Wed Jun 21 14:28:55 2017 -0400
+
+		Merge branch 'master' of https://github.com/panda-re/panda
+
+	commit 7e28e1b547cbe5d9626d48c5c22e2632de63263a
+	Author: Ray Wang <raywang@mit.edu>
+	Date:   Wed Jun 21 14:28:35 2017 -0400
+
+		Added ppc in Makefile panda target
+
+	commit ab9728d529be576be95367c256bfe2c356b672ee
+	Author: Tim Leek <tleek@ll.mit.edu>
+	Date:   Wed Jun 21 14:10:08 2017 -0400
+
+		adding ppc to build
+
+	commit 364642da77852da16b7d615f6a45c72d70185190
+	Author: Tim Leek <tleek@ll.mit.edu>
+	Date:   Wed Jun 21 14:04:32 2017 -0400
+
+		fixed ppc regs stuff in taint lib so that compiles again
+
+	commit d9bfc8de178b18694d07898674e7a73d2b746b68
+	Author: Ray Wang <raywang@mit.edu>
+	Date:   Wed Jun 21 13:15:10 2017 -0400
+
+		PPC record replay (#179)
+		
+		Add PowerPC record/replay. Relevant changes:
+		* make some of the guest and debug scripts arch-independent.
+		* record exceptions as well as interrupts.
+		* record PPC pending_interrupts field.
+		* break RR_LAST into index and RR_END_OF_LOG
+		* record mftb PPC instruction. (= rdtsc)
+		* comment out reserve_addr reset on cpu loop exit (spec explicitly says reserve_addr doesn't get reset except in certain circumstances)
+
+	commit d9b392c047026c464a7887feb6e2287a6bf6e443
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Tue Jun 20 23:10:17 2017 -0400
+
+		debug.
+		unordered_map instead of std::unordered_map.
+
+	commit 767631e56dfb256bf95deb82da49f51266b75cd8
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Tue Jun 20 22:46:03 2017 -0400
+
+		1, use map tb_insns_count and tb_insns to store basic block pc and all its instructions disasmed.
+		2, keep insn get from cs_disasm, and clear insn after plugin exit.
+		3, print pc of a block. compare it with first instruction's address, should be same.
+		
+		4, add after_block_exec call back, hoping to get the PC after call executed. Should be next PC after call instruction? or not?
+
+	commit 4c6826fbaedea796f07d64df4b57da8ae30ce6eb
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Tue Jun 20 16:44:40 2017 -0400
+
+		track init capston errors
+
+	commit b7ab42a0da90a5c3fd5e0b2da630f1031ed30ee7
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Tue Jun 20 16:31:01 2017 -0400
+
+		debug
+
+	commit dd37ae36fd471170833647f334aad3fe5c70d601
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Tue Jun 20 16:26:11 2017 -0400
+
+		detect error in cs_disasm of capstone
+
+	commit d8f8adf0d53741289c7f8ec72945ab7bf6561029
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Tue Jun 20 16:12:29 2017 -0400
+
+		check panda_virtual_memory_rw return value, non 0 is error;
+
+	commit b08d15b24a5b0f77ad70443af1a30413cf6de449
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Tue Jun 20 16:08:47 2017 -0400
+
+		print info when no disas result
+
+	commit 33654437d90d87cc7dd7d438ab25940e59d8c87a
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Tue Jun 20 15:53:11 2017 -0400
+
+		recog ret, iret, int calls
+
+	commit 1f8203aa61b2b8537c08a5cdc3b0c5e6e7edf182
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Tue Jun 20 15:48:45 2017 -0400
+
+		disable mem callback, debug block callbacks
+
+	commit df60a5bd64e10dada9a9df7848c8d8fffbae6cd1
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Tue Jun 20 15:01:13 2017 -0400
+
+		don't print any info about panda_current_asid and p.cr3 equal or not
+
+	commit 9208125f3bf4814aa039ec738e0a1f1443a516db
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Tue Jun 20 14:57:06 2017 -0400
+
+		debug block disas
+
+	commit 4938159c10b3b0422a012d4b9408934791a0fd7a
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Tue Jun 20 14:52:11 2017 -0400
+
+		no print when panda_current_asid != p.cr3
+
+	commit 3e456ee1b9835bffbbf98b42ae3c89339f96316a
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Tue Jun 20 14:48:03 2017 -0400
+
+		loose constraint of panda_current_asid must = p.cr3
+
+	commit a0c53330aa1b79e606d28167702f7541c59c07ef
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Tue Jun 20 14:44:15 2017 -0400
+
+		debug
+
+	commit bb04a9109e13b50cebd8f8f92666b2f546bf790e
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Tue Jun 20 14:32:59 2017 -0400
+
+		1, add capstone disas;
+		2, add after_block_translation, before_block_exec;
+		refer:
+		-- callstack_instr plugin;
+		-- PopulateIPReverseMapAndAccountTraceInstructions(Trace) in Deadspy, use BasicBlock in PANDA, as an alternative of trace instrumentation.
+
+	commit 5e92796dcabb323f1f3766631358f5815c4e879e
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 19 23:32:04 2017 -0400
+
+		debug capstone
+
+	commit d0300c25daa0367a24c7253f5a934bcceaca45fa
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 19 23:20:45 2017 -0400
+
+		makefile add capstone
+
+	commit ae5904315f38c642d8a830b6137281933aa7bb86
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 19 23:15:47 2017 -0400
+
+		1, add after_block_translate and before_block_exe;add capstone disassembly;
+
+	commit e46da018e49ba3225e5e087105ee0ed9e25ce1d0
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Mon Jun 19 17:29:44 2017 -0400
+
+		track segfault pointer context1/2
+
+	commit be9634b57eefae1b0c7681246bbb2b86912b51e4
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 19 16:44:36 2017 -0400
+
+		tracking printing reports
+
+	commit 26b738487e0118e7ef87188d22a7d65b9463a23d
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 19 16:22:01 2017 -0400
+
+		#simplify comments
+
+	commit c08f4c6d8114b04de1c3361436e3479589f8a474
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 19 16:05:32 2017 -0400
+
+		debug: avoid warning of int casted to pointer: p.pc, ip1, ip2, etc
+		first cast to 'uintptr_t' then cast to pointer
+
+	commit 176ac3783953e9996d17a791c2c559548c16622d
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 19 15:49:12 2017 -0400
+
+		 REPORT_DEAD: debug: print pointer use %p
+
+	commit 617c72633d9872856f438252eb33642d47027654
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 19 15:46:22 2017 -0400
+
+		prints curCtxt and oldCtxt on ReportDead
+
+	commit 5e2064ee8f912556847c4fab30ae1ec50b62969e
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 19 15:39:14 2017 -0400
+
+		Record8/10/16 bytes: state type: uint64 for 8bytes
+
+	commit fdf3627a423a9b3341a679152ce208032591f5d4
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 19 15:11:50 2017 -0400
+
+		change back the type def of DeadMap: <uint64_t, uint64_t>
+
+	commit 8efaa07fee4ba3aaa3bda739306788f9774b9c1a
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 19 15:01:25 2017 -0400
+
+		build only for x86_64
+
+	commit e3c0cc35b22690abb4acd43acf422932fac130dc
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 19 14:56:32 2017 -0400
+
+		tracking REPORT_DEAD; tracking DeadMap
+
+	commit 6e0aa3f9ba90532ecc569e7069f96734ecd7c14d
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 19 12:08:10 2017 -0400
+
+		Deadspy only supports x64 platform;
+		PANDA supports both 32 and 64 platform;
+		Panda Plugin will be built both on 32 and 64 platform;
+		So, we need to avoid some 64-bit operations on 32 bit platform;
+		Set
+		#if defined(TARGET_I386)
+		to compile only on x86 platforms
+		
+		TODO: add support to arm
+
+	commit fa9b3559d0f1ddf02809f563cfea0971faf26c51
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 19 11:46:33 2017 -0400
+
+		keep uint64_t in CONTEXT_HASH_128BITS_TO_64BITS macros and related macros
+
+	commit ee740b60681138379e1faf4b20843550a2af4189
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 19 11:39:51 2017 -0400
+
+		change all (target_ulong)addr to (uintptr_t)addr
+
+	commit e91df8810af4d6231893ecb1e1feb1d292bb7065
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 19 11:32:31 2017 -0400
+
+		bit wise operation on a pointer: cast to uintptr_t first
+
+	commit ea6019bc9398b996bc329ec95991a2df282f5902
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 19 11:15:00 2017 -0400
+
+		add return value to mem_callback( just to avoid warning, return value not used according to PANDA manual)
+
+	commit 1d8c670baa364ef41660691a90a66a5e060aba7b
+	Merge: e11b221 53f4566
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 19 11:04:09 2017 -0400
+
+		Merge branch 'deadspy' of ssh://lelema.org:2341/home/git/gitreps/panda into deadspy
+
+	commit e11b2213eea584a3ed0f6af066dc13489f2b88d9
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 19 11:01:19 2017 -0400
+
+		1, in deadspy IP_AND_CCT, use Trace to count instructions; but in Deadspy, no trace;
+		so in PANDA plugin's IP_AND_CCT, we also use doXByteCount
+		
+		2,debug: change all uint64_t to target_ulong
+
+	commit 53f456649b2cc778c6174a7be62f23e86d986d53
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 19 11:01:19 2017 -0400
+
+		debug: change all uint64_t to target_ulong
+
+	commit 5b756327fdb84fb5cbb8e0d26bf7413b73ea0b22
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 19 10:18:30 2017 -0400
+
+		trace measurementBaseCount, do8ByteCount
+
+	commit 45abf513667bbacad5f5da42a099b87ba2a37712
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 19 10:07:35 2017 -0400
+
+		debug-Report Segfault: prints info related to measurementBaseCount
+
+	commit ceee630dcc3287244d29579498130fada97b82cb
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Sun Jun 18 22:24:55 2017 -0400
+
+		disable gSigAct
+
+	commit 8e77a088b4eb2713ffa9290748573dbb42426ace
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Sun Jun 18 22:18:48 2017 -0400
+
+		debug final report prints
+
+	commit 30888c043490ea049723c0ff58d3c0abd78301be
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Sun Jun 18 22:07:46 2017 -0400
+
+		debug: pring cr3 for all app;
+
+	commit a232bfb4c0f806ab84bb53783e92ea3ab75599c7
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Sun Jun 18 22:03:07 2017 -0400
+
+		debug, print log info after replay complete'
+
+	commit 6239bf96b2c9e62f1d7aa9155444b4e218d08ade
+	Author: lele-lap-dk <lelema.zh@gmail.com>
+	Date:   Mon Jun 19 01:42:59 2017 +0000
+
+		add ASID filter: 1, only kernel: gTraceKernel; 2, All Apps except kernel: gTraceApp; 3, only given ASID;
+
+	commit eea0415f9f9980679267506ff26783fbbf11314e
+	Merge: 3819936 177943f
+	Author: lele-lap1t <lelema.zh@gmail.com>
+	Date:   Sun Jun 18 20:29:39 2017 -0400
+
+		resolve conflict
+
+	commit 3819936cd68542737b15f81c7834cc245368169a
+	Author: lele-lap1t <lelema.zh@gmail.com>
+	Date:   Sun Jun 18 20:20:54 2017 -0400
+
+		cmts; add slot
+
+	commit 177943f334f9ed6f87241e33e24179581ed6effd
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Mon Jun 5 16:58:37 2017 -0400
+
+		print search strings
+
+	commit 195b29a2f81bfa0d290f1ad9d9aaad11fd402eed
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Mon Jun 5 16:33:01 2017 -0400
+
+		debug: remove empty lines in config.panda
+
+	commit 73bd65389c913c984bd361f6d1e593962e18936c
+	Author: root <lele-dkr>
+	Date:   Mon Jun 5 20:24:19 2017 +0000
+
+		modify Makefile, add google sparse hash to -isystem
+
+	commit 6bbf8f8c520a0f501e666858094aab8aa1f176ca
+	Merge: e276be2 f531cdd
+	Author: root <lele-dkr>
+	Date:   Mon Jun 5 20:04:29 2017 +0000
+
+		merge official master
+
+	commit e276be20b8a87f6fb4587a54ed655728dc03c0df
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Mon Jun 5 10:46:54 2017 -0400
+
+		test another asid rather than 0: 000000001fb14000
+
+	commit c15b07c8d55b2915b100818ae7dc7b41a4fd72bf
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Mon Jun 5 10:17:00 2017 -0400
+
+		debug, tracking currentIp
+
+	commit 32d699b643890517a9ab42da1ebcf48a633cff04
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Mon Jun 5 10:12:35 2017 -0400
+
+		debug, tracking currentIp
+
+	commit 5d345710766f85043abda18ee19245842cbe211c
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Sun Jun 4 17:56:03 2017 -0400
+
+		update shadow IP ocunt in correct place
+
+	commit 6bdf823a98d76e4f1ce1cbc202a3a908f21794b7
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Sun Jun 4 17:53:54 2017 -0400
+
+		ipshadwo
+
+	commit fe30053200426519b542881a42522a4a817320ee
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Sun Jun 4 17:49:21 2017 -0400
+
+		update shadow slot index when write detected
+
+	commit 4b5eac6b024b17014f3be6f02b52fb5031199b9c
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Sun Jun 4 17:40:19 2017 -0400
+
+		debug. syntax
+
+	commit e19bc715298a5227f035069a7652ce6e93af2a7f
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Sun Jun 4 17:38:11 2017 -0400
+
+		add debug info, update gCurrentCallerIp
+
+	commit eae8565cf511bfe071540ebc43cef7d9de4f3f69
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Sun Jun 4 17:37:26 2017 -0400
+
+		add debug info, update gCurrentCallerIp
+
+	commit 40e9abc729fcf6c9e1b0efa000d6c8adce644f7a
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Sun Jun 4 17:27:50 2017 -0400
+
+		debug, syntax
+
+	commit a83697a17b4cfcf920eaf6b88a49f9d87aaaf0b6
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Sun Jun 4 17:25:35 2017 -0400
+
+		add gCurrentASID, track asids; add gCurrentCallerIp, todo: track it
+
+	commit 262b19a302c6114810d5e2b0393dbb6f0c580b34
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Sun Jun 4 17:05:10 2017 -0400
+
+		print curContextIp
+
+	commit e94c4ae2f8c8c1e12e9426b628c6f223c30cadc0
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Sun Jun 4 16:59:19 2017 -0400
+
+		print callerIp
+
+	commit e794a222a9c457d068dc6af9365af604ca2d5d46
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Sun Jun 4 16:52:59 2017 -0400
+
+		update slot count when update gCurrentSlot
+
+	commit cd53dae56e37e8564ee65600c3a7715713b9faa2
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Sun Jun 4 16:40:44 2017 -0400
+
+		debug: var name
+
+	commit 3c06b8c68a129311b118484b8fda34220b9bc73e
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Sun Jun 4 16:37:44 2017 -0400
+
+		first manageContext, then update slots"
+
+
+--------------------------------------------------------------------
+v0.2: ported partial code from deadspy 64-bit. Now able to compile.
+Next to add more codes and adjusted to the qemu whole guest environments.
+--------------------------------------------------------------------
+
+	commit 62470b883d12212dc4ee8c3de705c3a1c82158a6
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Sun Jun 4 16:20:50 2017 -0400
+
+		debug get recordedSlots from currentTraceShadowIP[-1]0000000000000000
+		Segmentation fault (core dumped)
+
+	commit a42901c90dc9fd23546adcab7fe9bf77eec75efc
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Fri Jun 2 19:23:28 2017 -0400
+
+		debug prints step 3/3 in manage context
+
+	commit 2b0da8acbf188e962d43a65827c52b182058d8d0
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Fri Jun 2 19:16:37 2017 -0400
+
+		debug prints
+
+	commit a90d34b2eadafc54c654d66ec5c9179abb3e1051
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Fri Jun 2 19:13:42 2017 -0400
+
+		debug
+
+	commit 92a3d8a5312f058381143240f9f72436fa198611
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Fri Jun 2 19:11:24 2017 -0400
+
+		add debug prints for manage context
+
+	commit 32dbaa587396318989fc412c632a9db71083823d
+	Author: Ruiqin Tian <ruiqin.cn@gmail.com>
+	Date:   Fri Jun 2 18:59:20 2017 -0400
+
+		panda_GetSourceLocation remove NULL callers
+
+	commit e27af2b33bc8bb96840988b75ed27656dabad99c
+	Author: Ruiqin Tian <ruiqin.cn@gmail.com>
+	Date:   Fri Jun 2 18:56:47 2017 -0400
+
+		debug
+
+	commit 15f7a8f6a31f805915406ac831567914ec88970f
+	Author: Ruiqin Tian <ruiqin.cn@gmail.com>
+	Date:   Fri Jun 2 18:54:18 2017 -0400
+
+		add funcs for prints,
+		- PrintEachSizeWrite()
+		- PrintStats()
+		- PrintInstructionBreakdown()
+		- PrintCallingContexts()
+		- IsInMemset()
+		move - GetMeasurementBaseCount()
+
+	commit d751daba9eb7ba55a91b9d92d2dd706942e39a4b
+	Author: Ruiqin Tian <ruiqin.cn@gmail.com>
+	Date:   Fri Jun 2 18:45:23 2017 -0400
+
+		comment PIN_LockClient in ImageUnload()
+
+	commit e64f9e250a1207dfbf3fd53a659cf90c7df38cac
+	Author: Ruiqin Tian <ruiqin.cn@gmail.com>
+	Date:   Fri Jun 2 18:36:18 2017 -0400
+
+		return true always, is valid ip
+
+	commit c5a424e1e1b9693e24e0dfa1513982516b5243c2
+	Author: Ruiqin Tian <ruiqin.cn@gmail.com>
+	Date:   Fri Jun 2 18:08:01 2017 -0400
+
+		valid ip check, >=0 is valid
+
+	commit 2cbe023d6c0c78e3db1c2329c1ce7e5aeb7a1308
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Fri Jun 2 17:34:45 2017 -0400
+
+		reimplement PrintFullCallingContext
+
+	commit b198b5996f2c1a2599cf472240ed09fb9e71b24c
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Fri Jun 2 16:49:41 2017 -0400
+
+		sigaction gSigAct
+
+	commit ef25867dcfa61370b073020c915706dcaa14be51
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Fri Jun 2 16:46:50 2017 -0400
+
+		add PrintFullCallingContext, add more includes
+
+	commit ac205e242573cdcedc922b14bf983a0ccca639c9
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Fri Jun 2 16:26:59 2017 -0400
+
+		debug: 1, GetIPFromInfo, back to traceNode from deadspy; INT32 to int32_t
+
+	commit 2f02bde0cd434d7693268765270bd8e4b559f6e7
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Fri Jun 2 15:51:14 2017 -0400
+
+		mem_callback definition: remove parameter: std:map <prog_point, string_pos> &text_tracker
+
+	commit 4800f06060e22c6bf82ab8a8f6a758e65e756e1a
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Fri Jun 2 15:31:47 2017 -0400
+
+		add definition of slot: add global 'gCurrentSlot' to track slot index of current IP in a Trace
+
+	commit 21421f8921d07ba02e8e59bc92900d8132219861
+	Author: lele-dkr <lelema.zh@gmail.com>
+	Date:   Fri Jun 2 15:23:57 2017 +0000
+
+		mkfile
+
+	commit 6ebbf2e3e19cc2f6f8266ece461a0cdd8782c3ed
+	Author: lele-lap1t <lelema.zh@gmail.com>
+	Date:   Sun May 7 16:35:20 2017 -0400
+
+		use cast p.pc to void * when calling Record1ByteMemRead((VOID *)p.pc)
+		and Record..MemWrite((VOID *)p.pc)
+
+	commit 2a83ca06743d6fc1988598bd8e0b977cafe8de12
+	Author: lele-lap1t <lelema.zh@gmail.com>
+	Date:   Sun May 7 16:21:03 2017 -0400
+
+		add func GetNextIPVecBuffer
+
+	commit cea7c77e86a7bd11f7c873b5b2ac38e68d4b1986
+	Author: lele-lap1t <lelema.zh@gmail.com>
+	Date:   Sun May 7 16:12:47 2017 -0400
+
+		no Instruction method, use mem_callback instead
+
+	commit 98361f7278fffcffd49216cbcb35bc50d9ffecb1
+	Author: lele-lap1t <lelema.zh@gmail.com>
+	Date:   Sun May 7 16:04:43 2017 -0400
+
+		use unordered_map instead of hash_map, as cctlib
+
+	commit f011c5df5668223e7e48753f5f45f692509a826b
+	Author: lele-lap1t <lelema.zh@gmail.com>
+	Date:   Sun May 7 00:44:42 2017 -0400
+
+		This plugin traces deadwrites, and print them to file
+		    - mem_callback() called every time a memory access.
+		        inside this function, a prog_point is got from the plugin of callstack_instr plugin
+		    - prog_point:  3-tuple:
+		        target_ulong caller;//
+		        target_ulong pc;    //
+		        target_ulong cr3;   //
+		    - deadspy: add define of 'CONTINUOUS_DEADINFO', refer this branch of deadspy code as the base
+		    - deadspy: store 3-tuple map of deadwrites <dead context, killing context, frequency>
+		        -- port DeadMap from deadspy.cpp; to store 3-tuple map of deadwrites <dead context, killing context, frequency> as <hashValue, frequency>, where hashValue = (dead_context_offset<<32 | killing_context_offset)
+		            - add def of DeadMap, 'gPreAllocatedContextBuffer',
+		            - init gPreAllocatedContextBuffer
+		
+		    - deadspy: Context Tree
+		        --structs from deadspy:
+		            ContextNode
+		            MergedDeadInfo,
+		            DeadInfoForPresentation,
+		            TraceNode,
+		            DeadInfo,
+		            include 'google sparse hash map'
+		
+		    - deadspy: init_deadspy() function ported from deadspy:InitDeadSpy()
+		    - deadspy: last step report_deadspy()
+		    - deadspy: shadow mem:
+		        - GetOrCreateShadowBaseAddress()
+		        - GetShadowBaseAddress()
+		
+		    - deadspy: detect deadwrite and maintain CCT in Instruction Level :
+		
+		      ===================
+		      In instrument trace level.
+		      ===================
+		      PIN Deadspy uses this to find and store function call stack. But don't use this in panda:
+		      Reason: Panda could get call stacks by intrumenting in the instruction level by plugin 'callstack_instr'
+		        - InstrumentTrace()
+		        - InstrumentTraceEntry() : get function info
+		        - PopulateIPReverseMapAndAccountTraceInstructions(),
+		            - InstructionContributionOfBBL1Byte()
+		
+		      ===================
+		      Instrument Instruction Level.
+		      ===================
+		      PIN Deadspy use this to detect deadwrite, without giving the CCT.
+		      Here, we will use this both to
+		        - detect deadwrite and
+		        - maintain the CCT (only when a func call/ret is detected, we update cct.)
+		        In order to do this: we need the following functions/structures to be adapted from PIN Deadspy:
+		
+		        - InitContextTree() in initilize the plugin.
+		
+		        - Port Instruction() from Deadspy to mem_callback()
+		          Instruction:functions  ==> mem_callback: functions
+		
+		            - detect R/W with size using Pin ==> mem r/w with size in Panda
+		              in function mem_callback
+		                -Do1ByteCount()...DoLargeByteCount()
+		
+		            - dynamically generate call context tree:
+		                - ManageCallingContext()
+		
+		            - recording R/W to shadow mem:
+		                - Record1ByteMemRead(), 2, 4, 8, 10, 16, RecordLargeMemRead()
+		                - Record2ByteMemRead(), 2, 4, 8, 10, 16, RecordLargeMemWrite()
+		
+		            - print deadinfo:
+		                - ImageUnload()
+		                - Fini()
+		}
+		
+		    ==========================
+
+
+	commit 1ed19fb99c7cb372958c7438248f3c6742000110
+	Author: lele-dkr <lelema.zh@gmail.com>
+	Date:   Mon Apr 3 21:17:47 2017 +0000
+
+		remain to debug
+
+	commit 0e2b7d63d60171d1364e87e007180b6d5ee0d263
+	Author: lele-lap1t <lelema.zh@gmail.com>
+	Date:   Mon Apr 3 17:11:08 2017 -0400
+
+		add two methods:
+		
+			MergedDeadInfoComparer
+		
+			PrintIPAndCallingContexts
+
+	commit 4e8b580ac8e86fc7466a2532bcc81a7d53f0798a
+	Author: lele-lap1t <lelema.zh@gmail.com>
+	Date:   Mon Apr 3 17:04:47 2017 -0400
+
+		always return true in IsValidIP methods, due to 'IMG' object only available from PIN
+
+	commit e5c8b6f2c3fa459a78372b53610d24089c41196f
+	Author: lele-lap1t <lelema.zh@gmail.com>
+	Date:   Mon Apr 3 17:00:25 2017 -0400
+
+		add three methods:
+		
+			inline bool DeadInfoComparer(const DeadInfo &first, const DeadInfo &second);
+			inline bool IsValidIP(ADDRINT ip);
+			inline bool IsValidIP(DeadInfo  di);
+		and all golbal #define's from deadspy.cpp
+
+	commit f3a187fe857c3bcf528d2bde50a996701315e6bf
+	Author: lele-lap1t <lelema.zh@gmail.com>
+	Date:   Mon Apr 3 16:54:03 2017 -0400
+
+		trace_deadwrite: define ADDRINT as target_ulong
+
+	commit 5b110c510225de14bd85f31dbd034d024baa3cf0
+	Author: lele-lap1t <lelema.zh@gmail.com>
+	Date:   Mon Apr 3 16:50:31 2017 -0400
+
+		del sparsehas-master in trace_deadspy
+
+	commit 83d8500b2c8b403a18cd38fe57e5a55a99e13576
+	Author: lele-lap1t <lelema.zh@gmail.com>
+	Date:   Mon Apr 3 16:32:32 2017 -0400
+
+		add ContextNode from deadspy, deadspy: Context Tree
+		        --structs from deadspy:
+		            ContextNode
+		            MergedDeadInfo,
+		            DeadInfoForPresentation,
+		            TraceNode,
+		            DeadInfo,
+		            include 'google sparse hash map'
+
+	commit 78a43494db467b34f11b637d02a9b49c88692ed8
+	Author: lele-dkr <lelema.zh@gmail.com>
+	Date:   Mon Apr 3 19:47:56 2017 +0000
+
+		use tr1::unordered_map for DeadMap; refer to cctlib:deadspy_client.cpp
+
+	commit a61a2aa838abcb447cba02fb6e1f7fdad899dbb4
+	Author: lele-lap1t <lelema.zh@gmail.com>
+	Date:   Mon Apr 3 15:23:00 2017 -0400
+
+		add 'DeadInfo, REPORT_DEAD, and deadinfo buffer init; from deadspy.cpp
+
+	commit 8f94826cf79b3bca6ed61543d15f6a7a541e7408
+	Author: lele-dkr <lelema.zh@gmail.com>
+	Date:   Mon Apr 3 18:42:48 2017 +0000
+
+		trace_deadwrite: build based trace_mem
+
+	commit 4a6b4a523004524f1f4f573d136a71e35780c8ee
+	Author: lele-lap1t <lelema.zh@gmail.com>
+	Date:   Mon Apr 3 14:39:06 2017 -0400
+
+		debug
+
+	commit a743845111a10ce94e75b6c3443eb5e57eddf4e8
+	Author: lele-lap1t <lelema.zh@gmail.com>
+	Date:   Mon Apr 3 14:35:51 2017 -0400
+
+		add trace_deadwrite to config.panda
+
+	commit 9418e02a8d93b4464bfe9997395e2532a313c671
+	Author: lele-lap1t <lelema.zh@gmail.com>
+	Date:   Mon Apr 3 14:33:42 2017 -0400
+
+		init trace_deadwrite based on trace_mem
+
+	commit 7cac19f02e3c64d9340dad84befb3f90d69d3067
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Fri Mar 31 13:52:05 2017 -0400
+
+		add plugin trace_deadwrite to detect deadwrites found
+
+	commit 9c7136540310f519d554b5c54fab9ebdf249a039
+	Merge: c7ec142 3265fc0
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Fri Mar 31 13:40:38 2017 -0400
+
+		Merge branch 'deadspy' of ssh://home1:2341/home/git/gitreps/panda into deadspy
+
+	commit 3265fc0f59c65368753dee7cae30af64ece46798
+	Merge: 5647c52 2acaf01
+	Author: lele-dkr <lelema.zh@gmail.com>
+	Date:   Fri Mar 31 17:39:44 2017 +0000
+
+		Merge branch 'deadspy' of ssh://192.168.111.234:2341/home/git/gitreps/panda into deadspy
+
+	commit 5647c5221119aeb518e83bc50b595caace56d6e9
+	Author: lele-dkr <lelema.zh@gmail.com>
+	Date:   Fri Mar 31 17:39:20 2017 +0000
+
+		plugin:trace_mem: print both asid=0 and asid_user, printed to two files, trace_mem_test_trace_mem.txt and trace_mem_test_trace_mem_user.txt
+
+	commit 4c81ed697b0e3b22cfccc0a90f18daedfe31523f
+	Author: Ricky Ulrich <ricky.ulrich@gmail.com>
+	Date:   Tue Mar 28 12:37:50 2017 -0400
+
+		small changes to pri_dwarf
+
+	commit cff9f5ae263bd70e6d05aed3e0ac141a59b0047f
+	Author: Ricky Ulrich <ricky.ulrich@gmail.com>
+	Date:   Tue Mar 28 11:17:11 2017 -0400
+
+		Changes to file_taint, pri_dwarf, taint2, run32lin
+		
+		Added enable_tainted_pointer function to taint2.
+		Changed run_on_32bitlinux.py to be able to set environment on guest machine
+		Added optional callback in file_taint on every byte read
+
+	commit c7ec142b7470c118f218417edb9c3df85172bba8
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Tue Mar 28 09:24:37 2017 -0400
+
+		ignore .vscode
+	
+	commit 2acaf018e99b8a57095872466feb8c7af075e264
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Wed Mar 22 23:52:10 2017 -0400
+
+		keep only core functions, ready to expand to the simplest func
+
+	commit bdef6ab357e303b001ea2c3189080a7d1eadffa0
+	Author: lelema-srv <lelema.zh@gmail.com>
+	Date:   Wed Mar 22 23:40:03 2017 -0400
+
+		plugin renamed to 'trace_deadspy'
+
+	commit d6d47666c22f458d5e3876d899e5063d2478076b
+	Author: lele-dkr <lelema.zh@gmail.com>
+	Date:   Thu Mar 23 03:34:24 2017 +0000
+
+		init the deadspy dev from official PIN plugin; add repo of google sparsehash-master
+
+
+--------------------------------------------------------------------
+v0.1: test panda plugins, trying to catch mem R/W and OSI functions, 
+based on plugins of string_search, osi_test, etc.
+--------------------------------------------------------------------
+
+	commit 72f68afa53b2cccab21784d8b300a23f739807ad
+	Author: lele-dkr <lelema.zh@gmail.com>
+	Date:   Thu Mar 9 17:17:57 2017 +0000
+
+		change kernelinfo.conf add :64 for deb7
+
+	commit 070052b7947840f66d292b342287d3211021ea0a
+	Author: Patrick Hulin <patrick.hulin@gmail.com>
+	Date:   Tue Mar 7 10:22:08 2017 -0800
+
+		Fix uninitialized variable in tcg-llvm.
+
+	commit 4b5b5934cd21b8554a1d34a60d676dbe1f3fe887
+	Author: Ricky Ulrich <ricky.ulrich@gmail.com>
+	Date:   Fri Feb 10 13:40:48 2017 -0500
+
+		Deleted typedef Panda__AtackPoint in plog_print.h
+		
+		also put in define guards in prog_point.h
+
+	commit 18709532f1f9d8917db3cc9ef92722a11962c341
+	Author: Patrick Hulin <patrick.hulin@gmail.com>
+	Date:   Mon Mar 6 14:41:27 2017 -0500
+
+		plog: Fix double-free.
+
+	commit d63255923a1d2c677aabc00a471087cbe8fe10e1
+	Author: Patrick Hulin <patrick.hulin@gmail.com>
+	Date:   Mon Mar 6 14:41:08 2017 -0500
+
+		pri_dwarf: Don't track hypercalls.
+
+	commit b7cb5f99115b0090d72d715b3c112f0f314e23b2
+	Author: Patrick Hulin <patrick.hulin@gmail.com>
+	Date:   Mon Mar 6 14:40:13 2017 -0500
+
+		file_taint: Fix interleaved read handling.
+
+	commit 3f23342c10f7bdb731aa82efd4a9451ed777f703
+	Merge: a7202bf bb3d7f8
+	Author: Brendan Dolan-Gavitt <brendandg@gatech.edu>
+	Date:   Mon Feb 27 21:27:26 2017 -0500
+
+		Merge pull request #145 from wintao/patch-1
+		
+		Update callstack_instr.cpp
+
+	commit bb3d7f86018e18ed451c5e08c95ff39a761e5bf2
+	Author: wintao <9bit@163.com>
+	Date:   Tue Feb 28 09:04:59 2017 +0800
+
+		Update callstack_instr.cpp
+		
+		The CS_MODE_32 is for x86, it should be CS_MODE_ARM for ARM, see capstone.h
+
+	commit a7202bfff50ddd47602770a974101bee9aeb3e02
+	Merge: eb29570 1ffe906
+	Author: Brendan Dolan-Gavitt <brendandg@gatech.edu>
+	Date:   Sun Feb 26 19:30:55 2017 -0500
+
+		Merge pull request #142 from bridgeythegeek/master
+		
+		Updates to Usage.md for osi
+
+	commit 1ffe906bc57e7281be571d37d0561b5cdd344ad5
+	Author: Bridgey the Geek <bridgeythegeek@users.noreply.github.com>
+	Date:   Sun Feb 26 22:41:05 2017 +0000
+
+		Added info on os argument for osi plugin
+		
+		The need for this argument was seemingly undocumented.
+
+	commit 2e6578204fcb8001c11d73e7ccc342f6c2d31565
+	Author: Bridgey the Geek <bridgeythegeek@users.noreply.github.com>
+	Date:   Sun Feb 26 22:27:49 2017 +0000
+
+		Updated link to osi_test
+		
+		Link to osi_test was 404ing - updated.
+
+	commit 8626d62219fdb095f3edd56e7f5607a6cfa634c4
+	Author: lele-dkr <lelema.zh@gmail.com>
+	Date:   Fri Feb 17 22:00:47 2017 +0000
+
+		new plugin, instr_traceblock.cpp, print instructions for every block, disasembled by capstone
+
+	commit e08e469660c227f5426a2a00cd8e71153ee0bf45
+	Author: lele-dkr <lelema.zh@gmail.com>
+	Date:   Fri Feb 17 18:24:27 2017 +0000
+
+		clean code in trace_insthist.cpp
+
+	commit 57b8f78d83eeb646ad46b5289febdde68fa51411
+	Author: lele-dkr <lelema.zh@gmail.com>
+	Date:   Fri Feb 17 18:18:38 2017 +0000
+
+		change plugin name 'trace_sample2' to 'trace_insthist'
+
+	commit 3cb1f3951453339df3be4f46acfebf42f5cd318e
+	Author: lele-dkr <lelema.zh@gmail.com>
+	Date:   Fri Feb 17 16:33:34 2017 +0000
+
+		test with histograms plugin from http://reverseengineering.stackexchange.com/questions/12313/getting-list-of-opcodes-from-panda-trace
+
+	commit 40ca86bc7df6e4b1a3879d27504a4286cb71c46c
+	Author: lele-dkr <lelema.zh@gmail.com>
+	Date:   Fri Feb 17 16:32:46 2017 +0000
+
+		clean code of plugin trace_sample.c
+
+	commit de69093c3744b35ebb0f18d0cdcce753e4e205a2
+	Author: lele-dkr <lelema.zh@gmail.com>
+	Date:   Fri Feb 17 14:25:04 2017 +0000
+
+		set active=true in trace_sample.c
+
+	commit f284ca63f14f241c041b0492055454716b5129b6
+	Author: lele-dkr <lelema.zh@gmail.com>
+	Date:   Fri Feb 17 14:03:42 2017 +0000
+
+		trace_sample, able to run, but no outputs
+
+	commit fabd3546ec4d224ee1a8a6175d28f1bddda722d3
+	Author: lele-dkr <lelema.zh@gmail.com>
+	Date:   Fri Feb 17 02:58:42 2017 +0000
+
+		port sample from panda1, to trace_sample, for futhur use of trace_instr
+
+	commit 7956e6ce288ddaf9ff1ab5860df13c1d761bf610
+	Author: lele-dkr <lelema.zh@gmail.com>
+	Date:   Thu Feb 16 22:38:08 2017 +0000
+
+		add plugin trace_mem, test suc, written mem acces to file
+
