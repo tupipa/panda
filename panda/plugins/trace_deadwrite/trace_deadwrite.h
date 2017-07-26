@@ -624,16 +624,32 @@ std::vector<ContextTree> gContextTreeVector;
 #endif //end MULTI_THREADED
 
 
+// use asid, pid, ppid to distinguish proces
+// use proc->name only for assistance.
 struct ProcID{
+
     OsiProc *proc;
 
 	bool operator==(const ProcID  & x) const{
-		if ( this->proc->asid == (x.proc)->asid && std::string(this->proc->name) == std::string((x.proc)->name)){
+		// if ( this->proc->asid == (x.proc)->asid && std::string(this->proc->name) == std::string((x.proc)->name)){
+        //     return true;
+        // }
+        // printf("%s, %s, %p != %s, %p\n", __FUNCTION__, (x.proc)->name, (void *)(uintptr_t)x.proc->asid,this->proc->name, (void *)(uintptr_t) this->proc->asid);
+        // exit(-1);
+		// return false;
+        
+		if ( this->proc->asid == (x.proc)->asid && std::string(this->proc->pid) == std::string((x.proc)->pid) && std::string(this->proc->ppid) == std::string((x.proc)->ppid)){
             return true;
         }
-        printf("%s, %s, %p != %s, %p\n", __FUNCTION__, (x.proc)->name, (void *)(uintptr_t)x.proc->asid,this->proc->name, (void *)(uintptr_t) this->proc->asid);
-        exit(-1);
+
+        printf("%s, %s: (%p,"TARGET_FMT_lu","TARGET_FMT_lu") != %s (%p,"TARGET_FMT_lu","TARGET_FMT_lu")\n",
+         __FUNCTION__, 
+         (x.proc)->name, (void *)(uintptr_t) x.proc->asid, x.proc->pid, x.proc->ppid,
+         this->proc->name, (void *)(uintptr_t) this->proc->asid, this->proc->pid, this->proc->ppid);
+
+        // exit(-1);
 		return false;
+        
 	}
 
 	bool operator<(const ProcID  & x) const{
