@@ -226,7 +226,7 @@ inline bool is_target_process_running(CPUState *cpu, bool *judge_by_struct, targ
         *judge_by_struct = true;
         std::string curProc(p->name);
         // if (curProc == gProcToMonitor || p->asid == gTargetAsid_struct){
-        if(p->ppid == gTargetPPID && p->pid == gTargetPID){
+        if(p->ppid == gTargetPPID && p->pid == gTargetPID && p->asid == gTargetAsid_struct){
             // found the target proc by pid, ppid
             // update the target asid.
             if (!gProcFound){
@@ -243,7 +243,7 @@ inline bool is_target_process_running(CPUState *cpu, bool *judge_by_struct, targ
                 __FUNCTION__, p->pid, p->ppid);
 
             gTargetAsid = panda_current_asid(cpu);
-            gTargetAsid_struct = p->asid;
+            //gTargetAsid_struct = p->asid;
             gProcToMonitor = curProc;
 
             is_target = true;
@@ -4496,15 +4496,15 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     // print judge metric, for debug
     if(judge_by_struct){
 
-        // printf("%s: judge by struct. \n",
-        //     __FUNCTION__);
+        printf("%s: judge by struct. \n",
+            __FUNCTION__);
         // printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
         // //print full info of proc
         // print_proc_info(judge_proc);
     }
     else{
-        // printf("%s: **** judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n; will not trust this here**** ",
-        //     __FUNCTION__, judge_asid, gTargetAsid);
+        printf("%s: **** judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n; will not trust this here**** ",
+           __FUNCTION__, judge_asid, gTargetAsid);
         return 1;
     }
     
@@ -4512,7 +4512,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
         return 1;
     }else{
         gIsTargetBlock = true;
-        // printf("%s: detect a block for the target process: tb->pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+        printf("%s: detect a block for the target process: tb->pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
     }
 
     // Refer: ManageCallingContext() -> GoUpCallChain().
