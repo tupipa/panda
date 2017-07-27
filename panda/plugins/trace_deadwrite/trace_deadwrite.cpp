@@ -2100,7 +2100,7 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
     OsiProc *judge_proc;
     bool is_target = is_target_process_running(cpu, &judge_by_struct, &judge_asid, &judge_proc);
 
-    printf("%s: pc: 0x" TARGET_FMT_lx ",\taddr: 0x" TARGET_FMT_lx "\n" , __FUNCTION__, pc, addr);
+    // printf("%s: pc: 0x" TARGET_FMT_lx ",\taddr: 0x" TARGET_FMT_lx "\n" , __FUNCTION__, pc, addr);
     // print judge metric, for debug
     // if(judge_by_struct){
     //     // printf("--%s: judge by name in struct. \n\ttarget name: %s\n",
