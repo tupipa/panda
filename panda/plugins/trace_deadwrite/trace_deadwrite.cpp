@@ -4784,6 +4784,16 @@ int checkNewProcID(const ProcID & proc){
     
     if ( procIt != gProcIDs.end() ){
         // an old proc name.
+
+        // check the name 
+
+        std::string procN(proc.proc->name);
+        std::string oldN(procIt->proc->name);
+        if (! (procN == oldN)){
+            printf("%s: proc name changes from %s to %s.\n", __FUNCTION__, procIt->proc->name, proc.proc->name);
+            print_proc_info(proc.proc);
+            *procIt = proc;
+        }
         procIndex = (int) ( procIt - gProcIDs.begin());
 
     }else{
@@ -5099,74 +5109,74 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
  
     // OsiModules *ms = get_libraries(cpu, current);
     
-    OsiModules *ms = get_libraries(cpu, proc);
-    if (ms == NULL) {
-        printf("No mapped dynamic libraries.\n");
-    }
-    else {
-        printf("Dynamic libraries list (%d libs):\n", ms->num);
-        for (int i = 0; i < ms->num; i++){
+    // OsiModules *ms = get_libraries(cpu, proc);
+    // if (ms == NULL) {
+    //     printf("No mapped dynamic libraries.\n");
+    // }
+    // else {
+    //     printf("Dynamic libraries list (%d libs):\n", ms->num);
+    //     for (int i = 0; i < ms->num; i++){
             
-            // printf("\tasid: 0x" TARGET_FMT_lx "\tsize:" TARGET_FMT_ld "\t%-24s %s\n", ms->module[i].base, ms->module[i].size, ms->module[i].name, ms->module[i].file);
+    //         // printf("\tasid: 0x" TARGET_FMT_lx "\tsize:" TARGET_FMT_ld "\t%-24s %s\n", ms->module[i].base, ms->module[i].size, ms->module[i].name, ms->module[i].file);
 
-            ModuleID mid={ &ms->module[i]};
+    //         ModuleID mid={ &ms->module[i]};
 
-            int oldgProcSize = (int) gModuleIDs.size();
-            // int procIndex = checkNewProc(std::string(ms->module[i].name));
-            int procIndex = checkNewModuleID(mid);
-            if (oldgProcSize == procIndex){
-                // // a new proc found
+    //         int oldgProcSize = (int) gModuleIDs.size();
+    //         // int procIndex = checkNewProc(std::string(ms->module[i].name));
+    //         int procIndex = checkNewModuleID(mid);
+    //         if (oldgProcSize == procIndex){
+    //             // // a new proc found
 
-                // printf("%s: a new dynamic lib found\n",
-                    // __FUNCTION__);
-                // print_mod_info(&ms->module[i]);
-            }
+    //             // printf("%s: a new dynamic lib found\n",
+    //                 // __FUNCTION__);
+    //             // print_mod_info(&ms->module[i]);
+    //         }
 
-            // gAsidToProcIndex[ ms->module[i].base ] = procIndex;
-        }
-    }
+    //         // gAsidToProcIndex[ ms->module[i].base ] = procIndex;
+    //     }
+    // }
 
-    OsiModules *kms = get_modules(cpu);
+    // OsiModules *kms = get_modules(cpu);
 
-    if (kms == NULL) {
-        printf("No mapped kernel modules.\n");
-    } else {
-        printf("Kernel module list (%d modules):\n", kms->num);
-        for (int i = 0; i < kms->num; i++){
-            // printf("\t0x" TARGET_FMT_lx "\t" TARGET_FMT_ld "\t%-24s %s\n", kms->module[i].base, kms->module[i].size, kms->module[i].name, kms->module[i].file);
+    // if (kms == NULL) {
+    //     printf("No mapped kernel modules.\n");
+    // } else {
+    //     printf("Kernel module list (%d modules):\n", kms->num);
+    //     for (int i = 0; i < kms->num; i++){
+    //         // printf("\t0x" TARGET_FMT_lx "\t" TARGET_FMT_ld "\t%-24s %s\n", kms->module[i].base, kms->module[i].size, kms->module[i].name, kms->module[i].file);
 
-            ModuleID mid={ &kms->module[i]};
+    //         ModuleID mid={ &kms->module[i]};
 
-            int oldgProcSize = (int) gModuleIDs.size();
-            // int procIndex = checkNewProc(std::string(kms->module[i].name));
-            int procIndex = checkNewModuleID(mid);
-            if (oldgProcSize == procIndex){
-                // a new proc found
+    //         int oldgProcSize = (int) gModuleIDs.size();
+    //         // int procIndex = checkNewProc(std::string(kms->module[i].name));
+    //         int procIndex = checkNewModuleID(mid);
+    //         if (oldgProcSize == procIndex){
+    //             // a new proc found
 
-                // printf("%s: a new kernel module found\n\toffset:\t0x" TARGET_FMT_lx "\tbase:\t0x" TARGET_FMT_lx "\tsize:\t0x" TARGET_FMT_lx 
-                // "\n\tname:\t%s\n\tfile:\t%s\n",
-                //     __FUNCTION__, 
-                //     kms->module[i].offset,
-                //     kms->module[i].base,
-                //     kms->module[i].size,
-                //     kms->module[i].name,  
-                //     kms->module[i].file);
-                // printf("%s: a new kernel module found\n",
-                //     __FUNCTION__);
-                // print_mod_info(&kms->module[i]);
-            }
-            // gAsidToProcIndex[ kms->module[i].base ] = procIndex;
-        }
-    }
+    //             // printf("%s: a new kernel module found\n\toffset:\t0x" TARGET_FMT_lx "\tbase:\t0x" TARGET_FMT_lx "\tsize:\t0x" TARGET_FMT_lx 
+    //             // "\n\tname:\t%s\n\tfile:\t%s\n",
+    //             //     __FUNCTION__, 
+    //             //     kms->module[i].offset,
+    //             //     kms->module[i].base,
+    //             //     kms->module[i].size,
+    //             //     kms->module[i].name,  
+    //             //     kms->module[i].file);
+    //             // printf("%s: a new kernel module found\n",
+    //             //     __FUNCTION__);
+    //             // print_mod_info(&kms->module[i]);
+    //         }
+    //         // gAsidToProcIndex[ kms->module[i].base ] = procIndex;
+    //     }
+    // }
 
-    // exit(-1);
+    // // exit(-1);
 
-    // clean up 
-    // printf("%s: clean up..\n", __FUNCTION__);
-    // free_osiproc(current);
-    // free_osiproc(proc); // this will cause seg fault after asid_changed, before calling handle_proc_change func..
-    free_osimodules(ms);
-    free_osimodules(kms); //no clean kms in osi_test.c
+    // // clean up 
+    // // printf("%s: clean up..\n", __FUNCTION__);
+    // // free_osiproc(current);
+    // // free_osiproc(proc); // this will cause seg fault after asid_changed, before calling handle_proc_change func..
+    // free_osimodules(ms);
+    // free_osimodules(kms); //no clean kms in osi_test.c
 
     printf("-----------end: %s------------\n\n", __FUNCTION__);
 }
