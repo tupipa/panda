@@ -239,8 +239,8 @@ inline bool is_target_process_running(CPUState *cpu, bool *judge_by_struct, targ
                 printf("%s: BingGo! found the target process for first time by pid/ppid!!!!!\n", __FUNCTION__);
                 gProcFound = true;
             }
-            printf("%s: found the target process by pid/ppid: " TARGET_FMT_lu"/" TARGET_FMT_lu "\n", 
-                __FUNCTION__, p->pid, p->ppid);
+	    printf("%s: found the target process by pid/ppid/asid_struct: " TARGET_FMT_lu "/" TARGET_FMT_lu "/0x" TARGET_FMT_lx "\n", 
+                __FUNCTION__, p->pid, p->ppid, p->asid);
 
             gTargetAsid = panda_current_asid(cpu);
             //gTargetAsid_struct = p->asid;
@@ -4494,23 +4494,40 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     bool is_target = is_target_process_running(cpu, &judge_by_struct, &judge_asid, &judge_proc);
 
     // print judge metric, for debug
-    if(judge_by_struct){
+    //if(judge_by_struct){
 
-        printf("%s: judge by struct. \n",
-            __FUNCTION__);
+        //printf("%s: judge by struct. \n",
+        //    __FUNCTION__);
         // printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
         // //print full info of proc
         // print_proc_info(judge_proc);
-    }
-    else{
-        printf("%s: WARNING: **** judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n; will not trust this here**** ",
-           __FUNCTION__, judge_asid, gTargetAsid);
-        return 1;
-    }
+    //}
+    //else{
+    //    printf("%s: WARNING: **** judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n; will not trust this here**** ",
+    //       __FUNCTION__, judge_asid, gTargetAsid);
+    //    return 1;
+    //}
     
     if(!is_target){
         return 1;
     }else{
+
+
+        // check judge metric, only trust judge_by_struct.
+        if(judge_by_struct){
+            printf("%s: good. judge by struct. \n",
+                __FUNCTION__);
+            // printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
+            // //print full info of proc
+            // print_proc_info(judge_proc);
+        }
+        else{
+            printf("%s: WARNING: **** judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n; will not trust this here**** ",
+            __FUNCTION__, judge_asid, gTargetAsid);
+            return 1;
+        }
+
+
         gIsTargetBlock = true;
         printf("%s: detect a block for the target process: tb->pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
     }
