@@ -160,6 +160,28 @@ inline void print_proc_info(OsiProc *proc){
 
 
 /*
+inline void  print_mod_info(OsiModule *mod)
+
+*/
+
+inline void print_mod_info(OsiModule *mod){
+
+    if(mod->name){
+        printf("\tmodule name: %s,", mod->name);
+    }
+
+    printf("\toffset:\t0x" TARGET_FMT_lx "\tbase:\t0x" TARGET_FMT_lx "\tsize:\t0x" TARGET_FMT_lx 
+    "\n\tfile:\t%s\n",
+        mod->offset,
+        mod->base,
+        mod->size,
+        mod->file);
+
+    printf("\n\n");
+}
+
+
+/*
  is_target_process_running
     - return true if the target process is running at this time point the function is called.
 
@@ -275,12 +297,14 @@ OsiProc * get_current_running_process(CPUState *cpu){
 
             // printf("%s: good, has offset/name/pid.\n", __FUNCTION__);
             uint32_t n = strnlen(p->name, 32);
+            
             // name is one char?
             if (n<2) {
-                printf("%s: ERROR get current proc name(length < 2): %s, pid: " TARGET_FMT_lu ", ppid " TARGET_FMT_lu "\n", __FUNCTION__, p->name, p->pid, p->ppid);
+                // printf("%s: ERROR get current proc name(length < 2): %s, pid: " TARGET_FMT_lu ", ppid " TARGET_FMT_lu "\n", __FUNCTION__, p->name, p->pid, p->ppid);
                 // exit(-1);
                 return 0;
             }
+
             uint32_t np = 0;
             for (uint32_t i=0; i<n; i++) {
                 np += (isprint(p->name[i]) != 0);
@@ -2145,9 +2169,17 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
     }else{
         // is target process
         if (! gIsTargetBlock){
-            printf("%s: WARNING: target not detected at before_block_exec, but detected here, might a process switch, or cr3 overlap??\n", __FUNCTION__);
+            printf("%s: WARNING: target not detected at before_block_exec, but detected here, might a cr3 overlap??", __FUNCTION__);
 
-            if (!judge_by_struct) return 1;
+            if (!judge_by_struct) {
+                // judged by asid, not accurate, regard as cr3 overlap.
+                printf(" might be. \n");
+                return 1;
+            }else{
+                printf(" no. \n");
+            }
+
+            // if (!judge_by_struct) return 1;
 
             printf("\tWARNING: \n");    
             printf("\t------- not cr3 overlap since judge by proc struct, must be a process switch??\n");
@@ -4275,9 +4307,15 @@ void handle_on_call(CPUState *cpu,TranslationBlock *src_tb, target_ulong dst_fun
         return ;
     }else{
         if (! gIsTargetBlock){
-            printf("%s: WARNING: target not detected at before_block_exec, but detected here, now check whether it's probably a cr3 overlap\n", __FUNCTION__);
+            printf("%s: WARNING: target not detected at before_block_exec, but detected here, now check whether it's probably a cr3 overlap? ", __FUNCTION__);
 
-            if (!judge_by_struct) return;
+            if (!judge_by_struct) {
+                // judged by asid, not accurate, regard as cr3 overlap.
+                printf(" might be. \n");
+                return;
+            }else{
+                printf(" no. \n");
+            }
 
             printf("\tCongratulations!\n");    
             printf("\t------- not cr3 overlap since judge by proc struct! must be a process switch??\n");
@@ -4588,9 +4626,15 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
         return 1;
     }else{
         if (! gIsTargetBlock){
-            printf("%s: WARNING: target not detected at before_block_exec, but detected here, might a process switch??, or cr3 overlap?? tb->pc: 0x " TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+            printf("%s: WARNING: target not detected at before_block_exec, but detected here, tb->pc: 0x " TARGET_FMT_lx ". might cr3 overlap??" , __FUNCTION__, tb->pc);
 
-            if (!judge_by_struct) return 1;
+            if (!judge_by_struct) {
+                // judged by asid, not accurate, regard as cr3 overlap.
+                printf(" might be. \n");
+                return 1;
+            }else{
+                printf(" no. \n");
+            }
 
             printf("\tCongratulations! judge by proc struct!\n");    
             printf("\t------- not cr3 overlap ! must be a process switch??\n");
@@ -4696,6 +4740,7 @@ int checkNewProcID(const ProcID & proc){
 
     // maintain the vector.
     int procIndex;
+    // std::string procName = std::string(proc->name);
     std::vector<ProcID>::iterator procIt =  std::find(gProcIDs.begin(), gProcIDs.end(), proc);
     
     if ( procIt != gProcIDs.end() ){
@@ -4713,6 +4758,7 @@ int checkNewProcID(const ProcID & proc){
         //exit(-1);
         // store it in gProcIDs, and the map
         gProcIDs.push_back(proc);
+        gProcs.push_back(std::string(proc.proc->name));
         procIndex = (int) gProcIDs.size()-1;
     }
 
@@ -4730,6 +4776,34 @@ int checkNewProcID(const ProcID & proc){
     }
 
     return procIndex;
+}
+
+/* int checkNewModuleID (ModuleID &m)
+*/
+int checkNewModuleID(const ModuleID & m){
+
+    // maintain the vector.
+    int mdIndex;
+    // std::string procName = std::string(proc->name);
+    std::vector<ModuleID>::iterator mdIt =  std::find(gModuleIDs.begin(), gModuleIDs.end(), m);
+    
+    if ( mdIt != gModuleIDs.end() ){
+        // an old proc name.
+        mdIndex = (int) ( mdIt - gModuleIDs.begin());
+
+    }else{
+        // a new module
+
+        printf("%s: got a new module:\n", __FUNCTION__);
+        // print_proc_info(proc.proc);
+        print_mod_info(m.m);
+
+        // store it in gModuleIDs, and the map
+        gModuleIDs.push_back(m);
+        mdIndex = (int) gModuleIDs.size()-1;
+    }
+
+    return mdIndex;
 }
 
 
@@ -4817,41 +4891,102 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
 
     // assert(asid == proc->asid);
 
+    // check whether new proc:
+    //
+    int oldgProcSize = gProcIDs.size();
+    ProcID procid = {proc};
+    int procIndex=checkNewProcID(procid);
+
     std::string curProc(proc->name);
-    // store the asid<-> procName mappings
-     std::tr1::unordered_map<target_ulong, int>::iterator asidProcIt = gAsidToProcIndex.find(asid);
-    
-    if (asidProcIt != gAsidToProcIndex.end()){
-        // not a new asid. 
-        // already a proc name stored. 
-        // Now check whether the stored name is the same name as current.
-        if (! (gProcs[asidProcIt->second] == curProc)){
-            printf("%s: WARNING::(ERROR): gProcs[%d]='%s' for asid 0x" TARGET_FMT_lx ", but curProcName is '%s' for this asid\n" ,
-            __FUNCTION__, asidProcIt->second, gProcs[asidProcIt->second].c_str(), asid, proc->name);
-            // exit(-1);
-            //update if changed
-            gProcs[asidProcIt->second] = curProc;
-        }
-    }else{
-        // got a new asid 
-        // now check the name. If name already exists, get the index; if not, insert into gProcs and get the new index;
-        // use index to store asid -- procName mapping.
+    if (procIndex == oldgProcSize){
+        // gProcs is inserted with a new proc
+        printf("%s: got a new proc:\n", __FUNCTION__);
+        // print_proc_info(proc);  // in checkNewProcID , already printed. so now avoid it.
 
-        // int oldgProcSize = gProcs.size();
-        // int procIndex=checkNewProc(curProc);
+        // check asid - procName mappinigs
+
+        // store the asid<-> procName mappings
         
-        int oldgProcSize = gProcIDs.size();
-        ProcID procid = {proc};
-        int procIndex=checkNewProcID(procid);
+        if ( gAsidToProcIndex.count(asid) != 0){
+            // not a new asid, but a new proc  
+            
+            printf("%s: WARNING::: a reused asid\n", __FUNCTION__);
+            // already a proc name stored. 
+            // Now check whether the stored name is the same name as current.
+            if (! (gProcs[gAsidToProcIndex[asid]] == curProc)){
+                // same asid, new proc, and diff proc name
+                
+                printf("%s: WARNING::: gProcs[%d]='%s' for a reused asid 0x" TARGET_FMT_lx ", but curProcName is '%s' for this asid\n" ,
+                __FUNCTION__, gAsidToProcIndex[asid], gProcs[gAsidToProcIndex[asid]].c_str(), asid, proc->name);
+                // exit(-1);
+                //update if changed
+                gProcs[gAsidToProcIndex[asid]] = curProc;
+            }
+            else{
+                // same asid, new proc, but same proc name.
 
-        if (procIndex == oldgProcSize){
-            // gProcs is inserted with a new proc
-            printf("%s: got a new proc:\n", __FUNCTION__);
-            // print_proc_info(proc);  // in checkNewProcID , already printed. so now avoid it.
+                 printf("%s: WARNING::: gProcs[%d]='%s' for a reused asid 0x" TARGET_FMT_lx ", same proc name for this asid\n" ,
+                    __FUNCTION__, gAsidToProcIndex[asid] , proc->name, asid);
+                
+            }
+
+            print_proc_info(proc);
         }
 
         gAsidToProcIndex[asid] = procIndex;
+
+    }else{
+        // not a new proc
+        // - check to be safe
+
+        // std::string curProc(proc->name);
+        // store the asid<-> procName mappings
+        if ( gAsidToProcIndex.count(asid) == 0){
+            // old proc, but a new asid. IMPOSSIBLE!
+            printf("%s: WARNING(ERROR)::: old proc not stored in gAsidToProcIndex:'%s', asid 0x" TARGET_FMT_lx ", now store it.\n" ,
+                __FUNCTION__, proc->name, asid);
+            // exit(-1);
+            gAsidToProcIndex[asid] = procIndex;
+        }
+        
     }
+
+    
+    // std::string curProc(proc->name);
+    // // store the asid<-> procName mappings
+    //  std::tr1::unordered_map<target_ulong, int>::iterator asidProcIt = gAsidToProcIndex.find(asid);
+    
+    // if (asidProcIt != gAsidToProcIndex.end()){
+    //     // not a new asid. 
+    //     // already a proc name stored. 
+    //     // Now check whether the stored name is the same name as current.
+    //     if (! (gProcs[asidProcIt->second] == curProc)){
+    //         printf("%s: WARNING::(ERROR): gProcs[%d]='%s' for asid 0x" TARGET_FMT_lx ", but curProcName is '%s' for this asid\n" ,
+    //         __FUNCTION__, asidProcIt->second, gProcs[asidProcIt->second].c_str(), asid, proc->name);
+    //         // exit(-1);
+    //         //update if changed
+    //         gProcs[asidProcIt->second] = curProc;
+    //     }
+    // }else{
+    //     // got a new asid 
+    //     // now check the name. If name already exists, get the index; if not, insert into gProcs and get the new index;
+    //     // use index to store asid -- procName mapping.
+
+    //     // int oldgProcSize = gProcs.size();
+    //     // int procIndex=checkNewProc(curProc);
+        
+    //     int oldgProcSize = gProcIDs.size();
+    //     ProcID procid = {proc};
+    //     int procIndex=checkNewProcID(procid);
+
+    //     if (procIndex == oldgProcSize){
+    //         // gProcs is inserted with a new proc
+    //         printf("%s: got a new proc:\n", __FUNCTION__);
+    //         // print_proc_info(proc);  // in checkNewProcID , already printed. so now avoid it.
+    //     }
+
+    //     gAsidToProcIndex[asid] = procIndex;
+    // }
 
     // update gAsidToProcIndex regard to asid_struct if different with asid.
     if(asid_struct_diff){
@@ -4947,20 +5082,27 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
             
             // printf("\tasid: 0x" TARGET_FMT_lx "\tsize:" TARGET_FMT_ld "\t%-24s %s\n", ms->module[i].base, ms->module[i].size, ms->module[i].name, ms->module[i].file);
 
+            ModuleID mid={ &ms->module[i]};
+
             int oldgProcSize = (int) gProcs.size();
-            int procIndex = checkNewProc(std::string(ms->module[i].name));
+            // int procIndex = checkNewProc(std::string(ms->module[i].name));
+            int procIndex = checkNewModuleID(mid);
             if (oldgProcSize == procIndex){
-                // a new proc found
-                printf("%s: a new dynamic lib found\n\toffset:\t0x" TARGET_FMT_lx "\tbase:\t0x" TARGET_FMT_lx "\tsize:\t0x" TARGET_FMT_lx 
-                "\n\tname:\t%s\n\tfile:\t%s\n",
-                    __FUNCTION__, 
-                    ms->module[i].offset,
-                    ms->module[i].base,
-                    ms->module[i].size,
-                    ms->module[i].name,  
-                    ms->module[i].file);
+                // // a new proc found
+                // printf("%s: a new dynamic lib found\n\toffset:\t0x" TARGET_FMT_lx "\tbase:\t0x" TARGET_FMT_lx "\tsize:\t0x" TARGET_FMT_lx 
+                // "\n\tname:\t%s\n\tfile:\t%s\n",
+                //     __FUNCTION__, 
+                //     ms->module[i].offset,
+                //     ms->module[i].base,
+                //     ms->module[i].size,
+                //     ms->module[i].name,  
+                //     ms->module[i].file);
+                printf("%s: a new dynamic lib found\n",
+                    __FUNCTION__);
+                print_mod_info(&ms->module[i]);
             }
-            gAsidToProcIndex[ ms->module[i].base ] = procIndex;
+
+            // gAsidToProcIndex[ ms->module[i].base ] = procIndex;
         }
     }
 
@@ -4973,21 +5115,27 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
         for (int i = 0; i < kms->num; i++){
             // printf("\t0x" TARGET_FMT_lx "\t" TARGET_FMT_ld "\t%-24s %s\n", kms->module[i].base, kms->module[i].size, kms->module[i].name, kms->module[i].file);
 
+            ModuleID mid={ &kms->module[i]};
+
             int oldgProcSize = (int) gProcs.size();
-            int procIndex = checkNewProc(std::string(kms->module[i].name));
+            // int procIndex = checkNewProc(std::string(kms->module[i].name));
+            int procIndex = checkNewModuleID(mid);
             if (oldgProcSize == procIndex){
                 // a new proc found
 
-                printf("%s: a new kernel module found\n\toffset:\t0x" TARGET_FMT_lx "\tbase:\t0x" TARGET_FMT_lx "\tsize:\t0x" TARGET_FMT_lx 
-                "\n\tname:\t%s\n\tfile:\t%s\n",
-                    __FUNCTION__, 
-                    kms->module[i].offset,
-                    kms->module[i].base,
-                    kms->module[i].size,
-                    kms->module[i].name,  
-                    kms->module[i].file);
+                // printf("%s: a new kernel module found\n\toffset:\t0x" TARGET_FMT_lx "\tbase:\t0x" TARGET_FMT_lx "\tsize:\t0x" TARGET_FMT_lx 
+                // "\n\tname:\t%s\n\tfile:\t%s\n",
+                //     __FUNCTION__, 
+                //     kms->module[i].offset,
+                //     kms->module[i].base,
+                //     kms->module[i].size,
+                //     kms->module[i].name,  
+                //     kms->module[i].file);
+                printf("%s: a new kernel module found\n",
+                    __FUNCTION__);
+                print_mod_info(&kms->module[i]);
             }
-            gAsidToProcIndex[ kms->module[i].base ] = procIndex;
+            // gAsidToProcIndex[ kms->module[i].base ] = procIndex;
         }
     }
 

@@ -1,7 +1,7 @@
 
 TODO:
 
-- A KEY problem: recognization of the target process we need to monitor. In the granularity of basic block and of single instruction.
+- KEY problem 1: recognization of the target process we need to monitor. In the granularity of basic block and of single instruction.
 
 	Panda is used to monitor a qemu guest running a whole operating system. The whole operating system contains various processes and different programs. However, for deadspy based on PIN, there is only one target program which is running on PIN platform. Therefore, there is no need to decide the target process for PIN. But here in Panda, we need to find the right way to find the target process.
 	
@@ -9,6 +9,9 @@ TODO:
 	
 	However, during the execution of a basic block for process A, it's possible that the CPU will be switched to process B and running process B's basic block. So during the exec of process A's basic block, we cannot assume that all the instructions between the block's start and end belong to this basic block of process A. We also need to determine where each instruction is come from.
 	
+	- use pid, ppid, asid to recognize the process. ProcID
+	- use base, size, offset to recognize the lib/kernel module. ModuleID
+
 - Problem 2: detection of call stacks. 
 
 	The solution callstack_instr plugin detects a function call by disasmbling every basic block's machine code and searches the 'call' instruction after block execution. Then based on this, it builds the call stack. To detect ret, it searches the block address in the call stack before every block executes. If block address exists in the call stack, it reports as a ret. This mechanisms might have the following drawbacks:
@@ -67,6 +70,50 @@ v0.6:
 
 	
 --------------------------------------------------------------------
+
+commit ac94af9924f9541e26d70533b6d65435c982894e
+Author: lele-lap <tupipa0929@gmail.com>
+Date:   Thu Jul 27 01:18:01 2017 -0400
+
+    reduce general prints in mem_callback
+
+commit be82047f25097bd46b8726b5ec3e21f5613eda0f
+Author: lele-lap <tupipa0929@gmail.com>
+Date:   Thu Jul 27 00:45:27 2017 -0400
+
+    reduce prints
+
+commit d1f79c89e055e32b422bff52fc7ec10aaf2b7854
+Author: lele-lap <tupipa0929@gmail.com>
+Date:   Thu Jul 27 00:21:29 2017 -0400
+
+    use pid+ppid to detect the target process;
+    
+    new globals:
+    
+        std::vector<ProcID> gProcIDs;
+    
+        target_ulong gTargetPID=0xfffff; //target pid;
+    
+        target_ulong gTargetPPID=0xffff; //target ppid;
+    
+        ProcID gTargetProcID;   //target proc by ProcID;
+    
+    new functions:
+    
+        inline void printRunningProcs()
+    
+        int checkNewProcID(const ProcID & proc)
+    
+    deprecated:
+    
+        checkNewProc(std::string)
+
+commit 3770b9d02e52e8f82626fba02b55a9ae0631190c
+Author: lele-lap <tupipa0929@gmail.com>
+Date:   Wed Jul 26 18:10:53 2017 -0400
+
+    use asid, pid, ppid to test procID equality
 
 	
 	

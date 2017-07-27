@@ -662,6 +662,30 @@ struct ProcID{
 };
 
 
+// use base, offset, size to distinguish proces lib/kernel module
+// use m->name only for assistance.
+struct ModuleID{
+
+    OsiModule *m;
+
+	bool operator==(const ModuleID  & x) const{
+
+		if ( this->m->base == (x.m)->base && this->m->offset == (x.m)->offset && this->m->size == (x.m)->size){
+            return true;
+        }
+        
+        return false;
+        
+	}
+
+	bool operator<(const ModuleID  & x) const{
+		if (this->m->base < x.m->base )
+            return true;
+		return false;
+	}
+};
+
+
 namespace std {
 
   template <>
@@ -709,6 +733,7 @@ std::vector<std::string> gDebugFiles;
 std::vector<std::string> gProcs;
 
 std::vector<ProcID> gProcIDs;
+std::vector<ModuleID> gModuleIDs;
 // std::vector<ProcID> gProcStructs;
 // std::tr1::unordered_map<target_ulong, OsiProc> gRunningProcs;
 std::unordered_set<ProcID> gRunningProcs;
@@ -863,6 +888,9 @@ OsiProc * get_current_running_process(CPUState *cpu);
 inline bool is_target_process_running(CPUState *cpu);
 
 inline void print_proc_info(OsiProc *proc);
+
+
+inline void print_mod_info(OsiModule *mod);
 
 inline void printRunningProcs();
 
