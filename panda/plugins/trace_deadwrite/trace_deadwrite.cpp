@@ -3626,8 +3626,8 @@ inline void printRunningProcs(){
     for (it = gRunningProcs.begin(); it != gRunningProcs.end(); ++it)
     {
         // u_long f = *it; // Note the "*" here
-		printf("\t0x" TARGET_FMT_lx ": procName: %s\n", 
-            it->proc->asid, it->proc->name);
+		printf("\t0x" TARGET_FMT_lx ": procName: %s, pid/ppid: " TARGET_FMT_lu "/" TARGET_FMT_lu "\n", 
+            it->proc->asid, it->proc->name, it->proc->pid, it->proc->ppid);
     }
     printf("\n");
 }
@@ -3638,10 +3638,10 @@ VOID printAllProcsFound(){
 
     printf("%s: (last) monitored ASID:\n", __FUNCTION__);
     if (gAsidToProcIndex.count(gTargetAsid) != 0 ){
-        printf("\t0x" TARGET_FMT_lx ": procName: %s\n", gTargetAsid, gProcs[gAsidToProcIndex[gTargetAsid]].c_str());
+        printf("\t0x" TARGET_FMT_lx ": procName: %s\n", gTargetAsid, gProcIDs[gAsidToProcIndex[gTargetAsid]].proc->name);
     }
     if (gAsidToProcIndex.count(gTargetAsid_struct) != 0){
-        printf("\t(struct): 0x" TARGET_FMT_lx ": procName: %s\n", gTargetAsid, gProcs[gAsidToProcIndex[gTargetAsid_struct]].c_str());
+        printf("\t(struct): 0x" TARGET_FMT_lx ": procName: %s\n", gTargetAsid, gProcIDs[gAsidToProcIndex[gTargetAsid_struct]].proc->name);
     }
     if (gAsidToProcIndex.count(gTargetAsid_struct) == 0 && gAsidToProcIndex.count(gTargetAsid) == 0 ){
         printf("\t no proc found for 0x" TARGET_FMT_lx ", (struct): 0x" TARGET_FMT_lx "\n", gTargetAsid, gTargetAsid_struct);
@@ -5096,7 +5096,7 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
 
             ModuleID mid={ &ms->module[i]};
 
-            int oldgProcSize = (int) gProcs.size();
+            int oldgProcSize = (int) gModuleIDs.size();
             // int procIndex = checkNewProc(std::string(ms->module[i].name));
             int procIndex = checkNewModuleID(mid);
             if (oldgProcSize == procIndex){
@@ -5129,7 +5129,7 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
 
             ModuleID mid={ &kms->module[i]};
 
-            int oldgProcSize = (int) gProcs.size();
+            int oldgProcSize = (int) gModuleIDs.size();
             // int procIndex = checkNewProc(std::string(kms->module[i].name));
             int procIndex = checkNewModuleID(mid);
             if (oldgProcSize == procIndex){
