@@ -239,8 +239,8 @@ inline bool is_target_process_running(CPUState *cpu, bool *judge_by_struct, targ
                 printf("%s: BingGo! found the target process for first time by pid/ppid!!!!!\n", __FUNCTION__);
                 gProcFound = true;
             }
-	    printf("%s: found the target process by pid/ppid/asid_struct: " TARGET_FMT_lu "/" TARGET_FMT_lu "/0x" TARGET_FMT_lx "\n", 
-                __FUNCTION__, p->pid, p->ppid, p->asid);
+	        // printf("%s: found the target process by pid/ppid/asid_struct: " TARGET_FMT_lu "/" TARGET_FMT_lu "/0x" TARGET_FMT_lx "\n", 
+            //     __FUNCTION__, p->pid, p->ppid, p->asid);
 
             gTargetAsid = panda_current_asid(cpu);
             //gTargetAsid_struct = p->asid;
@@ -2203,7 +2203,7 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
             // exit(-1);
         }
 
-        printf("%s: good. here we are in the target Proc!\n", __FUNCTION__);
+        // printf("%s: good. here we are in the target Proc!\n", __FUNCTION__);
         // // print judge metric, for debug
         // if(judge_by_struct){
 
@@ -4533,7 +4533,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
 
 
         gIsTargetBlock = true;
-        printf("%s: detect a block for the target process: tb->pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+        // printf("%s: detect a block for the target process: tb->pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
     }
 
     // Refer: ManageCallingContext() -> GoUpCallChain().
