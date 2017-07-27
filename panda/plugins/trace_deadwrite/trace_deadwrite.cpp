@@ -2185,7 +2185,7 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
 
             if (!judge_by_struct) {
                 // judged by asid, not accurate, regard as cr3 overlap.
-                printf(" might be. \n");
+                printf(" might be. Judge by asid, don't trust this.\n");
                 return 1;
             }else{
                 printf(" no. \n");
@@ -3310,7 +3310,7 @@ inline target_ulong GetMeasurementBaseCount(){
     
     // Prints the complete calling context including the line nunbers and the context's contribution, given a DeadInfo 
     inline VOID PrintIPAndCallingContexts(const DeadInfoForPresentation & di, target_ulong measurementBaseCount){
-        printf("now in func: %s\n", __FUNCTION__);
+        // printf("now in func: %s\n", __FUNCTION__);
         fprintf(gTraceFile,"\n " TARGET_FMT_lu " = %e",di.count, di.count * 100.0 / measurementBaseCount);
         fprintf(gTraceFile,"\n-------------------------------------------------------\n");
 #ifdef MERGE_SAME_LINES
@@ -4323,7 +4323,7 @@ void handle_on_call(CPUState *cpu,TranslationBlock *src_tb, target_ulong dst_fun
 
             if (!judge_by_struct) {
                 // judged by asid, not accurate, regard as cr3 overlap.
-                printf(" might be. \n");
+                printf(" might be. Judge by asid, don't trust\n");
                 return;
             }else{
                 printf(" no. \n");
@@ -4503,7 +4503,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
         // print_proc_info(judge_proc);
     }
     else{
-        printf("%s: **** judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n; will not trust this here**** ",
+        printf("%s: WARNING: **** judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n; will not trust this here**** ",
            __FUNCTION__, judge_asid, gTargetAsid);
         return 1;
     }
@@ -4642,7 +4642,7 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
 
             if (!judge_by_struct) {
                 // judged by asid, not accurate, regard as cr3 overlap.
-                printf(" might be. \n");
+                printf(" might be. Judge by asid, don't trust\n");
                 return 1;
             }else{
                 printf(" no. \n");
