@@ -215,6 +215,7 @@ inline bool is_target_process_running(CPUState *cpu, bool *judge_by_struct, targ
         // if (asid == gTargetAsid || asid == gTargetAsid_struct){
         if (asid == gTargetAsid ){
             is_target = true;
+            printf("%s: WARNING: found the target process by asid: ox" TARGET_FMT_lx "\n", __FUNCTION__, asid);
         }else{
             gIgnoredASIDs.insert(asid);
             is_target = false;
@@ -243,7 +244,7 @@ inline bool is_target_process_running(CPUState *cpu, bool *judge_by_struct, targ
             // found the target proc by name
             // update the target asid.
 
-            printf("%s: found the target process by name: %s\n", __FUNCTION__, p->name);
+            printf("%s: WARNING: found the target process by name: %s\n", __FUNCTION__, p->name);
 
             gTargetAsid = panda_current_asid(cpu);
             gTargetAsid_struct = p->asid;
