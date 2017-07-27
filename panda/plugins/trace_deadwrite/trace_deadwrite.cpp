@@ -340,7 +340,13 @@ OsiProc * get_current_running_process(CPUState *cpu){
 
             // check whether a new proc.
             ProcID procID = {p};
-            checkNewProcID(procID);
+
+            int oldgProcSize = gProcIDs.size();
+            int procIndex=checkNewProcID(procID);
+
+            if (procIndex == oldgProcSize){
+                printf("%s: got a new proc:\n", __FUNCTION__);
+            }
         }
     // }
 
@@ -2158,21 +2164,6 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
         if(gIsTargetBlock){
             printf("--%s: WARNING: target detected at before_block_exec but not detected here, might a process switch??\n", __FUNCTION__);
 
-            // // print judge metric, for debug
-            // if(judge_by_struct){
-
-            //     printf("%s: judge by name in struct. \n",
-            //         __FUNCTION__);
-            //     printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
-            //     //print full info of proc
-            //     print_proc_info(judge_proc);
-            // }
-            // else{
-            //     printf("\t\tjudge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n",
-            //         judge_asid, gTargetAsid);
-            // }
-
-            // exit(-1);
         }
         // else{
         //     return 1;
@@ -2196,6 +2187,10 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
             printf("\tWARNING: \n");    
             printf("\t------- not cr3 overlap since judge by proc struct, must be a process switch??\n");
 
+            printf("<TODO> since we only detected the target process here in mem_callback but not in before_block_exec: we don't have the gBlockShadowMap and gTraceBlockNode allocated yet. \n");
+            printf("<TODO> so we need a solution to keep track of this.");
+
+            return 1;
             // TODO: 
             // since we only detected the target process here in mem_callback but not in before_block_exec: we don't have the gBlockShadowMap and gTraceBlockNode allocated yet.
             // So, we need a solution to keep track of this.
@@ -4782,26 +4777,14 @@ int checkNewProcID(const ProcID & proc){
         //     __FUNCTION__, proc.proc->pid,  proc.proc->ppid, proc.proc->asid);
         // printf("\t\tproc name=%s\n", proc.proc->name);
 
-        printf("%s: got a new proc:\n", __FUNCTION__);
+        printf("%s: got a new proc ID:\n", __FUNCTION__);
         print_proc_info(proc.proc);
         //exit(-1);
         // store it in gProcIDs, and the map
         gProcIDs.push_back(proc);
         gProcs.push_back(std::string(proc.proc->name));
         procIndex = (int) gProcIDs.size()-1;
-    }
-
-    // maintain the set.
-    if (gRunningProcs.count(proc)==0){
-        // printf("%s: got a new proc:\n", __FUNCTION__);
-        print_proc_info(proc.proc);
         gRunningProcs.insert(proc);
-
-        // test function.
-        // if (gRunningProcs.size() == 3){
-        //     printRunningProcs();
-        //     // exit(-1);
-        // }
     }
 
     return procIndex;
@@ -4823,9 +4806,9 @@ int checkNewModuleID(const ModuleID & m){
     }else{
         // a new module
 
-        printf("%s: got a new module:\n", __FUNCTION__);
-        // print_proc_info(proc.proc);
-        print_mod_info(m.m);
+        // printf("%s: got a new module:\n", __FUNCTION__);
+        // // print_proc_info(proc.proc);
+        // print_mod_info(m.m);
 
         // store it in gModuleIDs, and the map
         gModuleIDs.push_back(m);
@@ -4959,7 +4942,7 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
                 
             }
 
-            print_proc_info(proc);
+            // print_proc_info(proc);
         }
 
         gAsidToProcIndex[asid] = procIndex;
@@ -5118,17 +5101,10 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
             int procIndex = checkNewModuleID(mid);
             if (oldgProcSize == procIndex){
                 // // a new proc found
-                // printf("%s: a new dynamic lib found\n\toffset:\t0x" TARGET_FMT_lx "\tbase:\t0x" TARGET_FMT_lx "\tsize:\t0x" TARGET_FMT_lx 
-                // "\n\tname:\t%s\n\tfile:\t%s\n",
-                //     __FUNCTION__, 
-                //     ms->module[i].offset,
-                //     ms->module[i].base,
-                //     ms->module[i].size,
-                //     ms->module[i].name,  
-                //     ms->module[i].file);
-                printf("%s: a new dynamic lib found\n",
-                    __FUNCTION__);
-                print_mod_info(&ms->module[i]);
+
+                // printf("%s: a new dynamic lib found\n",
+                    // __FUNCTION__);
+                // print_mod_info(&ms->module[i]);
             }
 
             // gAsidToProcIndex[ ms->module[i].base ] = procIndex;
@@ -5160,9 +5136,9 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
                 //     kms->module[i].size,
                 //     kms->module[i].name,  
                 //     kms->module[i].file);
-                printf("%s: a new kernel module found\n",
-                    __FUNCTION__);
-                print_mod_info(&kms->module[i]);
+                // printf("%s: a new kernel module found\n",
+                //     __FUNCTION__);
+                // print_mod_info(&kms->module[i]);
             }
             // gAsidToProcIndex[ kms->module[i].base ] = procIndex;
         }
