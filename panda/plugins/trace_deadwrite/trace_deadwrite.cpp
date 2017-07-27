@@ -2372,14 +2372,21 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
                 
                 // pc not in gBlockShadowMap
 
-                printf("%s: WARNING::::::::::::::::::::::::::::::::::::\n in an old block, but gBlockShadowMap[0x" TARGET_FMT_lx "] has no pc: 0x" TARGET_FMT_lx ", need add it.\n",
-                    __FUNCTION__, gCurrentTraceBlock->address, pc);
+                if (! gNewBasicBlock){
+                     printf("%s: WARNING: an old block, but gBlockShadowMap[0x" TARGET_FMT_lx "] has no pc: 0x" TARGET_FMT_lx ", need add it.\n",
+                        __FUNCTION__, gCurrentTraceBlock->address, pc);
 
+                }else{
+                     printf("%s: update gBlockShadowMap for a new block: tb->pc: 0x" TARGET_FMT_lx ", with memOp pc: 0x" TARGET_FMT_lx ", need add it.\n",
+                        __FUNCTION__, gCurrentTraceBlock->address, pc);
+                }
                 //Now update the gBlockShadowMap
                 //check if we have enough space left
                 if ((int)recordedSlots >= blockSize){
                     printf("%s: ERROR: number of write pcs is larger then block size, this shouldn't happen \n", __FUNCTION__);
                     printf("%s: the size of ShadowMap and block Size is checked before_block_exe. If this still happen, this instruction might have bypassed the callback of before_block_exe.\n", __FUNCTION__);
+
+                    printf("%s: If this is true, we might replace the gBlockShadowMap again, just as what we do in before_block_exec. <TODO>\n", __FUNCTION__);
                     exit(-1);
                     //might replace gBlockShadowMap for this block?
                 }
@@ -3873,6 +3880,8 @@ inline void InitializeBlockShadowMap(CPUState *cpu, TranslationBlock *tb){
 
         // ##############################################
         // set new basic block flag; used in after block exe to set gShadowMap as done.
+        // using this flag, we can track all execution instructions in the new block between before_block_exec and after_block_exec.
+        // this can be used to track the update of gBlockShadowMap.
         gNewBasicBlock=true;
 
        
@@ -4674,8 +4683,14 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     //  lele: should update Trace IPs after block executed.
     //  In Deadspy: gBlockShadowMap(gTraceShadowMap) is built during instrumentation. and used here in the instrumentation code.
     //  However, in Panda: we built gBlockShadowMap only when there is a mem write detected in mem_callback.
-    //  So , gBlockShadowMap should be built fully after the exe of the block.
-    //  So, we need to update BlockNode after block execution.
+    //  First, gBlockShadowMap should be built fully after the exe of one basic block.
+    //      a basic block could have only one place in gBlockShadowMap to store its mem write instruction slots.
+    //      idealy, when the basic block is re-executed as another trace block, the gBlockShadowMap should not be change;
+    //      However, this depends on the real exe of the program, where we find it can be changing. 
+    //
+    //  Second, we need to update BlockNode after block execution.
+    //      a basic block that is executed/called in an execution path, we naming it BlockNode. 
+    //      a basic block could have serveral BlockNode in the execution path.
 
     // Refer: InstrumentTrace() TODO
     //InstrumentTraceEntry() -> UpdateDataOnFunctionEntry() -> GoDownCallChain(cpu,tb);
