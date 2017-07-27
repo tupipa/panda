@@ -2149,8 +2149,8 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
 
             if (!judge_by_struct) return 1;
 
-            printf("\tWARNING: judge by proc struct!\n");    
-            printf("\t------- not cr3 overlap, must be a process switch??\n");
+            printf("\tWARNING: \n");    
+            printf("\t------- not cr3 overlap since judge by proc struct, must be a process switch??\n");
 
             // TODO: 
             // since we only detected the target process here in mem_callback but not in before_block_exec: we don't have the gBlockShadowMap and gTraceBlockNode allocated yet.
@@ -4279,8 +4279,8 @@ void handle_on_call(CPUState *cpu,TranslationBlock *src_tb, target_ulong dst_fun
 
             if (!judge_by_struct) return;
 
-            printf("\tCongratulations! judge by proc struct!\n");    
-            printf("\t------- not cr3 overlap, must be a process switch??\n");
+            printf("\tCongratulations!\n");    
+            printf("\t------- not cr3 overlap since judge by proc struct! must be a process switch??\n");
             // exit(-1);
             gIsTargetBlock = true;
         }
@@ -4318,16 +4318,16 @@ void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_fu
     // // print judge metric, for debug
     if(judge_by_struct){
 
-        printf("%s: judge by name in struct. \n",
-            __FUNCTION__);
-        printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
-        //print full info of proc
-        print_proc_info(judge_proc);
+        // printf("%s: judge by struct. \n",
+        //     __FUNCTION__);
+        // printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
+        // //print full info of proc
+        // print_proc_info(judge_proc);
     }
     else{
 
-        printf("%s: **** judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n; will not trust this here**** ",
-            __FUNCTION__, judge_asid, gTargetAsid);
+        // printf("%s: **** judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n; will not trust this here**** ",
+        //     __FUNCTION__, judge_asid, gTargetAsid);
         return ;
     }
     
@@ -4446,15 +4446,15 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     // print judge metric, for debug
     if(judge_by_struct){
 
-        printf("%s: judge by name in struct. \n",
-            __FUNCTION__);
-        printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
-        //print full info of proc
-        print_proc_info(judge_proc);
+        // printf("%s: judge by struct. \n",
+        //     __FUNCTION__);
+        // printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
+        // //print full info of proc
+        // print_proc_info(judge_proc);
     }
     else{
-        printf("%s: **** judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n; will not trust this here**** ",
-            __FUNCTION__, judge_asid, gTargetAsid);
+        // printf("%s: **** judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n; will not trust this here**** ",
+        //     __FUNCTION__, judge_asid, gTargetAsid);
         return 1;
     }
     
