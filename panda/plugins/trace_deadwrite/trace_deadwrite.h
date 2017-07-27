@@ -638,14 +638,16 @@ struct ProcID{
         // exit(-1);
 		// return false;
         
-		if ( this->proc->asid == (x.proc)->asid && std::string(this->proc->pid) == std::string((x.proc)->pid) && std::string(this->proc->ppid) == std::string((x.proc)->ppid)){
+		if ( this->proc->asid == (x.proc)->asid && this->proc->pid == (x.proc)->pid && this->proc->ppid == (x.proc)->ppid){
             return true;
         }
 
-        printf("%s, %s: (%p,"TARGET_FMT_lu","TARGET_FMT_lu") != %s (%p,"TARGET_FMT_lu","TARGET_FMT_lu")\n",
-         __FUNCTION__, 
-         (x.proc)->name, (void *)(uintptr_t) x.proc->asid, x.proc->pid, x.proc->ppid,
-         this->proc->name, (void *)(uintptr_t) this->proc->asid, this->proc->pid, this->proc->ppid);
+        // printf("%s, %s: (0x" TARGET_FMT_lx "," TARGET_FMT_lu "," TARGET_FMT_lu 
+        //         ")\n\t != %s (0x" TARGET_FMT_lx "," TARGET_FMT_lu "," TARGET_FMT_lu
+        //         ")\n",
+        //  __FUNCTION__, 
+        //  (x.proc)->name, x.proc->asid, x.proc->pid, x.proc->ppid,
+        //  this->proc->name, this->proc->asid, this->proc->pid, this->proc->ppid);
 
         // exit(-1);
 		return false;
@@ -705,6 +707,8 @@ bool gProcFound;
 std::vector<std::string> gDebugFiles;
 //store all process names
 std::vector<std::string> gProcs;
+
+std::vector<ProcID> gProcIDs;
 // std::vector<ProcID> gProcStructs;
 // std::tr1::unordered_map<target_ulong, OsiProc> gRunningProcs;
 std::unordered_set<ProcID> gRunningProcs;
@@ -737,8 +741,14 @@ ADDRINT gCurrentCallerIp;
 bool gTraceKernel=false; //trace all kernel processes; asid=0
 bool gTraceApp=false; // trace all other asids !=0;
 bool gTraceOne = false; //trace only one given ASID, kernel=0, or other asids. If this is true, the 'traceKernel' and 'traceApp' is invalide; If ASID not given, default is 0.
+
+// should be deprecated, use gTargetPID and gTargetPPID instead.
 ADDRINT gTargetAsid=0x0; //target ASID;
 ADDRINT gTargetAsid_struct=0x0; //target ASID;
+
+target_ulong gTargetPID=0xfffff; //target pid;
+target_ulong gTargetPPID=0xffff; //target ppid;
+ProcID gTargetProcID;   //target proc by ProcID;
 
 bool gIsTargetBlock = false; // used to tracking whether in a block for target process. will be set/reset in before_block_exe and after_block_exe.
 //ADDRINT gTargetASID=0x0; //target ASID;
@@ -852,7 +862,13 @@ OsiProc * get_current_running_process(CPUState *cpu);
 
 inline bool is_target_process_running(CPUState *cpu);
 
+inline void print_proc_info(OsiProc *proc);
+
+inline void printRunningProcs();
+
 int checkNewProc(std::string procName);
+
+int checkNewProcID(const ProcID & proc);
 
 void  panda_GetSourceLocation(ADDRINT ip, unsigned long *line, std::string *file, std::string *func);
 

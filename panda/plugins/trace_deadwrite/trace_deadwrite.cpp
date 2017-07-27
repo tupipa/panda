@@ -122,7 +122,9 @@ inline void  print_proc_info(OsiProc *proc)
 
 inline void print_proc_info(OsiProc *proc){
 
-    printf("\tproc name: %s,", proc->name);
+    if(proc->name){
+        printf("\tproc name: %s,", proc->name);
+    }
 
     // if(proc->pid){
         printf("\tpid: " TARGET_FMT_lu, proc->pid);
@@ -202,12 +204,33 @@ inline bool is_target_process_running(CPUState *cpu, bool *judge_by_struct, targ
         std::string curProc(p->name);
         // if (curProc == gProcToMonitor || p->asid == gTargetAsid_struct){
         if (curProc == gProcToMonitor){
-            // found the target proc
+            // found the target proc by name
             // update the target asid.
+
+            printf("%s: found the target process by name: %s\n", __FUNCTION__, p->name);
+
             gTargetAsid = panda_current_asid(cpu);
             gTargetAsid_struct = p->asid;
+            gTargetPID = p->pid;
+            gTargetPPID = p->ppid;
+            gProcToMonitor = curProc;
+
             is_target = true;
 
+        }else if(p->ppid == gTargetPPID && p->pid == gTargetPID){
+            // found the target proc by pid, ppid
+            // update the target asid.
+
+            printf("%s: found the target process by pid/ppid: " TARGET_FMT_lu"/" TARGET_FMT_lu "\n", 
+                __FUNCTION__, p->pid, p->ppid);
+
+            gTargetAsid = panda_current_asid(cpu);
+            gTargetAsid_struct = p->asid;
+            gProcToMonitor = curProc;
+
+            is_target = true;
+
+            exit(1);
         }else{
             // keeping track of both p->asid and cpu->cr3
             gIgnoredASIDs.insert(p->asid);
@@ -217,7 +240,8 @@ inline bool is_target_process_running(CPUState *cpu, bool *judge_by_struct, targ
     }
 
     if (is_target && !gProcFound){
-        printf("\t%s: WARNING: target process set to be running here but not found in 'handle_proc_change'\n", __FUNCTION__);
+        // printf("\t%s: WARNING: target process set to be running here but not found in 'handle_proc_change'\n", __FUNCTION__);
+        // this can be normal? since in handle_proc_change, the target process
     }
     return is_target;
 }
@@ -269,13 +293,18 @@ OsiProc * get_current_running_process(CPUState *cpu){
                 // exit(-1);
                 return 0;
             }
-            // asid = p->asid;
-            ProcID p_ = {p};
-            if (gRunningProcs.count(p_)==0){
-                gRunningProcs.insert(p_);
-            }
-            // check whether a new proc name.
-            checkNewProc(std::string(p->name));
+            // // asid = p->asid;
+            // ProcID p_ = {p};
+            // if (gRunningProcs.count(p_)==0){
+            //     gRunningProcs.insert(p_);
+            // }
+
+            // // check whether a new proc name.
+            // checkNewProc(std::string(p->name));
+
+            // check whether a new proc.
+            ProcID procID = {p};
+            checkNewProcID(procID);
         }
     // }
 
@@ -2073,19 +2102,19 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
 
     printf("%s: pc: 0x" TARGET_FMT_lx ",\taddr: 0x" TARGET_FMT_lx "\n" , __FUNCTION__, pc, addr);
     // print judge metric, for debug
-    if(judge_by_struct){
-        // printf("--%s: judge by name in struct. \n\ttarget name: %s\n",
-        //     __FUNCTION__, gProcToMonitor.c_str());
-        printf("--%s: judge by name in struct. \n",
-            __FUNCTION__);
-        printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
-        //print full info of proc
-        print_proc_info(judge_proc);
-    }
-    else{
-        printf("--%s: judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n",
-            __FUNCTION__, judge_asid, gTargetAsid);
-    }
+    // if(judge_by_struct){
+    //     // printf("--%s: judge by name in struct. \n\ttarget name: %s\n",
+    //     //     __FUNCTION__, gProcToMonitor.c_str());
+    //     printf("--%s: judge by name in struct. \n",
+    //         __FUNCTION__);
+    //     printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
+    //     //print full info of proc
+    //     print_proc_info(judge_proc);
+    // }
+    // else{
+    //     printf("--%s: judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n",
+    //         __FUNCTION__, judge_asid, gTargetAsid);
+    // }
 
     if(!is_target){
         // not target process.
@@ -2108,10 +2137,11 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
             // }
 
             // exit(-1);
-        }else{
-            return 1;
         }
-        // return 1;
+        // else{
+        //     return 1;
+        // }
+        return 1;
     }else{
         // is target process
         if (! gIsTargetBlock){
@@ -2134,7 +2164,7 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
             // exit(-1);
         }
 
-        printf("%s: good, before_block_exec has set gIsTargetBlock=true; here we are in the target Proc!\n", __FUNCTION__);
+        printf("%s: good. here we are in the target Proc!\n", __FUNCTION__);
         // // print judge metric, for debug
         // if(judge_by_struct){
 
@@ -3547,9 +3577,7 @@ VOID Fini() {
     fclose(gTraceFile);
 }
 
-VOID printAllProcsFound(){
-    // Iterate Over the Unordered Set and display it
-    printf("%s: All Procs Found:\n", __FUNCTION__);
+inline void printRunningProcs(){
     std::unordered_set<ProcID>::iterator it;
     for (it = gRunningProcs.begin(); it != gRunningProcs.end(); ++it)
     {
@@ -3558,6 +3586,12 @@ VOID printAllProcsFound(){
             it->proc->asid, it->proc->name);
     }
     printf("\n");
+}
+VOID printAllProcsFound(){
+    // Iterate Over the Unordered Set and display it
+    printf("%s: All Procs Found Running:\n", __FUNCTION__);
+    printRunningProcs();
+
     printf("%s: (last) monitored ASID:\n", __FUNCTION__);
     if (gAsidToProcIndex.count(gTargetAsid) != 0 ){
         printf("\t0x" TARGET_FMT_lx ": procName: %s\n", gTargetAsid, gProcs[gAsidToProcIndex[gTargetAsid]].c_str());
@@ -4630,6 +4664,7 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     - check whether procName is in gProcs, 
     - if does not exist, add it to gProcs and return its index; 
     - if exists, nothing change and return its index.
+    ** This will be deprecated. please use checkNewProcID instead.
 */
 int checkNewProc(std::string procName){
 
@@ -4652,10 +4687,56 @@ int checkNewProc(std::string procName){
     return procIndex;
 }
 
+/* int checkNewProcID (std::string procName)
+    - check whether procName is in vector gProcIDs, set gRunningProcs
+    - if does not exist, add it to gProcIDs and return its index; also add to set gRunningProcs
+    - if exists, nothing change and return its index.
+*/
+int checkNewProcID(const ProcID & proc){
+
+    // maintain the vector.
+    int procIndex;
+    std::vector<ProcID>::iterator procIt =  std::find(gProcIDs.begin(), gProcIDs.end(), proc);
+    
+    if ( procIt != gProcIDs.end() ){
+        // an old proc name.
+        procIndex = (int) ( procIt - gProcIDs.begin());
+
+    }else{
+        // a new proc.
+        // printf("%s: got a new proc: pid=" TARGET_FMT_lu ",ppid=" TARGET_FMT_lu ", asid=0x" TARGET_FMT_lx "\n", 
+        //     __FUNCTION__, proc.proc->pid,  proc.proc->ppid, proc.proc->asid);
+        // printf("\t\tproc name=%s\n", proc.proc->name);
+
+        printf("%s: got a new proc:\n", __FUNCTION__);
+        print_proc_info(proc.proc);
+        //exit(-1);
+        // store it in gProcIDs, and the map
+        gProcIDs.push_back(proc);
+        procIndex = (int) gProcIDs.size()-1;
+    }
+
+    // maintain the set.
+    if (gRunningProcs.count(proc)==0){
+        // printf("%s: got a new proc:\n", __FUNCTION__);
+        print_proc_info(proc.proc);
+        gRunningProcs.insert(proc);
+
+        // test function.
+        // if (gRunningProcs.size() == 3){
+        //     printRunningProcs();
+        //     // exit(-1);
+        // }
+    }
+
+    return procIndex;
+}
+
 
 // only tracking kernel asid, because asidstory pluging skips this
 int handle_asid_change(CPUState *cpu, target_ulong old_asid, target_ulong new_asid) {
 
+    printf("\n!!!!!!!!!!!!!!!!!%s: asid changed!!!!!!!!!!!!!!!!!!!!!!!!!\n", __FUNCTION__);
     // lele: panda BUG: when asid didn't change, we can still reach here...
     if(new_asid == old_asid){
         printf("%s: panda BUG: no asid change here.\n", __FUNCTION__);
@@ -4693,10 +4774,9 @@ Refer pri_dwarf.cpp and asidstory.h
 void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
     printf("-----------begin: %s------------\n", __FUNCTION__);
     if (!proc) { return; }
-    if (!proc->name) { return; }
 
+    // if (!proc->name) { return; }
 
-    printf("%s: new proc's asid: 0x" TARGET_FMT_lx ", struct_asid: 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid, proc->asid);
 
     target_ulong asid_struct;
     bool asid_struct_diff = false;
@@ -4707,7 +4787,7 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
     // BUG in Panda: on_proc_change asid can be different with panda_current_asid_proc_struct(cpu)
 
     // just check to be safe.
-    
+
     // asid_struct should be the same as proc->asid.
     asid_struct = panda_current_asid_proc_struct(cpu);
     if(asid_struct != proc->asid){
@@ -4721,19 +4801,19 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
         asid_struct_diff = true;
         //exit(-1);
     }
-    
 
-    printf("%s: proc_change: asid: 0x" TARGET_FMT_lx "(p->asid: 0x" TARGET_FMT_lx 
-            "), name: %s, pid: " TARGET_FMT_lu ", ppid: " TARGET_FMT_lu 
-            "\n",
-        __FUNCTION__, asid, proc->asid, proc->name, proc->pid,proc->ppid);
+    // printf("%s: proc_change: asid: 0x" TARGET_FMT_lx "(p->asid: 0x" TARGET_FMT_lx 
+    //         "), name: %s, pid: " TARGET_FMT_lu ", ppid: " TARGET_FMT_lu 
+    //         "\n",
+    //     __FUNCTION__, asid, proc->asid, proc->name, proc->pid,proc->ppid);
 
-    printf("\t\t offset: 0x" TARGET_FMT_lx "\n", proc->offset);
+    // printf("%s: new proc's asid: 0x" TARGET_FMT_lx ", struct_asid: 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid, proc->asid);
+    printf("%s: cur proc: \n", __FUNCTION__);
+    print_proc_info(proc);
 
-    if (proc->pages){
-        printf("\t\t page start: 0x" TARGET_FMT_lx " , page len: " TARGET_FMT_lu " \n",   
-            proc->pages->start, proc->pages->len);
-    }
+    printf("%s: proc_change: asid: 0x" TARGET_FMT_lx ",\tp->asid: 0x" TARGET_FMT_lx 
+            ")\n",
+        __FUNCTION__, asid, proc->asid);
 
     // assert(asid == proc->asid);
 
@@ -4756,15 +4836,20 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
         // got a new asid 
         // now check the name. If name already exists, get the index; if not, insert into gProcs and get the new index;
         // use index to store asid -- procName mapping.
-        int oldgProcSize = gProcs.size();
 
-        int procIndex=checkNewProc(curProc);
+        // int oldgProcSize = gProcs.size();
+        // int procIndex=checkNewProc(curProc);
+        
+        int oldgProcSize = gProcIDs.size();
+        ProcID procid = {proc};
+        int procIndex=checkNewProcID(procid);
 
         if (procIndex == oldgProcSize){
             // gProcs is inserted with a new proc
-            printf("%s: got a new proc: %s, asid: 0x" TARGET_FMT_lx "\n", 
-            __FUNCTION__, curProc.c_str(), asid);
+            printf("%s: got a new proc:\n", __FUNCTION__);
+            // print_proc_info(proc);  // in checkNewProcID , already printed. so now avoid it.
         }
+
         gAsidToProcIndex[asid] = procIndex;
     }
 
@@ -4787,14 +4872,17 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
             // got a new asid 
             // now check the name. If name already exists, get the index; if not, insert into gProcs and get the new index;
             // use index to store asid -- procName mapping.
-            int oldgProcSize = gProcs.size();
+            // int oldgProcSize = gProcs.size();
+            // int procIndex=checkNewProc(curProc);
 
-            int procIndex=checkNewProc(curProc);
+            int oldgProcSize = gProcIDs.size();
+            ProcID procid = {proc};
+            int procIndex=checkNewProcID(procid);
 
             if (procIndex == oldgProcSize){
                 // gProcs is inserted with a new proc
-                printf("%s: got a new proc: %s, asid(struct): 0x" TARGET_FMT_lx "\n", 
-                __FUNCTION__, curProc.c_str(), asid_struct);
+                printf("%s: ERROR: should not reach here, above (where use asid instead of asid_struct) already add this proc as new, now should not add it as new again\n", __FUNCTION__);
+                exit(-1);
             }
             gAsidToProcIndex[asid_struct] = procIndex;
         }
@@ -4802,20 +4890,37 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
      }
 
 
-    if (curProc == gProcToMonitor){
+    // if (curProc == gProcToMonitor){
+    if (curProc == gProcToMonitor || (proc->pid == gTargetPID && proc->ppid == gTargetPPID) ){
         // gTargetAsid = asid;
         // printf("%s: reset target asid to 0x" TARGET_FMT_lx ", proc: %s\n", __FUNCTION__, asid, curProc.c_str());
-        printf("%s: got asid of target Proc 0x" TARGET_FMT_lx ", proc: %s\n", __FUNCTION__, asid, curProc.c_str());
+        // printf("%s: got asid of target Proc 0x" TARGET_FMT_lx ", proc: %s\n", __FUNCTION__, asid, curProc.c_str());
+
+        // printf("%s: found the target process by name: %s\n", __FUNCTION__, proc->name);
+
         if (!gProcFound){
             // this is the monitored process.
             gProcFound = true;
             printf("%s: setting gProcFound to be true\n", __FUNCTION__);
+            // exit(-1);
         }
         // keeping the target asid/struct in the same pace.
         gTargetAsid = asid;
+        gProcToMonitor = curProc;
         gTargetAsid_struct = asid_struct;
+        gTargetPID = proc->pid;
+        gTargetPPID = proc->ppid;
+        gTargetProcID = {proc};
 
-        printf("%s: reset target asid 0x" TARGET_FMT_lx ", and target asid_struct: 0x" TARGET_FMT_lx "\n",__FUNCTION__, asid, asid_struct);
+        printf("%s: reset target asid 0x" TARGET_FMT_lx ", and target asid_struct: 0x" TARGET_FMT_lx "\n",
+            __FUNCTION__, asid, asid_struct);
+        printf("%s: reset target pid 0x" TARGET_FMT_lx ", and target ppid: 0x" TARGET_FMT_lx "\n",
+            __FUNCTION__, gTargetPID, gTargetPPID);
+        
+        printf("%s: reset target ProcID to: \n", __FUNCTION__);
+        print_proc_info(proc);
+        
+        exit(-1);
     }else{
         gProcFound = false;
         printf("%s: setting gProcFound to be false\n", __FUNCTION__);
