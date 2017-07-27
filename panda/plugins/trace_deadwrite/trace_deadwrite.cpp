@@ -5049,13 +5049,13 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
 
         printf("%s: reset target asid 0x" TARGET_FMT_lx ", and target asid_struct: 0x" TARGET_FMT_lx "\n",
             __FUNCTION__, asid, asid_struct);
-        printf("%s: reset target pid 0x" TARGET_FMT_lx ", and target ppid: 0x" TARGET_FMT_lx "\n",
+        printf("%s: reset target pid " TARGET_FMT_lu ", and target ppid: " TARGET_FMT_lu "\n",
             __FUNCTION__, gTargetPID, gTargetPPID);
         
         printf("%s: reset target ProcID to: \n", __FUNCTION__);
         print_proc_info(proc);
         
-        exit(-1);
+        // exit(-1);
     }else{
         gProcFound = false;
         printf("%s: setting gProcFound to be false\n", __FUNCTION__);
