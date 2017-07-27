@@ -229,7 +229,16 @@ inline bool is_target_process_running(CPUState *cpu, bool *judge_by_struct, targ
         if(p->ppid == gTargetPPID && p->pid == gTargetPID){
             // found the target proc by pid, ppid
             // update the target asid.
-
+            if (!gProcFound){
+                printf("%s: BingGo! BingGo! BingGo! BingGo! BingGo! BingGo! BingGo! \n", __FUNCTION__);
+                printf("%s: BingGo! BingGo! BingGo! BingGo! BingGo! BingGo! BingGo! \n", __FUNCTION__);
+                printf("%s: BingGo! BingGo! BingGo! BingGo! BingGo! BingGo! BingGo! \n", __FUNCTION__);
+                printf("%s: BingGo! BingGo! BingGo! BingGo! BingGo! BingGo! BingGo! \n", __FUNCTION__);
+                printf("%s: BingGo! BingGo! BingGo! BingGo! BingGo! BingGo! BingGo! \n", __FUNCTION__);
+                printf("%s: BingGo! BingGo! BingGo! BingGo! BingGo! BingGo! BingGo! \n", __FUNCTION__);
+                printf("%s: BingGo! found the target process for first time by pid/ppid!!!!!\n", __FUNCTION__);
+                gProcFound = true;
+            }
             printf("%s: found the target process by pid/ppid: " TARGET_FMT_lu"/" TARGET_FMT_lu "\n", 
                 __FUNCTION__, p->pid, p->ppid);
 
@@ -239,8 +248,8 @@ inline bool is_target_process_running(CPUState *cpu, bool *judge_by_struct, targ
 
             is_target = true;
 
-            exit(1);
-        }else  if (curProc == gProcToMonitor){
+            // exit(1);
+        }else  if (curProc == gProcToMonitor && ! gProcFound){
             // found the target proc by name
             // update the target asid.
 
@@ -252,6 +261,8 @@ inline bool is_target_process_running(CPUState *cpu, bool *judge_by_struct, targ
             gTargetPPID = p->ppid;
             gProcToMonitor = curProc;
 
+            gProcFound = true;
+
             is_target = true;
 
         }else{
@@ -262,7 +273,7 @@ inline bool is_target_process_running(CPUState *cpu, bool *judge_by_struct, targ
         }
     }
 
-    if (is_target && !gProcFound){
+    if (is_target && !gProcFoundByProcChange){
         // printf("\t%s: WARNING: target process set to be running here but not found in 'handle_proc_change'\n", __FUNCTION__);
         // this can be normal? since in handle_proc_change, the target process
     }
@@ -4501,7 +4512,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
         return 1;
     }else{
         gIsTargetBlock = true;
-        printf("%s: detect a block for the target process: tb->pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+        // printf("%s: detect a block for the target process: tb->pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
     }
 
     // Refer: ManageCallingContext() -> GoUpCallChain().
@@ -4838,7 +4849,7 @@ int handle_asid_change(CPUState *cpu, target_ulong old_asid, target_ulong new_as
 
     - this is used to monitor the non-kernel asid changes
     - once a new asid if found, store it's proc name and asid mapping relationship
-    - this will change gProcs, gAsidToProcIndex, and gProcFound
+    - this will change gProcs, gAsidToProcIndex, and gProcFoundByProcChange
 
 Refer pri_dwarf.cpp and asidstory.h 
     - handle asid change in pri_dwarf.
@@ -5034,10 +5045,10 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
 
         // printf("%s: found the target process by name: %s\n", __FUNCTION__, proc->name);
 
-        if (!gProcFound){
+        if (!gProcFoundByProcChange){
             // this is the monitored process.
-            gProcFound = true;
-            printf("%s: setting gProcFound to be true\n", __FUNCTION__);
+            gProcFoundByProcChange = true;
+            printf("%s: setting gProcFoundByProcChange to be true\n", __FUNCTION__);
             // exit(-1);
         }
         // keeping the target asid/struct in the same pace.
@@ -5058,8 +5069,8 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
         
         // exit(-1);
     }else{
-        gProcFound = false;
-        printf("%s: setting gProcFound to be false\n", __FUNCTION__);
+        gProcFoundByProcChange = false;
+        printf("%s: setting gProcFoundByProcChange to be false\n", __FUNCTION__);
     }
 
 

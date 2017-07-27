@@ -723,10 +723,16 @@ std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *
 
 std::string gProcToMonitor;
 
-// gProcFound:  in handle_proc_change, set to true when found the target, to false otherwise. 
+// gProcFoundByProcChange:  in handle_proc_change, set to true when found the target, to false otherwise. 
 //  this will be used in other places to check the consistent. like in is_target_process_running.
-//  e.g. there will be inconsistent if gProcFound is false, but is_target_proc_running return true.
-bool gProcFound;
+//  e.g. there will be inconsistent if gProcFoundByProcChange is false, but is_target_proc_running return true.
+bool gProcFoundByProcChange;
+
+// flag used only for is_target_process_running.
+// once target is found, set this flag until whole program exits;
+// - 
+bool gProcFound=false;
+
 //store all debug file paths
 std::vector<std::string> gDebugFiles;
 //store all process names
