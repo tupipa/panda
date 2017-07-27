@@ -5038,13 +5038,13 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
 
 
     // if (curProc == gProcToMonitor){
-    if (curProc == gProcToMonitor || (proc->pid == gTargetPID && proc->ppid == gTargetPPID) ){
-        // gTargetAsid = asid;
-        // printf("%s: reset target asid to 0x" TARGET_FMT_lx ", proc: %s\n", __FUNCTION__, asid, curProc.c_str());
-        // printf("%s: got asid of target Proc 0x" TARGET_FMT_lx ", proc: %s\n", __FUNCTION__, asid, curProc.c_str());
 
-        // printf("%s: found the target process by name: %s\n", __FUNCTION__, proc->name);
+    bool judge_by_struct;
+    target_ulong judge_asid;
+    OsiProc *judge_proc;
+    bool is_target = is_target_process_running(cpu, &judge_by_struct, &judge_asid, &judge_proc);
 
+    if ( is_target && judge_by_struct){
         if (!gProcFoundByProcChange){
             // this is the monitored process.
             gProcFoundByProcChange = true;
@@ -5066,7 +5066,7 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
         
         printf("%s: reset target ProcID to: \n", __FUNCTION__);
         print_proc_info(proc);
-        
+
         // exit(-1);
     }else{
         gProcFoundByProcChange = false;
@@ -5295,16 +5295,18 @@ bool init_plugin(void *self) {
     args = panda_get_args("trace_deadwrite");
 
 
-    target_ulong asid = panda_parse_ulong_opt(args, "asid", 0 , "the asid of the process to search for");
+    // target_ulong asid = panda_parse_ulong_opt(args, "asid", 0 , "the asid of the process to search for");
+
+    target_ulong asid_struct = panda_parse_ulong_opt(args, "asid_struct", 0 , "the asid in task struct of the process to search for");
 
     gTargetPID = panda_parse_ulong_opt(args, "pid", 0xffffffff , "the ppid of the process to search for");
 
     gTargetPPID = panda_parse_ulong_opt(args, "ppid", 0xffffffff , "the pid of the process to search for");
 
 
-    if (asid == 0){
+    if (asid_struct == 0 ){
         // no ASID parameter given, set the default behavior as following:
-        printf("%s: asid given as 0, or not given , or invalid, now use default value 0\n",__FUNCTION__);
+        printf("%s: asid_struct given as 0, or not given , or invalid, now use default value 0\n",__FUNCTION__);
         //gTargetAsid = 0x0; 
         //gTraceKernel=true;
         //gTraceApp=true;
@@ -5316,11 +5318,11 @@ bool init_plugin(void *self) {
     }else{
         // set target asid as input asid.
         // gTraceOne=true;
-        gTargetAsid = asid;
-        gTargetAsid_struct = asid;
+        gTargetAsid = asid_struct;
+        gTargetAsid_struct = asid_struct;
     }
     
-    printf("%s: target asid/asid_struct: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gTargetAsid);
+    printf("%s: target asid/asid_struct: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gTargetAsid_struct);
 
     if (gTargetPID != 0xffffffff){
         printf("\ttarget pid:" TARGET_FMT_lu "\n",gTargetPID);
@@ -5334,9 +5336,10 @@ bool init_plugin(void *self) {
     gProcToMonitor = std::string(proc_to_monitor);
     printf("%s: process to monitor: %s\n", __FUNCTION__, proc_to_monitor);
 
-    if (gTargetPID != 0xffffffff && gTargetPPID != 0xffffffff && gTargetAsid != 0x0 ){
+    if (gTargetPID != 0xffffffff && gTargetPPID != 0xffffffff && gTargetAsid_struct != 0x0 ){
         OsiProc * proc = new OsiProc();
-        proc->asid = gTargetAsid;
+
+        proc->asid = gTargetAsid_struct;
         proc->pid = gTargetPID;
         proc->ppid = gTargetPPID;
         proc->name = const_cast<char*>(gProcToMonitor.c_str());
