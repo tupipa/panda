@@ -4793,6 +4793,7 @@ int checkNewProcID(const ProcID & proc){
             printf("%s: proc name changes from %s to %s.\n", __FUNCTION__, procIt->proc->name, proc.proc->name);
             print_proc_info(proc.proc);
             *procIt = proc;
+            gRunningProcs.insert(proc);
         }
         procIndex = (int) ( procIt - gProcIDs.begin());
 

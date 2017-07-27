@@ -738,10 +738,16 @@ std::vector<std::string> gDebugFiles;
 //store all process names
 std::vector<std::string> gProcs;
 
+// used to store all procs with diff pid/ppid/asid combinations.
 std::vector<ProcID> gProcIDs;
+
+// used to store all modules, to be deprecated. not so usefull?
 std::vector<ModuleID> gModuleIDs;
 // std::vector<ProcID> gProcStructs;
+
+
 // std::tr1::unordered_map<target_ulong, OsiProc> gRunningProcs;
+// can be used to store all procs, name/pid/ppid/asid diffs.
 std::unordered_set<ProcID> gRunningProcs;
 
 //indicate whether we ever searched the debug file for a proc name, we use this to search only once for each proc name.
