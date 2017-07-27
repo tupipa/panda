@@ -144,11 +144,11 @@ inline void print_proc_info(OsiProc *proc){
     //     printf("\tp->asid: N/A");
     // }
 
-    // if(proc->offset){
+    if(proc->offset){
         printf("\t\tp->offset: 0x" TARGET_FMT_lx , proc->offset);
-    // }else{
-    //     printf("\tp->offset: N/A");
-    // }
+    }else{
+        printf("\tp->offset: N/A");
+    }
 
     if (proc->pages && proc->pages->start && proc->pages->len ){
         printf("\t page start: 0x" TARGET_FMT_lx ", page len: " TARGET_FMT_lu " \n",   
@@ -225,21 +225,7 @@ inline bool is_target_process_running(CPUState *cpu, bool *judge_by_struct, targ
         *judge_by_struct = true;
         std::string curProc(p->name);
         // if (curProc == gProcToMonitor || p->asid == gTargetAsid_struct){
-        if (curProc == gProcToMonitor){
-            // found the target proc by name
-            // update the target asid.
-
-            printf("%s: found the target process by name: %s\n", __FUNCTION__, p->name);
-
-            gTargetAsid = panda_current_asid(cpu);
-            gTargetAsid_struct = p->asid;
-            gTargetPID = p->pid;
-            gTargetPPID = p->ppid;
-            gProcToMonitor = curProc;
-
-            is_target = true;
-
-        }else if(p->ppid == gTargetPPID && p->pid == gTargetPID){
+        if(p->ppid == gTargetPPID && p->pid == gTargetPID){
             // found the target proc by pid, ppid
             // update the target asid.
 
@@ -253,6 +239,20 @@ inline bool is_target_process_running(CPUState *cpu, bool *judge_by_struct, targ
             is_target = true;
 
             exit(1);
+        }else  if (curProc == gProcToMonitor){
+            // found the target proc by name
+            // update the target asid.
+
+            printf("%s: found the target process by name: %s\n", __FUNCTION__, p->name);
+
+            gTargetAsid = panda_current_asid(cpu);
+            gTargetAsid_struct = p->asid;
+            gTargetPID = p->pid;
+            gTargetPPID = p->ppid;
+            gProcToMonitor = curProc;
+
+            is_target = true;
+
         }else{
             // keeping track of both p->asid and cpu->cr3
             gIgnoredASIDs.insert(p->asid);
@@ -5283,7 +5283,12 @@ bool init_plugin(void *self) {
     args = panda_get_args("trace_deadwrite");
 
 
-    target_ulong asid = panda_parse_ulong_opt(args, "asid", 0 , "a single asid to search for");
+    target_ulong asid = panda_parse_ulong_opt(args, "asid", 0 , "the asid of the process to search for");
+
+    gTargetPID = panda_parse_ulong_opt(args, "pid", 0xffffffff , "the ppid of the process to search for");
+
+    gTargetPPID = panda_parse_ulong_opt(args, "ppid", 0xffffffff , "the pid of the process to search for");
+
 
     if (asid == 0){
         // no ASID parameter given, set the default behavior as following:
@@ -5302,12 +5307,33 @@ bool init_plugin(void *self) {
         gTargetAsid = asid;
         gTargetAsid_struct = asid;
     }
+    
     printf("%s: target asid/asid_struct: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gTargetAsid);
+
+    if (gTargetPID != 0xffffffff){
+        printf("\ttarget pid:" TARGET_FMT_lu "\n",gTargetPID);
+    }
+    if (gTargetPPID != 0xffffffff){
+        printf("\ttarget ppid:" TARGET_FMT_lu "\n",gTargetPPID);
+    }
 
     const char *proc_to_monitor = panda_parse_string_req(args, "proc", "name of process to follow with debug info");
 
     gProcToMonitor = std::string(proc_to_monitor);
     printf("%s: process to monitor: %s\n", __FUNCTION__, proc_to_monitor);
+
+    if (gTargetPID != 0xffffffff && gTargetPPID != 0xffffffff && gTargetAsid != 0x0 ){
+        OsiProc * proc = new OsiProc();
+        proc->asid = gTargetAsid;
+        proc->pid = gTargetPID;
+        proc->ppid = gTargetPPID;
+        proc->name = const_cast<char*>(gProcToMonitor.c_str());
+
+        gTargetProcID = {proc};
+        printf("==> set target proc:\n");
+        print_proc_info(proc);
+    }
+
 
     const char *debug_list = panda_parse_string_opt(args, "debug_paths", "debug_paths.txt", "the file name that stores all the possible debug symbol directories, default as debug_paths.txt");
 
