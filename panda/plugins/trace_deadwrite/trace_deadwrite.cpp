@@ -3631,7 +3631,7 @@ inline void printRunningProcs(){
     for (it = gRunningProcs.begin(); it != gRunningProcs.end(); ++it)
     {
         // u_long f = *it; // Note the "*" here
-		printf("\t0x" TARGET_FMT_lx ":\t pid/ppid: " TARGET_FMT_lu "/" TARGET_FMT_lu "\t, procName: %s, \n", 
+		printf("\t0x" TARGET_FMT_lx ":\t pid/ppid: " TARGET_FMT_lu "/" TARGET_FMT_lu ",\tprocName: %s, \n", 
             it->proc->asid, it->proc->pid, it->proc->ppid, it->proc->name);
     }
     printf("\n");
@@ -3644,12 +3644,12 @@ VOID printAllProcsFound(){
     printf("%s: (last) monitored ASID:\n", __FUNCTION__);
     if (gAsidToProcIndex.count(gTargetAsid) != 0 ){
         OsiProc *tproc=gProcIDs[gAsidToProcIndex[gTargetAsid]].proc;
-        printf("\t0x" TARGET_FMT_lx ":\t pid/ppid: " TARGET_FMT_lu "/" TARGET_FMT_lu "\t, procName: %s\n",
+        printf("\t0x" TARGET_FMT_lx ":\t pid/ppid: " TARGET_FMT_lu "/" TARGET_FMT_lu ",\tprocName: %s\n",
          gTargetAsid, tproc->pid, tproc->ppid, tproc->name);
     }
     if (gAsidToProcIndex.count(gTargetAsid_struct) != 0){
         OsiProc *tp = gProcIDs[gAsidToProcIndex[gTargetAsid_struct]].proc;
-        printf("\t(struct): 0x" TARGET_FMT_lx ":\t pid/ppid: " TARGET_FMT_lu "/" TARGET_FMT_lu "\t, procName: %s\n", 
+        printf("\t(struct): 0x" TARGET_FMT_lx ":\t pid/ppid: " TARGET_FMT_lu "/" TARGET_FMT_lu ",\tprocName: %s\n", 
         gTargetAsid, tp->pid, tp->ppid, tp->name);
     }
     if (gAsidToProcIndex.count(gTargetAsid_struct) == 0 && gAsidToProcIndex.count(gTargetAsid) == 0 ){
@@ -4698,14 +4698,13 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
             if (!judge_by_struct) {
                 // judged by asid when gProcFound is not set, regard as not accurate.
                 if (!gProcFound){
-                    printf(" might be. Judge by asid and gProcFound is not set, don't trust\n");
+                    printf(" might be. Judge by asid and gProcFound is not set, ignore it.\n");
                     return 1;
                 }else{
-                    printf("\t judge by asid, and ProcFound set. trust it temporarily.\n");
+                    printf("\t judge by asid, and ProcFound set. trust it.\n");
                 }
             }else{             
-                printf("\tCongratulations! judge by proc struct!\n");    
-                printf("\t------- not cr3 overlap ! must be a process switch??\n");
+                printf("\tCongratulations! judge by proc struct! trust it.\n");
             }
         }
     }
@@ -5504,6 +5503,7 @@ bool init_plugin(void *self) {
     // use asidstory to find out the asid's of the ProcToMonitor.
 
     PPP_REG_CB("asidstory", on_proc_change, handle_proc_change);
+    // PPP_REG_CB("callstack_instr", on_call, handle_on_call);
     PPP_REG_CB("callstack_instr", on_call2, handle_on_call);
     PPP_REG_CB("callstack_instr", on_ret2, handle_on_ret);
 
