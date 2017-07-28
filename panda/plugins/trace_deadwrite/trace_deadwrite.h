@@ -170,8 +170,9 @@ extern "C" {
 // #define MULTI_THREADED
 
 // All globals
+#define SRC_FILE_NA "debug_info_not_available"
 #define CONTEXT_TREE_VECTOR_SIZE (10)
-#define MAX_CCT_PRINT_DEPTH (40)
+#define MAX_CCT_PRINT_DEPTH (900)
 #define MAX_FILE_PATH   (200)
 #ifndef MAX_DEAD_CONTEXTS_TO_LOG 
 #define MAX_DEAD_CONTEXTS_TO_LOG   (1000)

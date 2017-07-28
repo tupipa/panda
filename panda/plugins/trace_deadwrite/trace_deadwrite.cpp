@@ -3018,8 +3018,14 @@ int getLineInfoForAsidIP(target_ulong asid_target, target_ulong ip, FileLineInfo
                 std::string file, func;
                 unsigned long line;
                 //printf("get source location\n");
-                panda_GetSourceLocation(con_pc,  &line,&file, &func);
-                fprintf(gTraceFile,"\t%s:%lu: %s\n",file.c_str(),line, func.c_str());                                    
+                panda_GetSourceLocation(con_pc,  &line, &file, &func);
+
+                if (file == SRC_FILE_NA){
+                    // ignore the call stack layer if no file info available.
+                    fprintf(gTraceFile, "\tNA\n");
+                }else{
+                    fprintf(gTraceFile,"\t%s:%lu: %s\n",file.c_str(),line, func.c_str());
+                }                          
 
                 // check whether we have func/file/line info:                  
                 // std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(gTargetAsid);
@@ -3324,9 +3330,9 @@ inline target_ulong GetMeasurementBaseCount(){
             && getLineInfoForAsidIP(target_asid_st, ip, lineForPc) < 0){
             // cannot find by addr2line.
             // printf("%s: WARNING: no asidMap for asid 0x" TARGET_FMT_lx "\n", __FUNCTION__, target_asid);
-            lineForPc->valid = true;
+            lineForPc->valid = false;
             lineForPc->lineNum = 0;
-            lineForPc->fileName= "debug_info_not_available";
+            lineForPc->fileName= SRC_FILE_NA;
             lineForPc->funName = "NA";
         }
 
