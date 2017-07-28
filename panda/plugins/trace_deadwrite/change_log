@@ -14,6 +14,8 @@ TODO:
 
 - Problem 2: detection of call stacks. 
 
+	the call stack of sampel function, contains many functions that cannot find their source code info in the application.
+	
 	The solution callstack_instr plugin detects a function call by disasmbling every basic block's machine code and searches the 'call' instruction after block execution. Then based on this, it builds the call stack. To detect ret, it searches the block address in the call stack before every block executes. If block address exists in the call stack, it reports as a ret. This mechanisms might have the following drawbacks:
 
 	- In Linux, some call to a new function can be done without a 'call' instruction. For example, by manipulating the call stack and using ret, we can also use 'ret' to run a new function instead of using 'call' to run a new function. For example, the system call: clone(fn, arg, flags, child_stack, ...), will create a lightweight process running the given function 'fn'. However, it does not issue a 'call' instruction to call the 'fn', instead, it put the args and the address of fn onto its stack. When clone() terminates, the cpu will fetch and executes the new function 'fn(args)'.
