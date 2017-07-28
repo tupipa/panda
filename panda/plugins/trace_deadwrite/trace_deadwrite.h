@@ -22,6 +22,7 @@
 //#include <ext/hash_map>
 #include <tr1/unordered_map>
 #include <unordered_set>
+#include <set>
 #include <sys/types.h>
 #include <stdlib.h>
 #include <list>
@@ -748,7 +749,8 @@ std::vector<ModuleID> gModuleIDs;
 
 // std::tr1::unordered_map<target_ulong, OsiProc> gRunningProcs;
 // can be used to store all procs, name/pid/ppid/asid diffs.
-std::unordered_set<ProcID> gRunningProcs;
+// std::unordered_set<ProcID> gRunningProcs;
+std::set<ProcID> gRunningProcs;
 
 //indicate whether we ever searched the debug file for a proc name, we use this to search only once for each proc name.
 std::tr1::unordered_map<std::string, bool> gProcToDebugDone;

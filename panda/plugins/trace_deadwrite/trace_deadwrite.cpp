@@ -3627,7 +3627,8 @@ VOID Fini() {
 }
 
 inline void printRunningProcs(){
-    std::unordered_set<ProcID>::iterator it;
+    // std::unordered_set<ProcID>::iterator it;
+    std::set<ProcID>::iterator it;
     for (it = gRunningProcs.begin(); it != gRunningProcs.end(); ++it)
     {
         // u_long f = *it; // Note the "*" here
