@@ -2162,8 +2162,13 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
         // not target process.
 
         if(gIsTargetBlock){
-            printf("--%s: WARNING: target detected at before_block_exec but not detected here, might a process switch??\n", __FUNCTION__);
+            printf("--%s: WARNING: target detected at before_block_exec but not detected here, might a process switch??, asid: 0x" TARGET_FMT_lx ", gCurrentTraceBlock->address: 0x " TARGET_FMT_lx "\n", 
+                __FUNCTION__, judge_asid, gCurrentTraceBlock->address);
 
+            if (judge_by_struct){
+                printf("current proc info: \n");
+                print_proc_info(judge_proc);
+            }
         }
         // else{
         //     return 1;
@@ -4316,11 +4321,17 @@ void handle_on_call(CPUState *cpu,TranslationBlock *src_tb, target_ulong dst_fun
         // not target process.
         if(gIsTargetBlock){
             printf("%s: WARNING: target detected at before_block_exec but not detected here, might a process switch??\n", __FUNCTION__);
+
+            if (judge_by_struct){
+                printf("current proc info: \n");
+                print_proc_info(judge_proc);
+            }
+
             // exit(-1);
-        }else{
-            return ;
         }
+
         return ;
+
     }else{
         if (! gIsTargetBlock){
             printf("%s: WARNING: target not detected at before_block_exec, but detected here, now check whether it's probably a cr3 overlap? ", __FUNCTION__);
@@ -4456,8 +4467,10 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
 
     //Lele: if last block initiated a call, then set gInitiatedCall as true. 
     //  Then next block would be inside a new function call.
-    //printf("########### Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
 
+    if (gProcFound){
+        printf("########### Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
+    }
     //Lele: check asid.
     // target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
     // if (gTraceOne){
@@ -4525,8 +4538,11 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
             // //print full info of proc
             // print_proc_info(judge_proc);
         }
-        else{
-            printf("%s: WARNING: **** judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n; will not trust this here**** ",
+        else if (gProcFound){
+            printf("%s: gProcFound is set, judge by asid is trustworthy\n", __FUNCTION__);
+
+        }else {
+            printf("%s: WARNING: **** judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n; will not trust this here**** \n",
             __FUNCTION__, judge_asid, gTargetAsid);
             return 1;
         }
@@ -4594,7 +4610,12 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
 
     // Lele: after block executed. PC would point to the new function if tb has a call instruction at last.
     //
+
+    if (gProcFound){
+        printf("########### Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
+    }
     //printf("########### Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+
 
     //Lele: check asid.
     // target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
@@ -4647,16 +4668,22 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     //     printf("%s: judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n",
     //         __FUNCTION__, judge_asid, gTargetAsid);
     // }
-    
+
+    // first check consistence between is_target and gIsTargetBlock    
     if(!is_target){
         // not target process.
         if(gIsTargetBlock){
-            printf("%s: WARNING: target detected at before_block_exec but not detected here, might a process switch??, tb->pc: 0x " TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+
+            printf("%s: WARNING: target detected at before_block_exec but not detected here, might a process switch??, asid: 0x" TARGET_FMT_lx ", tb->pc: 0x " TARGET_FMT_lx "\n", 
+                __FUNCTION__, judge_asid, tb->pc);
+
+            if (judge_by_struct){
+                printf("current proc info: \n");
+                print_proc_info(judge_proc);
+            }
             // exit(-1);
-        }else{
-            return 1;
         }
-        return 1;
+
     }else{
         if (! gIsTargetBlock){
             printf("%s: WARNING: target not detected at before_block_exec, but detected here, tb->pc: 0x " TARGET_FMT_lx ". might cr3 overlap??" , __FUNCTION__, tb->pc);
@@ -4679,8 +4706,13 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
         gIsTargetBlock = false;
     }
 
+    // return if now target block.
+    if (!is_target){
+        return 1;
+    }
+
     
-    //  lele: should update Trace IPs after block executed.
+    //  lele: use flags to track each basic block before/after and between.
     //  In Deadspy: gBlockShadowMap(gTraceShadowMap) is built during instrumentation. and used here in the instrumentation code.
     //  However, in Panda: we built gBlockShadowMap only when there is a mem write detected in mem_callback.
     //  First, gBlockShadowMap should be built fully after the exe of one basic block.
@@ -4694,6 +4726,8 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
 
     // Refer: InstrumentTrace() TODO
     //InstrumentTraceEntry() -> UpdateDataOnFunctionEntry() -> GoDownCallChain(cpu,tb);
+
+    // reset some flags used for each basic block in the exe path:
     if (gNewBasicBlock){ // only update ChildIPs for one time for each Basic Block.
         gNewBasicBlock=false;
     }
@@ -4704,9 +4738,13 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
         // printf("%s: mark gBlockShadowMap[0x" TARGET_FMT_lx "] as done for this block\n", __FUNCTION__, tb->pc);
         gBlockShadowMapDone[tb->pc]=true;
     }
+
     // reset slot index, so that in next basic block, we count mem R/W from the begining.
     gCurrentSlot = 0;
 
+
+    /////////////////////////////////////////////////////////
+    /// this should be deprecated
     if(block_cache.count(tb->pc) == 0){
         // printf("%s: WARNING: no disasemble cache available for tb->pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
         return 1;
@@ -4739,6 +4777,9 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
         printf("%s: iret detected, but not set InitiatedIRET flag\n", __FUNCTION__);
         // gInitiatedRet=true;
     }
+
+    //////////////////////////////////////////////
+
     return 1;
 }
 
