@@ -3007,15 +3007,19 @@ int getLineInfoForAsidIP(target_ulong asid_target, target_ulong ip, FileLineInfo
         int depth = 0;
 
         // Dont print if the depth is more than MAX_CCT_PRINT_DEPTH since files become too large
+
+        fprintf(gTraceFile, "\tcall stack:\n");
+        fprintf(gTraceFile, "\t-> depth\t||\tpc\t||\tsrcInfo\t\n");
         while(curContext && (depth ++ < MAX_CCT_PRINT_DEPTH )){     
             target_ulong con_pc = curContext->address;       
             if(IsValidIP(con_pc)){
-                fprintf(gTraceFile, "\n!pc: 0x" TARGET_FMT_lx, con_pc);
+                fprintf(gTraceFile, "\t-> %d||\t 0x" TARGET_FMT_lx ",", 
+                    depth, con_pc);
                 std::string file, func;
                 unsigned long line;
                 //printf("get source location\n");
                 panda_GetSourceLocation(con_pc,  &line,&file, &func);
-                fprintf(gTraceFile,"\t%s:%lu: %s",file.c_str(),line, func.c_str());                                    
+                fprintf(gTraceFile,"\t%s:%lu: %s\n",file.c_str(),line, func.c_str());                                    
 
                 // check whether we have func/file/line info:                  
                 // std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(gTargetAsid);
@@ -3042,17 +3046,17 @@ int getLineInfoForAsidIP(target_ulong asid_target, target_ulong ip, FileLineInfo
             }
 #ifndef MULTI_THREADED 
             else if (curContext == gRootContext){
-                fprintf(gTraceFile, "\nROOT_CTXT");	
+                fprintf(gTraceFile, "ROOT_CTXT\n");	
             }
 #else //MULTI_THREADED
             else if ( (root=IsARootContextNode(curContext)) != -1){
-                fprintf(gTraceFile, "\nROOT_CTXT_THREAD %d", root);	
+                fprintf(gTraceFile, "ROOT_CTXT_THREAD %d\n", root);	
             } 
 #endif //end  ifndef MULTI_THREADED            
             else if (curContext->address == 0){
-                fprintf(gTraceFile, "\nIND CALL");	
+                fprintf(gTraceFile, "IND CALL\n");	
             } else{
-                fprintf(gTraceFile, "\nBAD IP ");	
+                fprintf(gTraceFile, "BAD IP \n");	
             }
             curContext = curContext->parent;
         }
@@ -3352,25 +3356,26 @@ inline target_ulong GetMeasurementBaseCount(){
     // Prints the complete calling context including the line nunbers and the context's contribution, given a DeadInfo 
     inline VOID PrintIPAndCallingContexts(const DeadInfoForPresentation & di, target_ulong measurementBaseCount){
         // printf("now in func: %s\n", __FUNCTION__);
-        fprintf(gTraceFile,"\n " TARGET_FMT_lu " = %e",di.count, di.count * 100.0 / measurementBaseCount);
         fprintf(gTraceFile,"\n-------------------------------------------------------\n");
-#ifdef MERGE_SAME_LINES
-        fprintf(gTraceFile,"\n%s",di.pMergedDeadInfo->line1.c_str());                                    
-#else // no MERGE_SAME_LINES
+        fprintf(gTraceFile,"\n count(percentage): " TARGET_FMT_lu " (%e)",di.count, di.count * 100.0 / measurementBaseCount);
+// #ifdef MERGE_SAME_LINES
+//         fprintf(gTraceFile,"\n%s",di.pMergedDeadInfo->line1.c_str());                                    
+// #else // no MERGE_SAME_LINES
         std::string file, func;
         unsigned long line;
         //printf("get source location\n");
         panda_GetSourceLocation(di.pMergedDeadInfo->ip1,  &line,&file, &func);
-        fprintf(gTraceFile,"\n%p:%s:%lu: %s",(void *)(uintptr_t)(di.pMergedDeadInfo->ip1),file.c_str(),line, func.c_str());                                    
-#endif //end MERGE_SAME_LINES        
+        fprintf(gTraceFile,"first write:\n");
+        fprintf(gTraceFile,"\n\t%p:%s:%lu: %s\n",(void *)(uintptr_t)(di.pMergedDeadInfo->ip1),file.c_str(),line, func.c_str());                                    
+// #endif //end MERGE_SAME_LINES        
         PrintFullCallingContext(di.pMergedDeadInfo->context1);
-        fprintf(gTraceFile,"\n***********************\n");
-#ifdef MERGE_SAME_LINES
-        fprintf(gTraceFile,"\n%s",di.pMergedDeadInfo->line2.c_str());                                    
-#else //no MERGE_SAME_LINES        
+        fprintf(gTraceFile,"\ndeadwrite: \n");
+// #ifdef MERGE_SAME_LINES
+//         fprintf(gTraceFile,"\n%s",di.pMergedDeadInfo->line2.c_str());                                    
+// #else //no MERGE_SAME_LINES        
         panda_GetSourceLocation(di.pMergedDeadInfo->ip2,  &line,&file, &func);
-        fprintf(gTraceFile,"\n%p:%s:%lu: %s",(void *)(uintptr_t)(di.pMergedDeadInfo->ip2),file.c_str(),line, func.c_str());
-#endif //end MERGE_SAME_LINES        
+        fprintf(gTraceFile,"\n%p:%s:%lu: %s\n",(void *)(uintptr_t)(di.pMergedDeadInfo->ip2),file.c_str(),line, func.c_str());
+// #endif //end MERGE_SAME_LINES        
         PrintFullCallingContext(di.pMergedDeadInfo->context2);
         fprintf(gTraceFile,"\n-------------------------------------------------------\n");
 
@@ -3540,108 +3545,108 @@ void ExtractDeadMap(){
 	}
     
 #else //no IP_AND_CCT
-    // On each Unload of a loaded image, the accummulated deadness information is dumped (JUST the CCT case, no IP)
-    // VOID ImageUnload() {
-void ExtractDeadMap(){
-        // fprintf(gTraceFile, "\nUnloading %s", IMG_Name(img).c_str());
-        fprintf(gTraceFile, "\nUnloading");
-        //static bool done = false;
-        bool done = false;
-        //if (done)
-        //    return;
+//     // On each Unload of a loaded image, the accummulated deadness information is dumped (JUST the CCT case, no IP)
+//     // VOID ImageUnload() {
+// void ExtractDeadMap(){
+//         // fprintf(gTraceFile, "\nUnloading %s", IMG_Name(img).c_str());
+//         fprintf(gTraceFile, "\nUnloading");
+//         //static bool done = false;
+//         bool done = false;
+//         //if (done)
+//         //    return;
         
-        //if(IMG_Name(img) != "/opt/apps/openmpi/1.3.3-gcc/lib/openmpi/mca_osc_rdma.so")
-        //if(IMG_Name(img) != "/users/mc29/mpi_dead/Gauss.exe")
-        //if(IMG_Name(img) != "/users/mc29/chombo/chombo/Chombo-4.petascale/trunk/benchmark/AMRGodunovFBS/exec/amrGodunov3d.Linux.64.mpicxx.mpif90.OPTHIGH.MPI.ex")
-        //return;
+//         //if(IMG_Name(img) != "/opt/apps/openmpi/1.3.3-gcc/lib/openmpi/mca_osc_rdma.so")
+//         //if(IMG_Name(img) != "/users/mc29/mpi_dead/Gauss.exe")
+//         //if(IMG_Name(img) != "/users/mc29/chombo/chombo/Chombo-4.petascale/trunk/benchmark/AMRGodunovFBS/exec/amrGodunov3d.Linux.64.mpicxx.mpif90.OPTHIGH.MPI.ex")
+//         //return;
         
-        // get  measurementBaseCount first 
-        target_ulong measurementBaseCount =  GetMeasurementBaseCount();         
-        fprintf(gTraceFile, "\nTotal Instr =  " TARGET_FMT_lu "", measurementBaseCount);
-        printf("get total Instr:  " TARGET_FMT_lu "\n", measurementBaseCount);
-        fflush(gTraceFile);
+//         // get  measurementBaseCount first 
+//         target_ulong measurementBaseCount =  GetMeasurementBaseCount();         
+//         fprintf(gTraceFile, "\nTotal Instr =  " TARGET_FMT_lu "", measurementBaseCount);
+//         printf("get total Instr:  " TARGET_FMT_lu "\n", measurementBaseCount);
+//         fflush(gTraceFile);
         
-#if defined(CONTINUOUS_DEADINFO)
-        std::tr1::unordered_map<uint64_t, uint64_t>::iterator mapIt;
-        //dense_hash_map<uint64_t, uint64_t>::iterator mapIt;
-        //sparse_hash_map<uint64_t, uint64_t>::iterator mapIt;
-#else // no defined(CONTINUOUS_DEADINFO)        
-        dense_hash_map<uint64_t, DeadInfo>::iterator mapIt;
-        //std::tr1::unordered_map<uint64_t, DeadInfo>::iterator mapIt;
-#endif  //end defined(CONTINUOUS_DEADINFO)        
-        std::list<DeadInfo> deadList;
+// #if defined(CONTINUOUS_DEADINFO)
+//         std::tr1::unordered_map<uint64_t, uint64_t>::iterator mapIt;
+//         //dense_hash_map<uint64_t, uint64_t>::iterator mapIt;
+//         //sparse_hash_map<uint64_t, uint64_t>::iterator mapIt;
+// #else // no defined(CONTINUOUS_DEADINFO)        
+//         dense_hash_map<uint64_t, DeadInfo>::iterator mapIt;
+//         //std::tr1::unordered_map<uint64_t, DeadInfo>::iterator mapIt;
+// #endif  //end defined(CONTINUOUS_DEADINFO)        
+//         std::list<DeadInfo> deadList;
         
         
-#if defined(CONTINUOUS_DEADINFO)
-        for (mapIt = DeadMap.begin(); mapIt != DeadMap.end(); mapIt++) {
-            uint64_t = mapIt->first;
-            uint64_t elt1 = (hash >> 32) * sizeof(void **) / sizeof(ContextNode);
-            uint64_t elt2 = (hash & 0xffffffff) * sizeof(void **) / sizeof(ContextNode);
-            void ** ctxt1 = (void**) ((ContextNode*)gPreAllocatedContextBuffer + elt1);
-            void ** ctxt2 = (void**)((ContextNode*)gPreAllocatedContextBuffer + elt2);
-            DeadInfo tmpDeadInfo = {(void*)ctxt1, (void*)ctxt2,  mapIt->second};
-            deadList.push_back(tmpDeadInfo);
-        }
-        DeadMap.clear();
+// #if defined(CONTINUOUS_DEADINFO)
+//         for (mapIt = DeadMap.begin(); mapIt != DeadMap.end(); mapIt++) {
+//             uint64_t = mapIt->first;
+//             uint64_t elt1 = (hash >> 32) * sizeof(void **) / sizeof(ContextNode);
+//             uint64_t elt2 = (hash & 0xffffffff) * sizeof(void **) / sizeof(ContextNode);
+//             void ** ctxt1 = (void**) ((ContextNode*)gPreAllocatedContextBuffer + elt1);
+//             void ** ctxt2 = (void**)((ContextNode*)gPreAllocatedContextBuffer + elt2);
+//             DeadInfo tmpDeadInfo = {(void*)ctxt1, (void*)ctxt2,  mapIt->second};
+//             deadList.push_back(tmpDeadInfo);
+//         }
+//         DeadMap.clear();
         
-#else   // no defined(CONTINUOUS_DEADINFO)        
-        for (mapIt = DeadMap.begin(); mapIt != DeadMap.end(); mapIt++) {
-            deadList.push_back(mapIt->second);
-        }
-        DeadMap.clear();
-#endif  // end defined(CONTINUOUS_DEADINFO)        
-        deadList.sort(DeadInfoComparer);
-        std::list<DeadInfo>::iterator it = deadList.begin();
-        PIN_LockClient();
-        target_ulong deads = 0;
-        for (; it != deadList.end(); it++) {
+// #else   // no defined(CONTINUOUS_DEADINFO)        
+//         for (mapIt = DeadMap.begin(); mapIt != DeadMap.end(); mapIt++) {
+//             deadList.push_back(mapIt->second);
+//         }
+//         DeadMap.clear();
+// #endif  // end defined(CONTINUOUS_DEADINFO)        
+//         deadList.sort(DeadInfoComparer);
+//         std::list<DeadInfo>::iterator it = deadList.begin();
+//         PIN_LockClient();
+//         target_ulong deads = 0;
+//         for (; it != deadList.end(); it++) {
             
-#ifdef MULTI_THREADED
-            // for MT, if they are from the same CCT, skip
-            if(IsSameContextTree((ContextNode*) it->firstIP, (ContextNode*)it->secondIP)){
-            	gTotalDead += it->count ;
-                continue;
-            } 
-#endif //end MULTI_THREADED            
+// #ifdef MULTI_THREADED
+//             // for MT, if they are from the same CCT, skip
+//             if(IsSameContextTree((ContextNode*) it->firstIP, (ContextNode*)it->secondIP)){
+//             	gTotalDead += it->count ;
+//                 continue;
+//             } 
+// #endif //end MULTI_THREADED            
             
-            // Print just first MAX_DEAD_CONTEXTS_TO_LOG contexts
-            if(deads < MAX_DEAD_CONTEXTS_TO_LOG){
-                try{
-                    fprintf(gTraceFile,"\n " TARGET_FMT_lu " = %e",it->count, it->count * 100.0 / measurementBaseCount);
-                    PrintCallingContexts(*it);
-                } catch (...) {
-                    fprintf(gTraceFile,"\nexcept");
-                }
-            } else {
-#ifdef PRINT_ALL_CTXT
-                // print only dead count
-                fprintf(gTraceFile,"\nCTXT_DEAD_CNT: " TARGET_FMT_lu " = %e",it->count, it->count * 100.0 / measurementBaseCount);
-#endif //end PRINT_ALL_CTXT                
-            }
+//             // Print just first MAX_DEAD_CONTEXTS_TO_LOG contexts
+//             if(deads < MAX_DEAD_CONTEXTS_TO_LOG){
+//                 try{
+//                     fprintf(gTraceFile,"\n " TARGET_FMT_lu " = %e",it->count, it->count * 100.0 / measurementBaseCount);
+//                     PrintCallingContexts(*it);
+//                 } catch (...) {
+//                     fprintf(gTraceFile,"\nexcept");
+//                 }
+//             } else {
+// #ifdef PRINT_ALL_CTXT
+//                 // print only dead count
+//                 fprintf(gTraceFile,"\nCTXT_DEAD_CNT: " TARGET_FMT_lu " = %e",it->count, it->count * 100.0 / measurementBaseCount);
+// #endif //end PRINT_ALL_CTXT                
+//             }
             
-#ifdef MULTI_THREADED
-            gTotalMTDead += it->count ;
-#endif //end MULTI_THREADED            
-            gTotalDead += it->count ;
-            deads++;
-        }
+// #ifdef MULTI_THREADED
+//             gTotalMTDead += it->count ;
+// #endif //end MULTI_THREADED            
+//             gTotalDead += it->count ;
+//             deads++;
+//         }
         
-        PrintEachSizeWrite();
+//         PrintEachSizeWrite();
         
         
-#ifdef TESTING_BYTES
-        PrintInstructionBreakdown();
-#endif //end TESTING_BYTES        
+// #ifdef TESTING_BYTES
+//         PrintInstructionBreakdown();
+// #endif //end TESTING_BYTES        
         
-#ifdef GATHER_STATS
-        PrintStats(deadList, deads);
-#endif //end GATHER_STATS        
+// #ifdef GATHER_STATS
+//         PrintStats(deadList, deads);
+// #endif //end GATHER_STATS        
         
-        deadList.clear();
-        // PIN_UnlockClient();
-        done = true;
-        printf("%s: done.\n", __FUNCTION__);
-    }
+//         deadList.clear();
+//         // PIN_UnlockClient();
+//         done = true;
+//         printf("%s: done.\n", __FUNCTION__);
+//     }
 
 #endif   //end IP_AND_CCT    
 
@@ -4740,8 +4745,13 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
                 }else{
                     printf("\t judge by asid, and ProcFound set. trust it.\n");
                 }
-            }else{             
-                printf("\tCongratulations! judge by proc struct! trust it.\n");
+            }else{  
+                if (!gProcFound){
+                    printf(" might be. Judge by struct, but gProcFound is not set, ignore it.\n");
+                    return 1;
+                }else{
+                    printf("\t judge by struct, and ProcFound set. trust it.\n");
+                }       
             }
         }
     }
@@ -4779,11 +4789,14 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     if (gNewBlockNode){
         gNewBlockNode = false;
     }
-    if (! gBlockShadowMapDone[tb->pc]){
-        // printf("%s: mark gBlockShadowMap[0x" TARGET_FMT_lx "] as done for this block\n", __FUNCTION__, tb->pc);
-        gBlockShadowMapDone[tb->pc]=true;
+    if (gBlockShadowMapDone.count(tb->pc)==0){
+        printf("%s: WARNING: (ERROR): gBlockShadowMapDone not setup yet for tb->pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
+    }else{
+        if (! gBlockShadowMapDone[tb->pc]){
+            // printf("%s: mark gBlockShadowMap[0x" TARGET_FMT_lx "] as done for this block\n", __FUNCTION__, tb->pc);
+            gBlockShadowMapDone[tb->pc]=true;
+        }
     }
-
     // reset slot index, so that in next basic block, we count mem R/W from the begining.
     gCurrentSlot = 0;
 

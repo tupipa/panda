@@ -171,7 +171,7 @@ extern "C" {
 
 // All globals
 #define CONTEXT_TREE_VECTOR_SIZE (10)
-#define MAX_CCT_PRINT_DEPTH (20)
+#define MAX_CCT_PRINT_DEPTH (40)
 #define MAX_FILE_PATH   (200)
 #ifndef MAX_DEAD_CONTEXTS_TO_LOG 
 #define MAX_DEAD_CONTEXTS_TO_LOG   (1000)
