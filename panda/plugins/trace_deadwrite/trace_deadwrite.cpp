@@ -2739,10 +2739,10 @@ int addr2line(std::string debugfile, target_ulong addr, FileLineInfo * lineInfo)
 
     std::string rawLineInfo = runcmd(cmd);
 
-    printf("%s: cmd returned: '%s'\n", __FUNCTION__, rawLineInfo.c_str());
+    // printf("%s: cmd returned: '%s'\n", __FUNCTION__, rawLineInfo.c_str());
 
     if (rawLineInfo.find("?? ??:0") != std::string::npos){
-        // printf("No result from addr2line\n");
+        printf("%s: No result from addr2line: %s\n",__FUNCTION__, rawLineInfo.c_str());
         return -1;
 
     }else if (rawLineInfo.find("??:?") != std::string::npos){
@@ -2766,7 +2766,43 @@ int addr2line(std::string debugfile, target_ulong addr, FileLineInfo * lineInfo)
         lineInfo->valid = true;
         lineInfo->extraInfo = tmp;
 
+    }else if (rawLineInfo.find(":?") != std::string::npos){
+        // printf("have func and file, but no line result from addr2line\n");
+
+        printf("get addr2line result:\n\t%s\n\tnow parse it\n", rawLineInfo.c_str());
+        //parse and store it as FileLineInfo struct.
+        size_t pos = rawLineInfo.find(" ");
+        lineInfo->funName = rawLineInfo.substr(0,pos); //store fun name.
+
+        std::string tmp = rawLineInfo.substr(pos+1); // ignore fun name and space.
+        std::cout<<"rest raw after ignore func: "<<tmp<<std::endl;
+        
+        //find second space, must be after 'at'
+        pos = tmp.find(" ");
+        tmp = tmp.substr(pos+1); //ignore 'at' and space
+        std::cout<<"rest raw after ignore 'at': "<<tmp<<std::endl;
+
+        pos = tmp.find(":");
+        lineInfo->fileName = tmp.substr(0, pos);
+        tmp = tmp.substr(pos+1); //ignore file name and :
+        std::cout<<"rest raw after ignore 'filename': "<<tmp<<std::endl;
+
+        pos = tmp.find("?");
+
+        lineInfo->lineNum = 0;
+
+        if (pos + 1 != tmp.length()){
+            tmp = rawLineInfo.substr(pos+1); //ignore line Num '?'.
+            lineInfo->extraInfo = tmp;
+        }else{
+            lineInfo->extraInfo = "";
+        }
+
+        lineInfo->valid = true;
+
+
     }else if (rawLineInfo.find_first_not_of("\n\t ") != std::string::npos){
+        // not empty string.
 
         printf("get addr2line result:\n\t%s\n\tnow parse it\n", rawLineInfo.c_str());
         //parse and store it as FileLineInfo struct.
@@ -2799,7 +2835,7 @@ int addr2line(std::string debugfile, target_ulong addr, FileLineInfo * lineInfo)
         lineInfo->lineNum = Result;
 
         if (pos != std::string::npos){
-            tmp = rawLineInfo.substr(pos); //ignore line Num.
+            tmp = tmp.substr(pos); //ignore line Num.
             lineInfo->extraInfo = tmp;
         }else{
             lineInfo->extraInfo = "";
