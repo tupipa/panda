@@ -4281,7 +4281,7 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 */
 void handle_on_call(CPUState *cpu,TranslationBlock *src_tb, target_ulong dst_func){
    
-    // printf("Now in %s\n", __FUNCTION__);
+    // printf("Now in %s(after_block_exec)\n", __FUNCTION__);
     // verify the pc of func by callstack_instr.cpp
     // current pc should be exactly dst_func
     target_ulong pc, cs_base;
@@ -4309,21 +4309,21 @@ void handle_on_call(CPUState *cpu,TranslationBlock *src_tb, target_ulong dst_fun
     // // // print judge metric, for debug
     // if(judge_by_struct){
 
-    //     printf("%s: judge by name in struct. \n",
+    //     printf("%s(after_block_exec): judge by name in struct. \n",
     //         __FUNCTION__);
         // printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
     //     //print full info of proc
     //     print_proc_info(judge_proc);
     // }
     // else{
-    //     printf("%s: judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n",
+    //     printf("%s(after_block_exec): judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n",
     //         __FUNCTION__, judge_asid, gTargetAsid);
     // }
     
     if(!is_target){
         // not target process.
         if(gIsTargetBlock){
-            printf("%s: WARNING: target detected at before_block_exec but not detected here, might a process switch??\n", __FUNCTION__);
+            printf("%s(after_block_exec): WARNING: target detected at before_block_exec but not detected here, might a process switch??\n", __FUNCTION__);
 
             if (judge_by_struct){
                 printf("current proc info: \n");
@@ -4337,7 +4337,7 @@ void handle_on_call(CPUState *cpu,TranslationBlock *src_tb, target_ulong dst_fun
 
     }else{
         if (! gIsTargetBlock){
-            printf("%s: WARNING: target not detected at before_block_exec, but detected here, now check whether it's probably a cr3 overlap? ", __FUNCTION__);
+            printf("%s(after_block_exec): WARNING: target not detected at before_block_exec, but detected here, now check whether it's probably a cr3 overlap? ", __FUNCTION__);
 
             if (!judge_by_struct) {
                 // judged by asid, not accurate, regard as cr3 overlap.
@@ -4354,7 +4354,7 @@ void handle_on_call(CPUState *cpu,TranslationBlock *src_tb, target_ulong dst_fun
         }
     }
     
-    printf("%s: callstack_instr get a call from block tb->pc: 0x" TARGET_FMT_lx ", to func 0x" TARGET_FMT_lx " \n", __FUNCTION__, src_tb->pc, dst_func);
+    printf("%s(after_block_exec): callstack_instr get a call from block tb->pc: 0x" TARGET_FMT_lx ", to func 0x" TARGET_FMT_lx " \n", __FUNCTION__, src_tb->pc, dst_func);
     
     // 
     // gInitiatedCall = true;
@@ -4430,7 +4430,7 @@ void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_fu
         exit(-1);
     }
 
-    printf("%s(before_block_exec): go up %d function calls\n", __FUNCTION__, depth);
+    printf("%s(before_block_exec): go up %d function call(s)\n", __FUNCTION__, depth);
 
     GoUpCallChain(cpu, dst_tb, from_func, depth);
 
@@ -4550,7 +4550,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
             return 1;
         }
 
-
+        printf("%s: set gIsTargetBlock to be true.\n",__FUNCTION__);
         gIsTargetBlock = true;
         // printf("%s: detect a block for the target process: tb->pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
     }
