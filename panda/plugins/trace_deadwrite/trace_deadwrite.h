@@ -656,9 +656,23 @@ struct ProcID{
 	}
 
 	bool operator<(const ProcID  & x) const{
-		if (this->proc->asid < x.proc->asid)
+
+		if (this->proc->asid == x.proc->asid){
+            // same asid, then compare name.
+            if (this->proc->name && x.proc->name){
+                std::string name1(this->proc->name);
+                std::string name2(x.proc->name);
+                if (name1.compare(name2) < 0){
+                    return true;
+                }else{
+                    return false;
+                }
+            }
+        }else if (this->proc->asid < x.proc->asid){
+            // different asid, compare according to asid.
             return true;
-		return false;
+        }
+        return false;
 	}
 };
 
