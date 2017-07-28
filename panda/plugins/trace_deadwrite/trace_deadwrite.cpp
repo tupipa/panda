@@ -3009,11 +3009,11 @@ int getLineInfoForAsidIP(target_ulong asid_target, target_ulong ip, FileLineInfo
         // Dont print if the depth is more than MAX_CCT_PRINT_DEPTH since files become too large
 
         fprintf(gTraceFile, "\tcall stack:\n");
-        fprintf(gTraceFile, "\t-> depth\t||\tpc\t||\tsrcInfo\t\n");
+        fprintf(gTraceFile, "\tdepth\t||\tpc\t\t\t||\tsrcInfo\t\n");
         while(curContext && (depth ++ < MAX_CCT_PRINT_DEPTH )){     
             target_ulong con_pc = curContext->address;       
             if(IsValidIP(con_pc)){
-                fprintf(gTraceFile, "\t-> %d||\t 0x" TARGET_FMT_lx ",", 
+                fprintf(gTraceFile, "\t-> %d\t||\t0x" TARGET_FMT_lx "\t||", 
                     depth, con_pc);
                 std::string file, func;
                 unsigned long line;
@@ -3357,7 +3357,7 @@ inline target_ulong GetMeasurementBaseCount(){
     inline VOID PrintIPAndCallingContexts(const DeadInfoForPresentation & di, target_ulong measurementBaseCount){
         // printf("now in func: %s\n", __FUNCTION__);
         fprintf(gTraceFile,"\n-------------------------------------------------------\n");
-        fprintf(gTraceFile,"\n count(percentage): " TARGET_FMT_lu " (%e)",di.count, di.count * 100.0 / measurementBaseCount);
+        fprintf(gTraceFile,"\ncount(percentage): " TARGET_FMT_lu " (%e)\n",di.count, di.count * 100.0 / measurementBaseCount);
 // #ifdef MERGE_SAME_LINES
 //         fprintf(gTraceFile,"\n%s",di.pMergedDeadInfo->line1.c_str());                                    
 // #else // no MERGE_SAME_LINES
@@ -3365,19 +3365,19 @@ inline target_ulong GetMeasurementBaseCount(){
         unsigned long line;
         //printf("get source location\n");
         panda_GetSourceLocation(di.pMergedDeadInfo->ip1,  &line,&file, &func);
-        fprintf(gTraceFile,"first write:\n");
-        fprintf(gTraceFile,"\n\t%p:%s:%lu: %s\n",(void *)(uintptr_t)(di.pMergedDeadInfo->ip1),file.c_str(),line, func.c_str());                                    
+        fprintf(gTraceFile,"<dead write>\n");
+        fprintf(gTraceFile,"  pc:%p, at %s:%lu: %s\n",(void *)(uintptr_t)(di.pMergedDeadInfo->ip1),file.c_str(),line, func.c_str());                                    
 // #endif //end MERGE_SAME_LINES        
         PrintFullCallingContext(di.pMergedDeadInfo->context1);
-        fprintf(gTraceFile,"\ndeadwrite: \n");
+        fprintf(gTraceFile,"\n<killing write:> \n");
 // #ifdef MERGE_SAME_LINES
 //         fprintf(gTraceFile,"\n%s",di.pMergedDeadInfo->line2.c_str());                                    
 // #else //no MERGE_SAME_LINES        
         panda_GetSourceLocation(di.pMergedDeadInfo->ip2,  &line,&file, &func);
-        fprintf(gTraceFile,"\n%p:%s:%lu: %s\n",(void *)(uintptr_t)(di.pMergedDeadInfo->ip2),file.c_str(),line, func.c_str());
+        fprintf(gTraceFile,"  pc: %p, at %s:%lu: %s\n",(void *)(uintptr_t)(di.pMergedDeadInfo->ip2),file.c_str(),line, func.c_str());
 // #endif //end MERGE_SAME_LINES        
         PrintFullCallingContext(di.pMergedDeadInfo->context2);
-        fprintf(gTraceFile,"\n-------------------------------------------------------\n");
+        fprintf(gTraceFile,"-------------------------------------------------------\n");
 
         // printf("func: %s: done.\n", __FUNCTION__);
     }
