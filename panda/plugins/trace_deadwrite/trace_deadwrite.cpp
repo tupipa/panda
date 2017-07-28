@@ -543,8 +543,11 @@ inline VOID GoUpCallChain(CPUState *cpu, TranslationBlock *dst_tb,  target_ulong
     if (gCurrentContext == gRootContext){
         printf("%s: go up %d call path and reached root\n", __FUNCTION__, i);
     }
-    // call go down call chain to exec the new basic block: dst_tb.
-    GoDownCallChain(cpu, dst_tb->pc);
+    // now we will exec the new basic block: dst_tb.
+    // Lele: don't go down call chain. It just go to a new basic block of the parent context node. So the context node is changed to parent.
+    //
+    // GoDownCallChain(cpu, dst_tb->pc);
+
     // RET & CALL end a trace hence the target should trigger a new trace entry for us ... pray pray.
     
 // #else    // no IP_AND_CCT
@@ -4374,7 +4377,7 @@ void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_fu
     //         return;
     //  }
 
-    // printf("Now in %s\n", __FUNCTION__);
+    // printf("Now in %s(before_block_exec)\n", __FUNCTION__);
     bool judge_by_struct;
     target_ulong judge_asid;
     OsiProc *judge_proc;
@@ -4383,7 +4386,7 @@ void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_fu
     // // print judge metric, for debug
     if(judge_by_struct){
 
-        // printf("%s: judge by struct. \n",
+        // printf("%s(before_block_exec): judge by struct. \n",
         //     __FUNCTION__);
         // printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
         // //print full info of proc
@@ -4391,7 +4394,7 @@ void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_fu
     }
     else{
 
-        // printf("%s: **** judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n; will not trust this here**** ",
+        // printf("%s(before_block_exec): **** judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n; will not trust this here**** ",
         //     __FUNCTION__, judge_asid, gTargetAsid);
         return ;
     }
@@ -4400,11 +4403,11 @@ void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_fu
        return ;
     }else{
         gIsTargetBlock = true;
-        printf("%s: set true to gIsTargetBlock\n", __FUNCTION__);
+        printf("%s(before_block_exec): set true to gIsTargetBlock\n", __FUNCTION__);
     }
 
 
-    printf("%s: callstack_instr detect a ret from func: 0x" TARGET_FMT_lx ", to a target proc's block: tb->pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, from_func, dst_tb->pc);
+    printf("%s(before_block_exec): callstack_instr detect a ret from func: 0x" TARGET_FMT_lx ", to a target proc's block: tb->pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, from_func, dst_tb->pc);
     
     // 
     // gInitiatedRet = true;
@@ -4423,11 +4426,11 @@ void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_fu
     depth = i + 1;
 
     if (depth > func_cnt){
-        printf("%s: ERROR: BUG in callstack_instr: ret has no matching from functions in func stack\n", __FUNCTION__);
+        printf("%s(before_block_exec): ERROR: BUG in callstack_instr: ret has no matching from functions in func stack\n", __FUNCTION__);
         exit(-1);
     }
 
-    printf("%s: go up %d function calls\n", __FUNCTION__, depth);
+    printf("%s(before_block_exec): go up %d function calls\n", __FUNCTION__, depth);
 
     GoUpCallChain(cpu, dst_tb, from_func, depth);
 
