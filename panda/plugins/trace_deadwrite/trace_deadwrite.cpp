@@ -4686,18 +4686,20 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
 
     }else{
         if (! gIsTargetBlock){
-            printf("%s: WARNING: target not detected at before_block_exec, but detected here, tb->pc: 0x " TARGET_FMT_lx ". might cr3 overlap??" , __FUNCTION__, tb->pc);
+            printf("%s: WARNING: target not detected at before_block_exec, but detected here, tb->pc: 0x " TARGET_FMT_lx ". ??" , __FUNCTION__, tb->pc);
 
             if (!judge_by_struct) {
-                // judged by asid, not accurate, regard as cr3 overlap.
-                printf(" might be. Judge by asid, don't trust\n");
-                return 1;
-            }else{
-                printf(" no. \n");
+                // judged by asid when gProcFound is not set, regard as not accurate.
+                if (!gProcFound){
+                    printf(" might be. Judge by asid and gProcFound is not set, don't trust\n");
+                    return 1;
+                }else{
+                    printf("\t judge by asid, and ProcFound set. trust it temporarily.\n");
+                }
+            }else{             
+                printf("\tCongratulations! judge by proc struct!\n");    
+                printf("\t------- not cr3 overlap ! must be a process switch??\n");
             }
-
-            printf("\tCongratulations! judge by proc struct!\n");    
-            printf("\t------- not cr3 overlap ! must be a process switch??\n");
         }
     }
 
