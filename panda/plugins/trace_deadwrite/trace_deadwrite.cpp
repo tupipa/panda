@@ -215,7 +215,7 @@ inline bool is_target_process_running(CPUState *cpu, bool *judge_by_struct, targ
         // if (asid == gTargetAsid || asid == gTargetAsid_struct){
         if (asid == gTargetAsid ){
             is_target = true;
-            printf("%s: WARNING: found the target process by asid: ox" TARGET_FMT_lx "\n", __FUNCTION__, asid);
+            // printf("%s: WARNING: found the target process by asid: 0x" TARGET_FMT_lx "\n", __FUNCTION__, asid);
         }else{
             gIgnoredASIDs.insert(asid);
             is_target = false;
@@ -2180,23 +2180,27 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
     }else{
         // is target process
         if (! gIsTargetBlock){
-            printf("%s: WARNING: target not detected at before_block_exec, but detected here, might a cr3 overlap??", __FUNCTION__);
+            // gIsTargetBlock flag is not set, only trust judge_by_struct.
+            // 
+            printf("%s: WARNING: target not detected at before_block_exec, but detected here.", __FUNCTION__);
 
             if (!judge_by_struct) {
                 // judged by asid, not accurate, regard as cr3 overlap.
-                printf(" might be. Judge by asid, don't trust this.\n");
+                printf(" Judge by asid, don't trust this.\n");
                 return 1;
             }else{
-                printf(" no. \n");
+                printf(" Judge by struct, trust it.\n");
             }
 
             // if (!judge_by_struct) return 1;
 
             printf("\tWARNING: \n");    
-            printf("\t------- not cr3 overlap since judge by proc struct, must be a process switch??\n");
+            printf("\t-------judge by proc struct, must be a process switch??\n");
 
-            printf("<TODO> since we only detected the target process here in mem_callback but not in before_block_exec: we don't have the gBlockShadowMap and gTraceBlockNode allocated yet. \n");
-            printf("<TODO> so we need a solution to keep track of this.");
+            printf("<TODO> <TODO> <TODO> <TODO> <TODO> <TODO> <TODO> <TODO> <TODO> \n");
+            printf("\tsince we only detected the target process here in mem_callback but not in before_block_exec: we don't have the gBlockShadowMap and gTraceBlockNode allocated yet. \n");
+            printf("\tso we need a solution to keep track of this.\n");
+            printf("<TODO> <TODO> <TODO> <TODO> <TODO> <TODO> <TODO> <TODO> <TODO> \n");
 
             return 1;
             // TODO: 
@@ -2209,22 +2213,13 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
             //  - in after_block_exe, using gFoundProcStruct[asid, blockID], we decide whether we can add the temporary gBlockShadowMap and TraceNode to our targets. If not free them.
 
             // exit(-1);
+        }else{
+            // gIsTargetBlock flag is set 'before_block_exe'
+            // no matter judge_by_struct, trust it.
+            if (!judge_by_struct){
+                printf("%s: gIsTargetBlock flag is true. trust the judge by asid.\n", __FUNCTION__);
+            }
         }
-
-        // printf("%s: good. here we are in the target Proc!\n", __FUNCTION__);
-        // // print judge metric, for debug
-        // if(judge_by_struct){
-
-        //     printf("%s: judge by name in struct. \n",
-        //         __FUNCTION__);
-        // printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
-        //     //print full info of proc
-        //     print_proc_info(judge_proc);
-        // }
-        // else{
-        //     printf("\t\tjudge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n",
-        //         judge_asid, gTargetAsid);
-        // }
     }
 
 
@@ -3636,8 +3631,8 @@ inline void printRunningProcs(){
     for (it = gRunningProcs.begin(); it != gRunningProcs.end(); ++it)
     {
         // u_long f = *it; // Note the "*" here
-		printf("\t0x" TARGET_FMT_lx ": procName: %s, pid/ppid: " TARGET_FMT_lu "/" TARGET_FMT_lu "\n", 
-            it->proc->asid, it->proc->name, it->proc->pid, it->proc->ppid);
+		printf("\t0x" TARGET_FMT_lx ":\t pid/ppid: " TARGET_FMT_lu "/" TARGET_FMT_lu "\t, procName: %s, \n", 
+            it->proc->asid, it->proc->pid, it->proc->ppid, it->proc->name);
     }
     printf("\n");
 }
@@ -3648,10 +3643,14 @@ VOID printAllProcsFound(){
 
     printf("%s: (last) monitored ASID:\n", __FUNCTION__);
     if (gAsidToProcIndex.count(gTargetAsid) != 0 ){
-        printf("\t0x" TARGET_FMT_lx ": procName: %s\n", gTargetAsid, gProcIDs[gAsidToProcIndex[gTargetAsid]].proc->name);
+        OsiProc *tproc=gProcIDs[gAsidToProcIndex[gTargetAsid]].proc;
+        printf("\t0x" TARGET_FMT_lx ":\t pid/ppid: " TARGET_FMT_lu "/" TARGET_FMT_lu "\t, procName: %s\n",
+         gTargetAsid, tproc->pid, tproc->ppid, tproc->name);
     }
     if (gAsidToProcIndex.count(gTargetAsid_struct) != 0){
-        printf("\t(struct): 0x" TARGET_FMT_lx ": procName: %s\n", gTargetAsid, gProcIDs[gAsidToProcIndex[gTargetAsid_struct]].proc->name);
+        OsiProc *tp = gProcIDs[gAsidToProcIndex[gTargetAsid_struct]].proc;
+        printf("\t(struct): 0x" TARGET_FMT_lx ":\t pid/ppid: " TARGET_FMT_lu "/" TARGET_FMT_lu "\t, procName: %s\n", 
+        gTargetAsid, tp->pid, tp->ppid, tp->name);
     }
     if (gAsidToProcIndex.count(gTargetAsid_struct) == 0 && gAsidToProcIndex.count(gTargetAsid) == 0 ){
         printf("\t no proc found for 0x" TARGET_FMT_lx ", (struct): 0x" TARGET_FMT_lx "\n", gTargetAsid, gTargetAsid_struct);
@@ -4471,9 +4470,9 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     //Lele: if last block initiated a call, then set gInitiatedCall as true. 
     //  Then next block would be inside a new function call.
 
-    if (gProcFound){
-        printf("########### Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
-    }
+    // if (gProcFound){
+    //     printf("########### Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
+    // }
     //Lele: check asid.
     // target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
     // if (gTraceOne){
@@ -4531,7 +4530,8 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     if(!is_target){
         return 1;
     }else{
-
+        
+        printf("########### Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
 
         // check judge metric, only trust judge_by_struct.
         if(judge_by_struct){
@@ -4614,9 +4614,9 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     // Lele: after block executed. PC would point to the new function if tb has a call instruction at last.
     //
 
-    if (gProcFound){
-        printf("########### Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
-    }
+    // if (gProcFound){
+    //     printf("########### Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
+    // }
     //printf("########### Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
 
 
@@ -4688,6 +4688,10 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
         }
 
     }else{
+        // is target process
+
+        printf("########### Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
+        
         if (! gIsTargetBlock){
             printf("%s: WARNING: target not detected at before_block_exec, but detected here, tb->pc: 0x " TARGET_FMT_lx ". ??" , __FUNCTION__, tb->pc);
 
