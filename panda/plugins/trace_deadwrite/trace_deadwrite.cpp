@@ -5406,6 +5406,99 @@ void init_deadspy(const char * prefix){
     InitContextTree();        
 }
 
+void error_debug_symbol_info(const char* debug_list){
+
+    printf("ERROR: cannot interpret the symInfo file %s\n", debug_list);
+    printf("Right format: \n");
+    printf("\t<kernelspace|userspace>:<symbol file/program file with symb info>\n");
+    printf("[offset: <0xfff...>]\n");
+    printf("[size: <23456>]\n");
+    printf("* offset and size are only required for kernel space program\n");
+    exit(-1);
+}
+void parse_debug_symbol_info(const char * debug_list){
+
+    // read the paths from the file
+    if (strlen(debug_list) > 0) {
+
+        std::ifstream debug_file_names(debug_list);
+        if (!debug_file_names) {
+            printf("Couldn't open %s; no strings to search for. Exiting.\n", debug_list);
+            exit(-1);
+        }
+
+        std::string line;
+        while(std::getline(debug_file_names, line)) {
+            ////////////////
+
+            // first line
+            // get the key
+            std::size_t pos = line.find(":");
+            std::string line_key = line.substr(0, pos);
+            // get the value
+            std::string line_value = line.substr(pos+1);
+
+            if (line_key == "kernelspace"){
+                printf("%s: get kernel space symbol file: %s: \n",
+                    __FUNCTION__, line_value.c_str());
+                
+                // read offset
+                std::string offset_line;
+                std::getline(debug_file_names, offset_line);
+                pos = offset_line.find(":");
+                std::string offset_key = offset_line.substr(0,pos);
+                std::string offset_value = offset_line.substr(pos+1);
+
+                if(offset_key == "offset"){
+                    printf("\tget offset: %s\n", offset_value.c_str());
+                }else{
+                    error_debug_symbol_info(debug_list);
+                }
+
+                std::string size_line;
+                std::getline(debug_file_names, size_line);
+                pos = size_line.find(":");
+                std::string size_key = size_line.substr(0, pos);
+                std::string size_value = size_line.substr(pos+1);
+
+                if(size_key == "size"){
+                    printf("\tget size: %s\n", size_value.c_str());
+                }else{
+                    error_debug_symbol_info(debug_list);
+                }
+
+                target_ulong mod_offset, mod_size;//number which will contain the result
+                std::stringstream convert1(offset_value); // stringstream used for the 
+                std::stringstream convert2(size_value); // stringstream used for the conversion initialized with the contents of Text
+                if ( !(convert1 >> mod_offset) ){//give the value to Result using the characters in the string
+                    mod_offset = 0;//if that fails set Result to 0
+                    printf("%s: cannot cast %s to number\n",__FUNCTION__, offset_value.c_str());
+                    exit(-1);
+                }
+                if ( !(convert2 >> mod_size) ){//give the value to Result using the characters in the string
+                    mod_size = 0;//if that fails set Result to 0
+                    printf("%s: cannot cast %s to number\n",__FUNCTION__, size_value.c_str());
+                    exit(-1);
+                }
+
+                KDebugFile kdf={line_value, mod_offset, mod_size };
+
+                gKDebugFiles.push_back(kdf);
+
+            }else if (line_key == "userspace"){
+                printf("%s: get user space symbol file: %s: \n",
+                    __FUNCTION__, line_value.c_str());
+                gDebugFiles.push_back(line_value);
+            }else{
+                error_debug_symbol_info(debug_list);
+            }
+        }
+
+    }else{
+        printf("%s: WARNING: no debug info path found\n", __FUNCTION__);
+    }
+
+}
 
 bool init_plugin(void *self) {
 
@@ -5427,6 +5520,15 @@ bool init_plugin(void *self) {
 
     gTargetPPID = panda_parse_ulong_opt(args, "ppid", 0xffffffff , "the pid of the process to search for");
 
+    gTargetIsKernelMod = panda_parse_bool_opt(args, "is_kernel_module", "set if the target is a kernel module; kernel=0 otherwise");
+
+    if (gTargetIsKernelMod){
+        printf("Set target to be a kernel module\n");
+    }else{
+        printf("Set target to be a userspace application\n");
+    }
+
+    // exit(-1);
 
     if (asid_struct == 0 ){
         // no ASID parameter given, set the default behavior as following:
@@ -5445,6 +5547,7 @@ bool init_plugin(void *self) {
         gTargetAsid = asid_struct;
         gTargetAsid_struct = asid_struct;
     }
+
     
     printf("%s: target asid/asid_struct: 0x" TARGET_FMT_lx "\n", __FUNCTION__, gTargetAsid_struct);
 
@@ -5474,26 +5577,10 @@ bool init_plugin(void *self) {
     }
 
 
-    const char *debug_list = panda_parse_string_opt(args, "debug_paths", "debug_paths.txt", "the file name that stores all the possible debug symbol directories, default as debug_paths.txt");
+    const char *debug_list = panda_parse_string_opt(args, "symInfo", "symInfo.txt", "the full name of the file that stores all the possible debug symbol file, default as debug_paths.txt; First line contains program type (kernel/userspace) and debug file path; If the debug symbole is for kernel module, each file should has its section offset and size.");
 
-    // read the paths from the file
-    if (strlen(debug_list) > 0) {
+    parse_debug_symbol_info(debug_list);
 
-        std::ifstream debug_file_names(debug_list);
-        if (!debug_file_names) {
-            printf("Couldn't open %s; no strings to search for. Exiting.\n", debug_list);
-            return false;
-        }
-
-        std::string line;
-        while(std::getline(debug_file_names, line)) {
-            printf("%s: add %s to Debug Paths\n", __FUNCTION__, line.c_str());
-            gDebugFiles.push_back(line);
-        }
-
-    }else{
-        printf("%s: WARNING: no debug info path found\n", __FUNCTION__);
-    }
 
     //lele: step 2: sys int: set callstack plugins, enable precise pc, memcb, and set callback functions.
 

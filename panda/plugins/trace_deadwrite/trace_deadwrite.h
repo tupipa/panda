@@ -625,6 +625,29 @@ struct ContextTree{
 std::vector<ContextTree> gContextTreeVector;
 #endif //end MULTI_THREADED
 
+// use asid, pid, ppid to distinguish proces
+// use proc->name only for assistance.
+struct KDebugFile{
+
+    std::string filename;
+    target_ulong offset;
+    target_ulong size;
+	bool operator==(const KDebugFile  & x) const{ 
+		if ( this->filename == x.filename && this->offset == x.offset && this->size == x.size){
+            return true;
+        }
+		return false; 
+	}
+
+	bool operator<(const KDebugFile  & x) const{
+		if (this->offset < x.offset){
+            // different asid, compare according to asid.
+            return true;
+        }
+        return false;
+	}
+};
+
 
 // use asid, pid, ppid to distinguish proces
 // use proc->name only for assistance.
@@ -751,6 +774,7 @@ bool gProcFound=false;
 
 //store all debug file paths
 std::vector<std::string> gDebugFiles;
+std::vector<KDebugFile> gKDebugFiles;
 //store all process names
 std::vector<std::string> gProcs;
 
@@ -802,6 +826,8 @@ ADDRINT gTargetAsid_struct=0x0; //target ASID;
 
 target_ulong gTargetPID=0xfffff; //target pid;
 target_ulong gTargetPPID=0xffff; //target ppid;
+bool gTargetIsKernelMod;
+
 ProcID gTargetProcID;   //target proc by ProcID;
 
 bool gIsTargetBlock = false; // used to tracking whether in a block for target process. will be set/reset in before_block_exe and after_block_exe.
