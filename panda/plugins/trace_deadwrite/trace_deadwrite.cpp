@@ -250,10 +250,13 @@ inline bool is_target_process_running(CPUState *cpu, bool *judge_by_struct, targ
 
             // exit(1);
         }else  if (curProc == gProcToMonitor && ! gProcFound){
-            // found the target proc by name
-            // update the target asid.
+            // found the target proc by name, only when the proc has not been found before.
+            // If proc has been found, then we don't trust proc name, to avoid the same proc 
+            // being executed for many times.
+            //
+            // once found for the first time, update the target asid, asid_struct, as well as pid, ppid.
 
-            printf("%s: WARNING: found the target process by name: %s\n", __FUNCTION__, p->name);
+            printf("%s: BingGo! found the target process for first time by name: %s\n", __FUNCTION__, p->name);
 
             gTargetAsid = panda_current_asid(cpu);
             gTargetAsid_struct = p->asid;
@@ -2140,6 +2143,15 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
     //     printf("\n All: Mem op for ASID: 0x" TARGET_FMT_lx "\n", asid_cur);
     // }
     // printf("Now in %s\n", __FUNCTION__);
+    
+    
+    // TODO: in the future we might be able to use gIsTargetBlock to control the mem_callback.
+    // the proper use of gIsTargetBlock can avoid calling 'is_target_process_running' in 
+    // mem_callback. This could improve the performance significantly.
+    
+    //if (!gIsTargetBlock){
+    //	return 0;
+    //}
     bool judge_by_struct;
     target_ulong judge_asid;
     OsiProc *judge_proc;
@@ -2182,7 +2194,8 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
         if (! gIsTargetBlock){
             // gIsTargetBlock flag is not set, only trust judge_by_struct.
             // 
-            printf("%s: WARNING: target not detected at before_block_exec, but detected here.", __FUNCTION__);
+            printf("%s: WARNING: target not detected at before_block_exec, but detected here. asid: 0x" TARGET_FMT_lx ".",
+            	__FUNCTION__, judge_asid);
 
             if (!judge_by_struct) {
                 // judged by asid, not accurate, regard as cr3 overlap.
@@ -2852,6 +2865,27 @@ int addr2line(std::string debugfile, target_ulong addr, FileLineInfo * lineInfo)
     return 0;
 }
 
+
+/* 
+for kernel modules, convert pc according to offset/size info, and call addr2line
+*/
+int addr2line_k(KDebugFile &kdbg, target_ulong addr, FileLineInfo * lineInfo){
+
+    //target_ulong offset = kdbg.offset;
+    target_ulong size = kdbg.size;
+    
+    target_ulong vaddr = addr - kdbg.offset;
+    
+    if (vaddr < size){
+    	// virtual address is inside the module address space.
+    	return addr2line(kdbg.filename, vaddr, lineInfo);
+    }else {
+    	//virtual address is outside the module address space.
+    	return -1;
+    }
+    
+}
+
 /* searchDebugFilesForProcName:
     - for asid with IP, search all debugfiles that can return the lineInfo for this ip.
     - debug files stored in a vector of strings
@@ -2866,7 +2900,7 @@ int searchDebugFilesForProcName(std::string procName, target_ulong ip, FileLineI
     // printf("%s: search debug file for proc: %s\n", __FUNCTION__, procName.c_str());
     if (gTargetIsKernelMod){
         for (std::vector<std::string>::size_type i = 0; i < gKDebugFiles.size(); i++){
-            if (addr2line(gKDebugFiles[i], ip, fileInfo) == 0){
+            if (addr2line_k(gKDebugFiles[i], ip, fileInfo) == 0){
                 // found info from debugfile
                 // link this debugfile with procName
                 gProcToDebugFileIndex[procName] = (int) i;
@@ -2876,19 +2910,18 @@ int searchDebugFilesForProcName(std::string procName, target_ulong ip, FileLineI
                 return 0;
             }
         }
-    }
-
-    for (std::vector<std::string>::size_type i = 0; i < gDebugFiles.size(); i++){
-        if (addr2line(gDebugFiles[i], ip, fileInfo) == 0){
-            // found info from debugfile
-            // link this debugfile with procName
-            gProcToDebugFileIndex[procName] = (int) i;
-            printf("%s: found debug file %s for proc %s\n", __FUNCTION__, gDebugFiles[i].c_str(), procName.c_str() );
-            gProcToDebugDone[procName]=true;
-            return 0;
-        }
-    }
-
+    }else{
+		for (std::vector<std::string>::size_type i = 0; i < gDebugFiles.size(); i++){
+		    if (addr2line(gDebugFiles[i], ip, fileInfo) == 0){
+		        // found info from debugfile
+		        // link this debugfile with procName
+		        gProcToDebugFileIndex[procName] = (int) i;
+		        printf("%s: found debug file %s for proc %s\n", __FUNCTION__, gDebugFiles[i].c_str(), procName.c_str() );
+		        gProcToDebugDone[procName]=true;
+		        return 0;
+		    }
+		}
+	}
     return -1;
 }
 
@@ -2942,7 +2975,8 @@ int getLineInfoForAsidIP(target_ulong asid_target, target_ulong ip, FileLineInfo
            return searchDebugFilesForProcName(procName,ip,fileInfo);
         }
         // 
-        printf("%s: no debug file found for proc name: %s\n", __FUNCTION__, procName.c_str() );
+        printf("%s: no debug file found for proc name: %s, with pc: 0x" TARGET_FMT_lx "\n", 
+        	__FUNCTION__, procName.c_str(), ip );
         return -1;
     }
 
@@ -4594,7 +4628,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
         return 1;
     }else{
         
-        printf("########### Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
+        //printf("########### Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
 
         // check judge metric, only trust judge_by_struct.
         if(judge_by_struct){
@@ -4753,7 +4787,7 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
     }else{
         // is target process
 
-        printf("########### Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
+        //printf("########### Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
         
         if (! gIsTargetBlock){
             printf("%s: WARNING: target not detected at before_block_exec, but detected here, tb->pc: 0x " TARGET_FMT_lx ". ??" , __FUNCTION__, tb->pc);
