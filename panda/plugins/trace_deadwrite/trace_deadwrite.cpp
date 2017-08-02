@@ -2864,6 +2864,20 @@ int searchDebugFilesForProcName(std::string procName, target_ulong ip, FileLineI
     // if there is one ip info got a valid line info, we regard it as valide debug file for this proc.
     // bool found = false;
     // printf("%s: search debug file for proc: %s\n", __FUNCTION__, procName.c_str());
+    if (gTargetIsKernelMod){
+        for (std::vector<std::string>::size_type i = 0; i < gKDebugFiles.size(); i++){
+            if (addr2line(gKDebugFiles[i], ip, fileInfo) == 0){
+                // found info from debugfile
+                // link this debugfile with procName
+                gProcToDebugFileIndex[procName] = (int) i;
+                printf("%s: found debug file %s for proc %s\n", __FUNCTION__, gDebugFiles[i].c_str(), procName.c_str() );
+                gProcToDebugDone[procName]=true;
+                exit(-1);
+                return 0;
+            }
+        }
+    }
+
     for (std::vector<std::string>::size_type i = 0; i < gDebugFiles.size(); i++){
         if (addr2line(gDebugFiles[i], ip, fileInfo) == 0){
             // found info from debugfile
@@ -2874,6 +2888,7 @@ int searchDebugFilesForProcName(std::string procName, target_ulong ip, FileLineI
             return 0;
         }
     }
+
     return -1;
 }
 
@@ -5416,6 +5431,7 @@ void error_debug_symbol_info(const char* debug_list){
     printf("* offset and size are only required for kernel space program\n");
     exit(-1);
 }
+
 void parse_debug_symbol_info(const char * debug_list){
 
     // read the paths from the file
