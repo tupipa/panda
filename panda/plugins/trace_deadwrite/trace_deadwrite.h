@@ -362,7 +362,12 @@ gPartiallyDeadBytes##size += deadBytes;\
 
 #endif // end TESTING_BYTES
 
+// ######################################
+// test flag used to control running time.
 
+//target_ulong testTotal = 0x100000;	 // number of mem_callback operations for target program
+bool gIsTest;	// use to enable or disable test.
+target_ulong testTotal = 0;	 // if test enabled, this is the number of mem_callback operations for target program
 
 
 // ######################################################
@@ -385,6 +390,7 @@ enum ins_type {
   INSTR_INT,
   INSTR_IRET,
 };
+
 
 csh csh_hd_32;
 csh csh_hd_64;
@@ -627,19 +633,20 @@ std::vector<ContextTree> gContextTreeVector;
 
 // use asid, pid, ppid to distinguish proces
 // use proc->name only for assistance.
-struct KDebugFile{
-
+struct DebugFile{
+    bool isKernel;
     std::string filename;
     target_ulong offset;
     target_ulong size;
-	bool operator==(const KDebugFile  & x) const{ 
+
+	bool operator==(const DebugFile  & x) const{ 
 		if ( this->filename == x.filename && this->offset == x.offset && this->size == x.size){
             return true;
         }
 		return false; 
 	}
 
-	bool operator<(const KDebugFile  & x) const{
+	bool operator<(const DebugFile  & x) const{
 		if (this->offset < x.offset){
             // different asid, compare according to asid.
             return true;
@@ -705,11 +712,33 @@ struct ProcID{
 // use m->name only for assistance.
 struct ModuleID{
 
-    OsiModule *m;
+    //OsiModule *m;
+
+    target_ulong base;
+    target_ulong offset;
+    target_ulong size;
+    std::string name;
+    std::string file;
+
+    ModuleID(OsiModule *m){
+        this->base = m->base;
+        this->offset = m->offset;
+        this->size = m->size;
+
+        if(m->name != NULL)
+            this->name = std::string(m->name);
+        else
+            this->name = "";
+
+        if(m->file == NULL)
+            this->file="";
+        else 
+            this->file = std::string(m->file);
+    }
 
 	bool operator==(const ModuleID  & x) const{
 
-		if ( this->m->base == (x.m)->base && this->m->offset == (x.m)->offset && this->m->size == (x.m)->size){
+		if ( this->base == x.base && this->offset == x.offset && this->size == x.size){
             return true;
         }
         
@@ -718,7 +747,7 @@ struct ModuleID{
 	}
 
 	bool operator<(const ModuleID  & x) const{
-		if (this->m->base < x.m->base )
+		if (this->base < x.base )
             return true;
 		return false;
 	}
@@ -773,8 +802,9 @@ bool gProcFoundByProcChange;
 bool gProcFound=false;
 
 //store all debug file paths
-std::vector<std::string> gDebugFiles;
-std::vector<KDebugFile> gKDebugFiles;
+//std::vector<std::string> gDebugFiles;
+
+std::vector<DebugFile> gDebugFiles;
 //store all process names
 std::vector<std::string> gProcs;
 
@@ -916,6 +946,9 @@ inline bool IsValidIP(ADDRINT ip);
 inline bool IsValidIP(DeadInfo  di);
 
 
+void report_deadspy();
+
+void printAllProcsFound();
 
 void init_deadspy();
 
@@ -942,10 +975,9 @@ OsiProc * get_current_running_process(CPUState *cpu);
 
 inline bool is_target_process_running(CPUState *cpu);
 
-inline void print_proc_info(OsiProc *proc);
+inline void print_proc_info(const OsiProc *proc);
 
-
-inline void print_mod_info(OsiModule *mod);
+inline void print_mod_info(const OsiModule *mod);
 
 inline void printRunningProcs();
 

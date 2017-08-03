@@ -120,7 +120,7 @@ inline void  print_proc_info(OsiProc *proc)
 
 */
 
-inline void print_proc_info(OsiProc *proc){
+inline void print_proc_info(const OsiProc *proc){
 
     if(proc->name){
         printf("\tproc name: %s,", proc->name);
@@ -160,22 +160,22 @@ inline void print_proc_info(OsiProc *proc){
 
 
 /*
-inline void  print_mod_info(OsiModule *mod)
+inline void  print_mod_info(ModuleID *mod)
 
 */
 
-inline void print_mod_info(OsiModule *mod){
+inline void print_mod_info(const ModuleID *mod){
 
-    if(mod->name){
-        printf("\tmodule name: %s,", mod->name);
-    }
+    //if(mod->name){
+        printf("\tmodule name: %s,", mod->name.c_str());
+    //}
 
     printf("\toffset:\t0x" TARGET_FMT_lx "\tbase:\t0x" TARGET_FMT_lx "\tsize:\t0x" TARGET_FMT_lx 
     "\n\tfile:\t%s\n",
         mod->offset,
         mod->base,
         mod->size,
-        mod->file);
+        mod->file.c_str());
 
     printf("\n\n");
 }
@@ -2235,7 +2235,17 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
         }
     }
 
+	if ( gIsTest ){
+		testTotal --;
+		if( testTotal == 0 ) {
+			printf("%s: stop before finished.\n\treport deadspy\n", __FUNCTION__);
+			report_deadspy();
+			// clear_insn();
 
+			printAllProcsFound();
+			exit(-1);
+		}
+	}
     // reset the flag. will be detect and set again in before_block_exe
     // if(!gIsTargetBlock){
     //     return 1;
@@ -2869,19 +2879,36 @@ int addr2line(std::string debugfile, target_ulong addr, FileLineInfo * lineInfo)
 /* 
 for kernel modules, convert pc according to offset/size info, and call addr2line
 */
-int addr2line_k(KDebugFile &kdbg, target_ulong addr, FileLineInfo * lineInfo){
+int addr2line_wrap(DebugFile &dbgf, target_ulong addr, FileLineInfo * lineInfo){
 
-    //target_ulong offset = kdbg.offset;
-    target_ulong size = kdbg.size;
+    if(dbgf.isKernel){
     
-    target_ulong vaddr = addr - kdbg.offset;
+    	if(dbgf.offset == 0){
+    		printf("%s: ERROR: kernel module offset is 0. file name: %s\n", 
+    			__FUNCTION__, dbgf.filename.c_str());
+    	    exit(-1);
+    	}
+		//target_ulong offset = dbgf.offset;
+		//target_ulong size = dbgf.size;
+		
+		target_ulong vaddr = addr - dbgf.offset;
+		
+		printf("\n");
+
+		if (vaddr < dbgf.size){
+			// virtual address is inside the module address space.
+			printf("%s: good. search inside a kernel module: %s\n", __FUNCTION__, dbgf.filename.c_str());
+			return addr2line(dbgf.filename, vaddr, lineInfo);
+		}else {
+			//virtual address is outside the module address space.
+			printf("%s: addr 0x" TARGET_FMT_lx "(vaddr: 0x" TARGET_FMT_lx ") is not in the module %s\n",
+				__FUNCTION__, addr, vaddr, dbgf.filename.c_str());
+			return -1;
+		}
+    }else{
     
-    if (vaddr < size){
-    	// virtual address is inside the module address space.
-    	return addr2line(kdbg.filename, vaddr, lineInfo);
-    }else {
-    	//virtual address is outside the module address space.
-    	return -1;
+    	return addr2line (dbgf.filename, addr, lineInfo);
+    
     }
     
 }
@@ -2898,30 +2925,31 @@ int searchDebugFilesForProcName(std::string procName, target_ulong ip, FileLineI
     // if there is one ip info got a valid line info, we regard it as valide debug file for this proc.
     // bool found = false;
     // printf("%s: search debug file for proc: %s\n", __FUNCTION__, procName.c_str());
-    if (gTargetIsKernelMod){
-        for (std::vector<std::string>::size_type i = 0; i < gKDebugFiles.size(); i++){
-            if (addr2line_k(gKDebugFiles[i], ip, fileInfo) == 0){
-                // found info from debugfile
-                // link this debugfile with procName
-                gProcToDebugFileIndex[procName] = (int) i;
-                printf("%s: found debug file %s for proc %s\n", __FUNCTION__, gDebugFiles[i].c_str(), procName.c_str() );
-                gProcToDebugDone[procName]=true;
-                exit(-1);
-                return 0;
-            }
+    // if (gTargetIsKernelMod){
+    for (std::vector<std::string>::size_type i = 0; i < gDebugFiles.size(); i++){
+        if (addr2line_wrap(gDebugFiles[i], ip, fileInfo) == 0){
+            // found info from debugfile
+            // link this debugfile with procName
+            gProcToDebugFileIndex[procName] = (int) i;
+            printf("%s: found kernel debug file %s for proc %s\n", __FUNCTION__, gDebugFiles[i].filename.c_str(), procName.c_str() );
+            gProcToDebugDone[procName]=true;
+            //exit(-1);
+            return 0;
         }
-    }else{
-		for (std::vector<std::string>::size_type i = 0; i < gDebugFiles.size(); i++){
-		    if (addr2line(gDebugFiles[i], ip, fileInfo) == 0){
-		        // found info from debugfile
-		        // link this debugfile with procName
-		        gProcToDebugFileIndex[procName] = (int) i;
-		        printf("%s: found debug file %s for proc %s\n", __FUNCTION__, gDebugFiles[i].c_str(), procName.c_str() );
-		        gProcToDebugDone[procName]=true;
-		        return 0;
-		    }
-		}
-	}
+    }
+    // }else{
+		// for (std::vector<std::string>::size_type i = 0; i < gDebugFiles.size(); i++){
+		//     if (addr2line_wrap(gDebugFiles[i], ip, fileInfo) == 0){
+		//         // found info from debugfile
+		//         // link this debugfile with procName
+		//         gProcToDebugFileIndex[procName] = (int) i;
+		//         printf("%s: found debug file %s for proc %s\n", __FUNCTION__, gDebugFiles[i].c_str(), procName.c_str() );
+		//         gProcToDebugDone[procName]=true;
+		//         return 0;
+		//     }
+		// }
+
+	// }
     return -1;
 }
 
@@ -2944,6 +2972,7 @@ int getLineInfoForAsidIP(target_ulong asid_target, target_ulong ip, FileLineInfo
     if (asidProcIt != gAsidToProcIndex.end()){
         //found the proc name from asid
         procName = gProcs[asidProcIt -> second];
+        printf("%s: found proc name %s, for asid 0x" TARGET_FMT_lx "\n", __FUNCTION__, procName.c_str(), asid_target);
 
     }else{
         //no proc name found for asid: 
@@ -2962,7 +2991,7 @@ int getLineInfoForAsidIP(target_ulong asid_target, target_ulong ip, FileLineInfo
     // if (procDebugIt != gProcToDebugFileIndex.end()){
     if (gProcToDebugFileIndex.count(procName) != 0){
         //found the proc name from asid
-        debugFileName = gDebugFiles[gProcToDebugFileIndex[procName]];
+        debugFileName = gDebugFiles[gProcToDebugFileIndex[procName]].filename;
         printf("%s: found debug file for %s: %s\n", __FUNCTION__, procName.c_str(), debugFileName.c_str());
         // exit(-1);
 
@@ -2980,11 +3009,12 @@ int getLineInfoForAsidIP(target_ulong asid_target, target_ulong ip, FileLineInfo
         return -1;
     }
 
-    //3, iterate through all debug files for proc.
+    //3, iterate through the debug file for proc.
     // TODO: might be different debug file for a proc?
     // Now only 1 debug file for the proc.
 
-    if ( addr2line(debugFileName, ip, fileInfo) == 0 ){
+    DebugFile dbf=gDebugFiles[gProcToDebugFileIndex[procName]];
+    if ( addr2line_wrap(dbf, ip, fileInfo) == 0 ){
         return 0;
     }else{
         return -1;
@@ -3728,8 +3758,9 @@ inline void printRunningProcs(){
     for (it = gRunningProcs.begin(); it != gRunningProcs.end(); ++it)
     {
         // u_long f = *it; // Note the "*" here
-		printf("\t0x" TARGET_FMT_lx ":\t pid/ppid: " TARGET_FMT_lu "/" TARGET_FMT_lu ",\tprocName: %s, \n", 
-            it->proc->asid, it->proc->pid, it->proc->ppid, it->proc->name);
+		//printf("\t0x" TARGET_FMT_lx ":\t pid/ppid: " TARGET_FMT_lu "/" TARGET_FMT_lu ",\tprocName: %s, \n", 
+        //    it->proc->asid, it->proc->pid, it->proc->ppid, it->proc->name);
+        print_proc_info(it->proc);
     }
     printf("\n");
 }
@@ -3748,6 +3779,15 @@ VOID printAllProcsFound(){
         OsiProc *tp = gProcIDs[gAsidToProcIndex[gTargetAsid_struct]].proc;
         printf("\t(struct): 0x" TARGET_FMT_lx ":\t pid/ppid: " TARGET_FMT_lu "/" TARGET_FMT_lu ",\tprocName: %s\n", 
         gTargetAsid, tp->pid, tp->ppid, tp->name);
+    }
+    
+    // print modules for target proc
+    if (gModuleIDs.size()>0){
+    	printf("modules found for programs:");
+    	for (int i = 0;i<gModuleIDs.size(); i++){
+    		print_mod_info(&gModuleIDs[i]);
+    		printf("------\n");
+    	}
     }
     if (gAsidToProcIndex.count(gTargetAsid_struct) == 0 && gAsidToProcIndex.count(gTargetAsid) == 0 ){
         printf("\t no proc found for 0x" TARGET_FMT_lx ", (struct): 0x" TARGET_FMT_lx "\n", gTargetAsid, gTargetAsid_struct);
@@ -4972,7 +5012,7 @@ int checkNewProcID(const ProcID & proc){
 
 /* int checkNewModuleID (ModuleID &m)
 */
-int checkNewModuleID(const ModuleID & m){
+int checkNewModuleID(const ModuleID &m){
 
     // maintain the vector.
     int mdIndex;
@@ -4986,9 +5026,9 @@ int checkNewModuleID(const ModuleID & m){
     }else{
         // a new module
 
-        // printf("%s: got a new module:\n", __FUNCTION__);
+        printf("%s: got a new module:\n", __FUNCTION__);
         // // print_proc_info(proc.proc);
-        // print_mod_info(m.m);
+        print_mod_info(&m);
 
         // store it in gModuleIDs, and the map
         gModuleIDs.push_back(m);
@@ -5239,6 +5279,17 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
         gTargetPPID = proc->ppid;
         gTargetProcID = {proc};
 
+        //check to be safe
+
+        if (judge_proc->pid != proc->pid){
+            printf("ERRPR in %s, proc differs at the same time point.\n", __FUNCTION__);
+            printf("\tjudge proc:\n");
+            print_proc_info(judge_proc);
+            printf("\tproc in handle_proc_change:\n");
+            print_proc_info(proc);
+            exit(-1);
+        }
+
         printf("%s: reset target asid 0x" TARGET_FMT_lx ", and target asid_struct: 0x" TARGET_FMT_lx "\n",
             __FUNCTION__, asid, asid_struct);
         printf("%s: reset target pid " TARGET_FMT_lu ", and target ppid: " TARGET_FMT_lu "\n",
@@ -5249,8 +5300,12 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
 
         // exit(-1);
     }else{
+    	// we regard this not target.
         gProcFoundByProcChange = false;
         printf("%s: setting gProcFoundByProcChange to be false\n", __FUNCTION__);
+        
+    	printf("-----------end: %s------------\n\n", __FUNCTION__);
+    	return;
     }
 
 
@@ -5264,79 +5319,81 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
  
     // OsiModules *ms = get_libraries(cpu, current);
     
-    // OsiModules *ms = get_libraries(cpu, proc);
-    // if (ms == NULL) {
-    //     printf("No mapped dynamic libraries.\n");
-    // }
-    // else {
-    //     printf("Dynamic libraries list (%d libs):\n", ms->num);
-    //     for (int i = 0; i < ms->num; i++){
+    OsiModules *ms = get_libraries(cpu, proc);
+    if (ms == NULL) {
+        printf("No mapped dynamic libraries.\n");
+    }
+    else {
+        printf("Dynamic libraries list (%d libs):\n", ms->num);
+        for (int i = 0; i < ms->num; i++){
             
-    //         // printf("\tasid: 0x" TARGET_FMT_lx "\tsize:" TARGET_FMT_ld "\t%-24s %s\n", ms->module[i].base, ms->module[i].size, ms->module[i].name, ms->module[i].file);
+            // printf("\tasid: 0x" TARGET_FMT_lx "\tsize:" TARGET_FMT_ld "\t%-24s %s\n", ms->module[i].base, ms->module[i].size, ms->module[i].name, ms->module[i].file);
 
-    //         ModuleID mid={ &ms->module[i]};
+            //ModuleID mid={ &ms->module[i]};
 
-    //         int oldgProcSize = (int) gModuleIDs.size();
-    //         // int procIndex = checkNewProc(std::string(ms->module[i].name));
-    //         int procIndex = checkNewModuleID(mid);
-    //         if (oldgProcSize == procIndex){
-    //             // // a new proc found
+            ModuleID mid(&ms->module[i]);
 
-    //             // printf("%s: a new dynamic lib found\n",
-    //                 // __FUNCTION__);
-    //             // print_mod_info(&ms->module[i]);
-    //         }
+            int oldgProcSize = (int) gModuleIDs.size();
+            // int procIndex = checkNewProc(std::string(ms->module[i].name));
+            int procIndex = checkNewModuleID(mid);
+            if (oldgProcSize == procIndex){
+                // // a new proc found
 
-    //         // gAsidToProcIndex[ ms->module[i].base ] = procIndex;
-    //     }
-    // }
+                // printf("%s: a new dynamic lib found\n",
+                    // __FUNCTION__);
+                // print_mod_info(&ms->module[i]);
+            }
 
-    // OsiModules *kms = get_modules(cpu);
+            // gAsidToProcIndex[ ms->module[i].base ] = procIndex;
+        }
+    }
 
-    // if (kms == NULL) {
-    //     printf("No mapped kernel modules.\n");
-    // } else {
-    //     printf("Kernel module list (%d modules):\n", kms->num);
-    //     for (int i = 0; i < kms->num; i++){
-    //         // printf("\t0x" TARGET_FMT_lx "\t" TARGET_FMT_ld "\t%-24s %s\n", kms->module[i].base, kms->module[i].size, kms->module[i].name, kms->module[i].file);
+    OsiModules *kms = get_modules(cpu);
 
-    //         ModuleID mid={ &kms->module[i]};
+    if (kms == NULL) {
+        printf("No mapped kernel modules.\n");
+    } else {
+        printf("Kernel module list (%d modules):\n", kms->num);
+        for (int i = 0; i < kms->num; i++){
+            // printf("\t0x" TARGET_FMT_lx "\t" TARGET_FMT_ld "\t%-24s %s\n", kms->module[i].base, kms->module[i].size, kms->module[i].name, kms->module[i].file);
 
-    //         int oldgProcSize = (int) gModuleIDs.size();
-    //         // int procIndex = checkNewProc(std::string(kms->module[i].name));
-    //         int procIndex = checkNewModuleID(mid);
-    //         if (oldgProcSize == procIndex){
-    //             // a new proc found
+            ModuleID mid(&kms->module[i]);
 
-    //             // printf("%s: a new kernel module found\n\toffset:\t0x" TARGET_FMT_lx "\tbase:\t0x" TARGET_FMT_lx "\tsize:\t0x" TARGET_FMT_lx 
-    //             // "\n\tname:\t%s\n\tfile:\t%s\n",
-    //             //     __FUNCTION__, 
-    //             //     kms->module[i].offset,
-    //             //     kms->module[i].base,
-    //             //     kms->module[i].size,
-    //             //     kms->module[i].name,  
-    //             //     kms->module[i].file);
-    //             // printf("%s: a new kernel module found\n",
-    //             //     __FUNCTION__);
-    //             // print_mod_info(&kms->module[i]);
-    //         }
-    //         // gAsidToProcIndex[ kms->module[i].base ] = procIndex;
-    //     }
-    // }
+            int oldgProcSize = (int) gModuleIDs.size();
+            // int procIndex = checkNewProc(std::string(kms->module[i].name));
+            int procIndex = checkNewModuleID(mid);
+            if (oldgProcSize == procIndex){
+                // a new proc found
 
-    // // exit(-1);
+                // printf("%s: a new kernel module found\n\toffset:\t0x" TARGET_FMT_lx "\tbase:\t0x" TARGET_FMT_lx "\tsize:\t0x" TARGET_FMT_lx 
+                // "\n\tname:\t%s\n\tfile:\t%s\n",
+                //     __FUNCTION__, 
+                //     kms->module[i].offset,
+                //     kms->module[i].base,
+                //     kms->module[i].size,
+                //     kms->module[i].name,  
+                //     kms->module[i].file);
+                // printf("%s: a new kernel module found\n",
+                //     __FUNCTION__);
+                // print_mod_info(&kms->module[i]);
+            }
+            // gAsidToProcIndex[ kms->module[i].base ] = procIndex;
+        }
+    }
 
-    // // clean up 
-    // // printf("%s: clean up..\n", __FUNCTION__);
-    // // free_osiproc(current);
-    // // free_osiproc(proc); // this will cause seg fault after asid_changed, before calling handle_proc_change func..
-    // free_osimodules(ms);
-    // free_osimodules(kms); //no clean kms in osi_test.c
+    // exit(-1);
+
+    // clean up 
+    // printf("%s: clean up..\n", __FUNCTION__);
+    // free_osiproc(current);
+    // free_osiproc(proc); // this will cause seg fault after asid_changed, before calling handle_proc_change func..
+    free_osimodules(ms);
+    free_osimodules(kms); //no clean kms in osi_test.c
 
     printf("-----------end: %s------------\n\n", __FUNCTION__);
 }
 
-void report_deadspy(void * self){
+void report_deadspy(){
     //lele: ported from deadspy: ExtractDeadMap and Fini
     // 
     //printf("%s: ExtractDeadMap()\n", __FUNCTION__);
@@ -5361,7 +5418,7 @@ void report_deadspy(void * self){
 void uninit_plugin(void *self) {
 
     printf("%s: report deadspy\n", __FUNCTION__);
-    report_deadspy(self);
+    report_deadspy();
     // clear_insn();
 
     printAllProcsFound();
@@ -5488,10 +5545,13 @@ void parse_debug_symbol_info(const char * debug_list){
             // get the value
             std::string line_value = line.substr(pos+1);
 
+            bool is_kernel ;
+
+
             if (line_key == "kernelspace"){
                 printf("%s: get kernel space symbol file: %s: \n",
                     __FUNCTION__, line_value.c_str());
-                
+                is_kernel = true;
                 // read offset
                 std::string offset_line;
                 std::getline(debug_file_names, offset_line);
@@ -5518,27 +5578,38 @@ void parse_debug_symbol_info(const char * debug_list){
                 }
 
                 target_ulong mod_offset, mod_size;//number which will contain the result
-                std::stringstream convert1(offset_value); // stringstream used for the 
-                std::stringstream convert2(size_value); // stringstream used for the conversion initialized with the contents of Text
-                if ( !(convert1 >> mod_offset) ){//give the value to Result using the characters in the string
+                std::stringstream offset_ss(offset_value); // stringstream used for the 
+                std::stringstream size_ss(size_value); // stringstream used for the conversion initialized with the contents of Text
+                if ( !(offset_ss >> std::hex >> mod_offset) ){//give the value to Result using the characters in the string
                     mod_offset = 0;//if that fails set Result to 0
                     printf("%s: cannot cast %s to number\n",__FUNCTION__, offset_value.c_str());
                     exit(-1);
                 }
-                if ( !(convert2 >> mod_size) ){//give the value to Result using the characters in the string
+                if ( !(size_ss >> mod_size) ){//give the value to Result using the characters in the string
                     mod_size = 0;//if that fails set Result to 0
                     printf("%s: cannot cast %s to number\n",__FUNCTION__, size_value.c_str());
                     exit(-1);
                 }
 
-                KDebugFile kdf={line_value, mod_offset, mod_size };
-
-                gKDebugFiles.push_back(kdf);
+                DebugFile df = {is_kernel , line_value, mod_offset, mod_size };
+				
+				printf("%s: mod_offset: 0x" TARGET_FMT_lx "\n", __FUNCTION__, mod_offset);
+				
+				printf("%s: mod_size: 0x" TARGET_FMT_lx "\n", __FUNCTION__, mod_size);
+				
+                gDebugFiles.push_back(df);
 
             }else if (line_key == "userspace"){
+
+                is_kernel = false;
+                
                 printf("%s: get user space symbol file: %s: \n",
                     __FUNCTION__, line_value.c_str());
-                gDebugFiles.push_back(line_value);
+                    
+                DebugFile df = {is_kernel, line_value, 0, 0};
+                
+                gDebugFiles.push_back(df);
+            
             }else{
                 error_debug_symbol_info(debug_list);
             }
@@ -5570,6 +5641,16 @@ bool init_plugin(void *self) {
 
     gTargetPPID = panda_parse_ulong_opt(args, "ppid", 0xffffffff , "the pid of the process to search for");
 
+    testTotal = panda_parse_ulong_opt(args, "testTotal", 0x0 , "a number used to stop the program before it really finished. The number is currently used as the max number of mem ops for the target program");
+	printf("%s: get testTotal: 0x" TARGET_FMT_lx "\n", __FUNCTION__, testTotal);
+	if (testTotal == 0 ){ 
+		gIsTest = false;
+		printf("\tset gIsTest to be false\n");
+	}else{
+		gIsTest = true;
+		printf("\tset gIsTest to be true\n");
+	}
+	
     gTargetIsKernelMod = panda_parse_bool_opt(args, "is_kernel_module", "set if the target is a kernel module; kernel=0 otherwise");
 
     if (gTargetIsKernelMod){
