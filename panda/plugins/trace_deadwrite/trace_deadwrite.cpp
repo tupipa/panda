@@ -5332,18 +5332,23 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
             //ModuleID mid={ &ms->module[i]};
 
             ModuleID mid(&ms->module[i]);
+            
+            if (mid.is_valid){
 
-            int oldgProcSize = (int) gModuleIDs.size();
-            // int procIndex = checkNewProc(std::string(ms->module[i].name));
-            int procIndex = checkNewModuleID(mid);
-            if (oldgProcSize == procIndex){
-                // // a new proc found
+		        int oldgProcSize = (int) gModuleIDs.size();
+		        // int procIndex = checkNewProc(std::string(ms->module[i].name));
+		        int procIndex = checkNewModuleID(mid);
+		        if (oldgProcSize == procIndex){
+		            // // a new proc found
 
-                // printf("%s: a new dynamic lib found\n",
-                    // __FUNCTION__);
-                // print_mod_info(&ms->module[i]);
-            }
-
+		            // printf("%s: a new dynamic lib found\n",
+		                // __FUNCTION__);
+		            // print_mod_info(&ms->module[i]);
+		        }
+			}else{
+				printf("%s: not a valid module, abandon it:\n", __FUNCTION__);
+				print_mod_info(&mid);
+			}
             // gAsidToProcIndex[ ms->module[i].base ] = procIndex;
         }
     }
@@ -5358,26 +5363,24 @@ void handle_proc_change(CPUState *cpu, target_ulong asid, OsiProc *proc) {
             // printf("\t0x" TARGET_FMT_lx "\t" TARGET_FMT_ld "\t%-24s %s\n", kms->module[i].base, kms->module[i].size, kms->module[i].name, kms->module[i].file);
 
             ModuleID mid(&kms->module[i]);
+ 
+            if (mid.is_valid){
 
-            int oldgProcSize = (int) gModuleIDs.size();
-            // int procIndex = checkNewProc(std::string(kms->module[i].name));
-            int procIndex = checkNewModuleID(mid);
-            if (oldgProcSize == procIndex){
-                // a new proc found
-
-                // printf("%s: a new kernel module found\n\toffset:\t0x" TARGET_FMT_lx "\tbase:\t0x" TARGET_FMT_lx "\tsize:\t0x" TARGET_FMT_lx 
-                // "\n\tname:\t%s\n\tfile:\t%s\n",
-                //     __FUNCTION__, 
-                //     kms->module[i].offset,
-                //     kms->module[i].base,
-                //     kms->module[i].size,
-                //     kms->module[i].name,  
-                //     kms->module[i].file);
-                // printf("%s: a new kernel module found\n",
-                //     __FUNCTION__);
-                // print_mod_info(&kms->module[i]);
-            }
-            // gAsidToProcIndex[ kms->module[i].base ] = procIndex;
+		        int oldgProcSize = (int) gModuleIDs.size();
+		        // int procIndex = checkNewProc(std::string(kms->module[i].name));
+		        int procIndex = checkNewModuleID(mid);
+		        if (oldgProcSize == procIndex){
+		            // a new proc found
+		            // printf("%s: a new kernel module found\n",
+		            //     __FUNCTION__);
+		            // print_mod_info(&kms->module[i]);
+		        }
+		        
+			}else{
+				printf("%s: not a valid module, abandon it:\n", __FUNCTION__);
+				print_mod_info(&mid);
+			}
+			
         }
     }
 

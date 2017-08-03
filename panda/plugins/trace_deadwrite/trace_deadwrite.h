@@ -719,6 +719,7 @@ struct ModuleID{
     target_ulong size;
     std::string name;
     std::string file;
+    bool is_valid;
 
     ModuleID(OsiModule *m){
         this->base = m->base;
@@ -729,6 +730,12 @@ struct ModuleID{
             this->name = std::string(m->name);
         else
             this->name = "";
+        
+        if (this->name == "" || this->name == "[???]" || this->name == "???"){
+        	is_valid=false;
+        }else{
+        	is_valid=true;
+        }
 
         if(m->file == NULL)
             this->file="";
