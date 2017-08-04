@@ -3441,7 +3441,7 @@ inline target_ulong GetMeasurementBaseCount(){
     // Prints the complete calling context including the line nunbers and the context's contribution, given a DeadInfo 
     inline VOID PrintIPAndCallingContexts(const DeadInfoForPresentation & di, target_ulong measurementBaseCount){
         // printf("now in func: %s\n", __FUNCTION__);
-        fprintf(gTraceFile,"\n-------------------------------------------------------\n");
+        fprintf(gTraceFile,"\n----------------------------------------\n");
         fprintf(gTraceFile,"\ncount(percentage): " TARGET_FMT_lu " (%e)\n",di.count, di.count * 100.0 / measurementBaseCount);
 // #ifdef MERGE_SAME_LINES
 //         fprintf(gTraceFile,"\n%s",di.pMergedDeadInfo->line1.c_str());                                    
@@ -3462,7 +3462,7 @@ inline target_ulong GetMeasurementBaseCount(){
         fprintf(gTraceFile,"  pc: %p, at %s:%lu: %s\n",(void *)(uintptr_t)(di.pMergedDeadInfo->ip2),file.c_str(),line, func.c_str());
 // #endif //end MERGE_SAME_LINES        
         PrintFullCallingContext(di.pMergedDeadInfo->context2);
-        fprintf(gTraceFile,"-------------------------------------------------------\n");
+        fprintf(gTraceFile,"----------------------------------------\n");
 
         // printf("func: %s: done.\n", __FUNCTION__);
     }
@@ -5496,8 +5496,8 @@ void init_deadspy(const char * prefix){
         return false;
     }
     // Print rw/ addr callers, pc , asid
-    fprintf(gTraceFile, "R/W\taddr\t\t[callers]\tpc\tasid\n");
-    fprintf(gTraceFile_user, "R/W\taddr\t\t[callers]\tpc\tasid\n");
+    // fprintf(gTraceFile, "R/W\taddr\t\t[callers]\tpc\tasid\n");
+    // fprintf(gTraceFile_user, "R/W\taddr\t\t[callers]\tpc\tasid\n");
 
     
 #ifdef GATHER_STATS
