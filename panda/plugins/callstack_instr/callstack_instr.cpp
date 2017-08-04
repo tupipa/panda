@@ -392,7 +392,8 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     if (v.empty()) return 1;
 
     // Search up to 10 down
-    for (int i = v.size()-1; i > ((int)(v.size()-10)) && i >= 0; i--) {
+    // ==> Lele: search up to 500 down
+    for (int i = v.size()-1; i > ((int)(v.size()-500)) && i >= 0; i--) {
         if (tb->pc == v[i].pc) {
             // printf("%s: Matched at depth %d\n",__FUNCTION__, (int) v.size()-i);
             //v.erase(v.begin()+i, v.end());
