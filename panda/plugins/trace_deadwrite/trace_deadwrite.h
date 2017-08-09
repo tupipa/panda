@@ -986,13 +986,13 @@ inline void print_proc_info(const OsiProc *proc);
 
 inline void print_mod_info(const OsiModule *mod);
 
-// inline void printRunningProcs();
+inline void printRunningProcs();
 
 int checkNewProc(std::string procName);
 
 int checkNewProcID(const ProcID & proc);
 
-// void  panda_GetSourceLocation(ADDRINT ip, unsigned long *line, std::string *file, std::string *func);
+void  panda_GetSourceLocation(ADDRINT ip, unsigned long *line, std::string *file, std::string *func);
 
 // the type for the ppp callback fn that can be passed to string search to be called
 // whenever a string match is observed
