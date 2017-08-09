@@ -2972,7 +2972,7 @@ int getLineInfoForAsidIP(target_ulong asid_target, target_ulong ip, FileLineInfo
     if (asidProcIt != gAsidToProcIndex.end()){
         //found the proc name from asid
         procName = gProcs[asidProcIt -> second];
-        printf("%s: found proc name %s, for asid 0x" TARGET_FMT_lx "\n", __FUNCTION__, procName.c_str(), asid_target);
+        // printf("%s: found proc name %s, for asid 0x" TARGET_FMT_lx "\n", __FUNCTION__, procName.c_str(), asid_target);
 
     }else{
         //no proc name found for asid: 
@@ -2992,7 +2992,7 @@ int getLineInfoForAsidIP(target_ulong asid_target, target_ulong ip, FileLineInfo
     if (gProcToDebugFileIndex.count(procName) != 0){
         //found the proc name from asid
         debugFileName = gDebugFiles[gProcToDebugFileIndex[procName]].filename;
-        printf("%s: found debug file for %s: %s\n", __FUNCTION__, procName.c_str(), debugFileName.c_str());
+        // printf("%s: found debug file for %s: %s\n", __FUNCTION__, procName.c_str(), debugFileName.c_str());
         // exit(-1);
 
     }else{
