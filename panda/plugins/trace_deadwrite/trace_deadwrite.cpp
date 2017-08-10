@@ -4673,8 +4673,8 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
 
         // check judge metric, only trust judge_by_struct.
         if(judge_by_struct){
-            printf("%s: good. judge by struct. \n",
-                __FUNCTION__);
+            // printf("%s: good. judge by struct. \n",
+            //     __FUNCTION__);
             // printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
             // //print full info of proc
             // print_proc_info(judge_proc);
@@ -4688,7 +4688,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
             return 1;
         }
 
-        printf("%s: set gIsTargetBlock to be true.\n",__FUNCTION__);
+        // printf("%s: set gIsTargetBlock to be true.\n",__FUNCTION__);
         gIsTargetBlock = true;
         // printf("%s: detect a block for the target process: tb->pc: 0x" TARGET_FMT_lx "\n", __FUNCTION__, tb->pc);
     }
