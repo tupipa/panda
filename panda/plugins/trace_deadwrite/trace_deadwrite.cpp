@@ -4527,19 +4527,20 @@ void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_fu
         // printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
         // //print full info of proc
         // print_proc_info(judge_proc);
-    }
-    else{
+    }else{
 
         // printf("%s(before_block_exec): **** judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n; will not trust this here**** ",
         //     __FUNCTION__, judge_asid, gTargetAsid);
-        return ;
+        // return ;
     }
     
     if(!is_target){
        return ;
     }else{
-        gIsTargetBlock = true;
-        printf("%s(before_block_exec): set true to gIsTargetBlock\n", __FUNCTION__);
+        if(!gIsTargetBlock){
+            gIsTargetBlock = true;
+            printf("%s(before_block_exec): set true to gIsTargetBlock\n", __FUNCTION__);
+        }
     }
 
 
