@@ -393,7 +393,9 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
 
     // Search up to 10 down
     // ==> Lele: search up to 500 down
+    int depth = 0;
     for (int i = v.size()-1; i > ((int)(v.size()-500)) && i >= 0; i--) {
+        depth ++;
         if (tb->pc == v[i].pc) {
             // printf("%s: Matched at depth %d\n",__FUNCTION__, (int) v.size()-i);
             //v.erase(v.begin()+i, v.end());
@@ -402,7 +404,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
             // function_stacks stored all call to function addresses.
             // for each function addr w[i], corresponding a return address v[i] in the stack.
             PPP_RUN_CB(on_ret, cpu, w[i]);
-            PPP_RUN_CB(on_ret2, cpu, tb, w[i]);
+            PPP_RUN_CB(on_ret2, cpu, tb, w[i], depth);
             v.erase(v.begin()+i, v.end());
             w.erase(w.begin()+i, w.end());
 

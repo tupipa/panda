@@ -4506,7 +4506,7 @@ void handle_on_call(CPUState *cpu,TranslationBlock *src_tb, target_ulong dst_fun
  Refer: callstack_instr.h
 
 */
-void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_func){
+void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_func, int depth){
     // target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
     //  target_ulong asid_cur = panda_current_asid_proc_struct(env);
     //  if (asid_cur != gTargetAsid){
@@ -4550,22 +4550,24 @@ void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_fu
     // gInitiatedRet = true;
 
     // detect the ret depth and call GoUpCallChain
-    // search up to 10 depth, according to callstack_instr.cpp
-    int i = 0;
-    int depth = 0;
-    target_ulong functions[10];
-    int func_cnt = get_functions(functions, 10, cpu);
-    for (i=0 ; i < func_cnt; i ++){
-        if (from_func == functions[i]){
-            break;
-        }
-    }
-    depth = i + 1;
+    // search up to 500 depth, according to callstack_instr.cpp
 
-    if (depth > func_cnt){
-        printf("%s(before_block_exec): ERROR: BUG in callstack_instr: ret has no matching from functions in func stack\n", __FUNCTION__);
-        exit(-1);
-    }
+    // int i = 0;
+    // int depth = 0;
+    // target_ulong functions[500];
+    // int func_cnt = get_functions(functions, 500, cpu);
+    // for (i=0 ; i < func_cnt; i ++){
+    //     if (from_func == functions[i]){
+    //         break;
+    //     }
+    // }
+
+    // depth = i + 1;
+
+    // if (depth > func_cnt){
+    //     printf("%s(before_block_exec): ERROR: BUG in callstack_instr: ret has no matching from functions in func stack\n", __FUNCTION__);
+    //     exit(-1);
+    // }
 
     printf("%s(before_block_exec): go up %d function call(s)\n", __FUNCTION__, depth);
 
