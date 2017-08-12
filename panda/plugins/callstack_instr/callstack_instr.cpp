@@ -84,6 +84,8 @@ struct stack_entry {
 csh cs_handle_32;
 csh cs_handle_64;
 
+bool has_ret_after_block = false;
+
 bool init_capstone_done = false;
 
 // Track the different stacks we have seen to handle multiple threads
@@ -394,6 +396,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     // Search up to 10 down
     // ==> Lele: search up to 500 down
     int depth = 0;
+    bool found_ret = false;
     for (int i = v.size()-1; i > ((int)(v.size()-500)) && i >= 0; i--) {
         depth ++;
         if (tb->pc == v[i].pc) {
@@ -403,15 +406,35 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
             // ret to address is the next ip of last call instruction, which is stored in callstack
             // function_stacks stored all call to function addresses.
             // for each function addr w[i], corresponding a return address v[i] in the stack.
+            if(!has_ret_after_block){
+                printf("callstack_instr:(%s): WARNING: no ret instruction after previous block, but here detects a ret, tb->pc: 0x" TARGET_FMT_lx "\n",
+                    __FUNCTION__, tb->pc);
+            }
             PPP_RUN_CB(on_ret, cpu, w[i]);
             PPP_RUN_CB(on_ret2, cpu, tb, w[i], depth);
             v.erase(v.begin()+i, v.end());
             w.erase(w.begin()+i, w.end());
-
+            found_ret = true;
             break;
         }
     }
 
+    //TO detect an important corner case:
+    // program will call himself, or another function, using 'ret' instruction:
+    //  - it first manipulate stack, appending the callee address on top of stack
+    //  - then by 'ret' instruction, it call the callee.
+    //  
+    // in this case, we will have the possibility to miss a function call
+    // But we currently don't deal with it.
+
+    if(found_ret = false){
+        // more check for possible missing ret;
+        if (has_ret_after_block){
+            // got a ret instruction in previous block.
+            printf("callstack_instr:(%s): WARNING: no ret detected according to call stack;but has a ret instruction in previous block\n",
+                __FUNCTION__);
+        }
+    }
     return 0;
 }
 
@@ -436,24 +459,25 @@ int after_block_exec(CPUState* cpu, TranslationBlock *tb) {
         PPP_RUN_CB(on_call, cpu, pc);
         PPP_RUN_CB(on_call2, cpu, tb, pc);
     }
-    else if (tb_type == INSTR_INT) {
-        printf("%s:%s: detect an interrupt\n", __FILE__, __FUNCTION__);
-        stack_entry se = {tb->pc+tb->size,tb_type};
-        callstacks[get_stackid(env)].push_back(se);
+    // else if (tb_type == INSTR_INT) {
+    //     printf("%s:%s: detect an interrupt\n", __FILE__, __FUNCTION__);
+    //     stack_entry se = {tb->pc+tb->size,tb_type};
+    //     callstacks[get_stackid(env)].push_back(se);
 
-        // Also track the function that gets called
-        target_ulong pc, cs_base;
-        uint32_t flags;
-        // This retrieves the pc in an architecture-neutral way
-        cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
-        function_stacks[get_stackid(env)].push_back(pc);
+    //     // Also track the function that gets called
+    //     target_ulong pc, cs_base;
+    //     uint32_t flags;
+    //     // This retrieves the pc in an architecture-neutral way
+    //     cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
+    //     function_stacks[get_stackid(env)].push_back(pc);
 
-        PPP_RUN_CB(on_call2, cpu, tb, pc);
-    }
+    //     PPP_RUN_CB(on_call2, cpu, tb, pc);
+    // }
     // TODO: we might need also detect INSTR_INT
     else if (tb_type == INSTR_RET) {
         //printf("Just executed a RET in TB " TARGET_FMT_lx "\n", tb->pc);
         //if (next) printf("Next TB: " TARGET_FMT_lx "\n", next->pc);
+        has_ret_after_block = true;
     }
 
     return 1;
