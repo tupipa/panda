@@ -427,7 +427,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     // in this case, we will have the possibility to miss a function call
     // But we currently don't deal with it.
 
-    if(found_ret = false){
+    if(!found_ret){
         // more check for possible missing ret;
         if (has_ret_after_block){
             // got a ret instruction in previous block.
