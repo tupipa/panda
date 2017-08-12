@@ -436,20 +436,20 @@ int after_block_exec(CPUState* cpu, TranslationBlock *tb) {
         PPP_RUN_CB(on_call, cpu, pc);
         PPP_RUN_CB(on_call2, cpu, tb, pc);
     }
-    // else if (tb_type == INSTR_INT) {
-    //     printf("%s:%s: detect an interrupt\n", __FILE__, __FUNCTION__);
-    //     stack_entry se = {tb->pc+tb->size,tb_type};
-    //     callstacks[get_stackid(env)].push_back(se);
+    else if (tb_type == INSTR_INT) {
+        printf("%s:%s: detect an interrupt\n", __FILE__, __FUNCTION__);
+        stack_entry se = {tb->pc+tb->size,tb_type};
+        callstacks[get_stackid(env)].push_back(se);
 
-    //     // Also track the function that gets called
-    //     target_ulong pc, cs_base;
-    //     uint32_t flags;
-    //     // This retrieves the pc in an architecture-neutral way
-    //     cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
-    //     function_stacks[get_stackid(env)].push_back(pc);
+        // Also track the function that gets called
+        target_ulong pc, cs_base;
+        uint32_t flags;
+        // This retrieves the pc in an architecture-neutral way
+        cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
+        function_stacks[get_stackid(env)].push_back(pc);
 
-    //     PPP_RUN_CB(on_call2, cpu, tb, pc);
-    // }
+        PPP_RUN_CB(on_call2, cpu, tb, pc);
+    }
     // TODO: we might need also detect INSTR_INT
     else if (tb_type == INSTR_RET) {
         //printf("Just executed a RET in TB " TARGET_FMT_lx "\n", tb->pc);
