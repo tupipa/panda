@@ -4283,7 +4283,8 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
         gNewBlockNode = false;
         // printf("%s:Trace Node already exists\n",__FUNCTION__);
         gCurrentTraceBlock = gTraceIter->second;
-        // printf("%s: reset gCurrentTraceBlock for existed Node\n", __FUNCTION__);
+        printf("%s: reset gCurrentTraceBlock for existed Node, addr: 0x" TARGET_FMT_lx "\n",
+            __FUNCTION__, gCurrentTraceBlock->address);
         gCurrentTraceIpVector = gCurrentTraceBlock->childIPs;
         // printf("%s: reset gCurrentTraceIpVector to %p\n", __FUNCTION__, gCurrentTraceBlock->childIPs);
         
@@ -4322,7 +4323,7 @@ inline void instrumentBeforeBlockExe(CPUState *cpu, TranslationBlock *tb){
 
         BlockNode * newChild = new BlockNode();
         newChild->parent = gCurrentContext;
-        // printf("\tNew Child: set parent as %p\n", gCurrentContext);
+        printf("\tCreating New Child Block Node with tb->pc: 0x" TARGET_FMT_lx ", for context node: 0x" TARGET_FMT_lx "\n", currentIp, gCurrentContext->address);
 
         newChild->address = currentIp;
         // printf("\tNew Child: set address as 0x" TARGET_FMT_lx " \n", currentIp);
