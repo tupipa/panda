@@ -84,8 +84,6 @@ struct stack_entry {
 csh cs_handle_32;
 csh cs_handle_64;
 
-bool has_ret_after_block = false;
-
 bool init_capstone_done = false;
 
 // Track the different stacks we have seen to handle multiple threads
@@ -106,6 +104,10 @@ typedef target_ulong stackid;
 std::map<stackid, std::vector<stack_entry>> callstacks;
 // stackid -> function entry points
 std::map<stackid, std::vector<target_ulong>> function_stacks;
+
+
+std::map<stackid, bool> has_ret_last_block;
+
 // EIP -> instr_type
 std::map<target_ulong, instr_type> call_cache;
 int last_ret_size = 0;
@@ -406,7 +408,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
             // ret to address is the next ip of last call instruction, which is stored in callstack
             // function_stacks stored all call to function addresses.
             // for each function addr w[i], corresponding a return address v[i] in the stack.
-            if(!has_ret_after_block){
+            if(!has_ret_last_block[get_stackid(env)]){
                 printf("callstack_instr:(%s): WARNING: no ret instruction after previous block, but here detects a ret, tb->pc: 0x" TARGET_FMT_lx "\n",
                     __FUNCTION__, tb->pc);
             }
@@ -429,15 +431,15 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
 
     if(!found_ret){
         // more check for possible missing ret;
-        if (has_ret_after_block){
+        if (has_ret_last_block[get_stackid(env)]){
             // got a ret instruction in previous block.
             printf("callstack_instr:(%s): WARNING: no ret detected according to call stack;but has a ret instruction in previous block\n",
                 __FUNCTION__);
         }
     }
 
-    if (has_ret_after_block){
-        has_ret_after_block = false;
+    if (has_ret_last_block[get_stackid(env)]){
+        has_ret_last_block[get_stackid(env)] = false;
     }
     return 0;
 }
@@ -481,7 +483,7 @@ int after_block_exec(CPUState* cpu, TranslationBlock *tb) {
     else if (tb_type == INSTR_RET) {
         //printf("Just executed a RET in TB " TARGET_FMT_lx "\n", tb->pc);
         //if (next) printf("Next TB: " TARGET_FMT_lx "\n", next->pc);
-        has_ret_after_block = true;
+        has_ret_last_block[get_stackid(env)] = true;
     }
 
     return 1;
