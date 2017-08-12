@@ -437,7 +437,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     }
 
     if (has_ret_after_block){
-        has_ret_after_block = true;
+        has_ret_after_block = false;
     }
     return 0;
 }
