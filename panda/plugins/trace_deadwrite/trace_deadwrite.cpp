@@ -2181,7 +2181,7 @@ int mem_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
         // not target process.
 
         if(gIsTargetBlock){
-            printf("--%s: WARNING: target detected at before_block_exec but not detected here, might a process switch??, asid: 0x" TARGET_FMT_lx ", gCurrentTraceBlock->address: 0x " TARGET_FMT_lx "\n", 
+            printf("--%s: WARNING: target detected at before_block_exec but not detected here, might a process switch??, asid: 0x" TARGET_FMT_lx ", gCurrentTraceBlock->address: 0x" TARGET_FMT_lx "\n", 
                 __FUNCTION__, judge_asid, gCurrentTraceBlock->address);
 
             if (judge_by_struct){
@@ -4445,26 +4445,17 @@ void handle_on_call(CPUState *cpu,TranslationBlock *src_tb, target_ulong dst_fun
     bool judge_by_struct;
     target_ulong judge_asid;
     OsiProc *judge_proc;
-    bool is_target = is_target_process_running(cpu, &judge_by_struct, &judge_asid, &judge_proc);
 
-    // // // print judge metric, for debug
-    // if(judge_by_struct){
+    bool is_target;
 
-    //     printf("%s(after_block_exec): judge by name in struct. \n",
-    //         __FUNCTION__);
-        // printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
-    //     //print full info of proc
-    //     print_proc_info(judge_proc);
-    // }
-    // else{
-    //     printf("%s(after_block_exec): judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n",
-    //         __FUNCTION__, judge_asid, gTargetAsid);
-    // }
-    
+    is_target = is_target_process_running(cpu, &judge_by_struct, &judge_asid, &judge_proc);
     if(!is_target){
         // not target process.
         if(gIsTargetBlock){
             printf("%s(after_block_exec): WARNING: target detected at before_block_exec but not detected here, might a process switch??\n", __FUNCTION__);
+
+            printf("\t tb->pc: 0x" TARGET_FMT_lx ", asid: 0x" TARGET_FMT_lx "\n",
+                src_tb->pc, judge_asid);
 
             if (judge_by_struct){
                 printf("current proc info: \n");
@@ -4478,15 +4469,18 @@ void handle_on_call(CPUState *cpu,TranslationBlock *src_tb, target_ulong dst_fun
 
     }else{
         if (! gIsTargetBlock){
-            printf("%s(after_block_exec): WARNING: target not detected at before_block_exec, but detected here, now only trust judge by struct\n", __FUNCTION__);
+            printf("%s(after_block_exec): WARNING: target not detected at before_block_exec, but detected here. switch or cr3 overlap?? Now only trust judge by struct, to avoid cr3 overlap with other processes.\n", __FUNCTION__);
 
-            // if (!judge_by_struct) {
-            //     // judged by asid, not accurate, regard as cr3 overlap.
-            //     // printf(" might be. Judge by asid, don't trust\n");
-            //     return;
-            // }else{
-            //     // printf(" no. \n");
-            // }
+            printf("\ttb->pc: 0x" TARGET_FMT_lx ", asid: 0x" TARGET_FMT_lx "\n",
+                src_tb->pc, judge_asid);
+
+            if (!judge_by_struct) {
+                // judged by asid, not accurate, regard as cr3 overlap.
+                // printf(" might be. Judge by asid, don't trust\n");
+                return;
+            }else{
+                // printf(" no. \n");
+            }
 
             // printf("\tCongratulations!\n");    
             // printf("\t------- judge by proc struct! must be a process switch??\n");
@@ -4494,6 +4488,20 @@ void handle_on_call(CPUState *cpu,TranslationBlock *src_tb, target_ulong dst_fun
             gIsTargetBlock = true;
         }
     }
+        
+    // // // print judge metric, for debug
+    // if(judge_by_struct){
+
+    //     printf("%s(after_block_exec): judge by name in struct. \n",
+    //         __FUNCTION__);
+        // printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
+    //     //print full info of proc
+    //     print_proc_info(judge_proc);
+    // }
+    // else{
+    //     printf("%s(after_block_exec): judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n",
+    //         __FUNCTION__, judge_asid, gTargetAsid);
+    // }
     
     printf("%s(after_block_exec): callstack_instr get a call from block tb->pc: 0x" TARGET_FMT_lx ", to func 0x" TARGET_FMT_lx " \n", __FUNCTION__, src_tb->pc, dst_func);
     
@@ -4564,10 +4572,16 @@ void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_fu
     // }
 
 
-    printf("%s(before_block_exec): callstack_instr detect a ret from func: 0x" TARGET_FMT_lx ", to a target proc's block: tb->pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, from_func, dst_tb->pc);
+    // printf("%s(before_block_exec): callstack_instr detect a ret from func: 0x" TARGET_FMT_lx ", to a target proc's block: tb->pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, from_func, dst_tb->pc);
     
 
-    target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
+    target_ulong asid_cur = panda_current_asid(cpu);
+
+    if(asid_cur != gTargetAsid){
+        // return if not target asid;
+        // here asid is trustworthy, since gProcFound is set.
+        return;
+    }
    
     // CPUArchState* env = (CPUArchState*)cpu->env_ptr;
 
@@ -4577,14 +4591,14 @@ void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_fu
     //if no call stack; already on the root context node;
     // just return it.
     if (v.empty()) {
-        printf("%s: WARNING: ret but have no stack for this block: tb->pc: 0x" TARGET_FMT_lx "\n",
-            __FUNCTION__, dst_tb->pc);
+        printf("%s: WARNING: ret but have no stack for this block: tb->pc: 0x" TARGET_FMT_lx ", of asid: 0x" TARGET_FMT_lx "\n",
+            __FUNCTION__, dst_tb->pc, asid_cur);
         return;
     }
 
     // ==> Lele: search up to 500 down
     int depth_local = 0;
-    // bool found_ret = false;
+    bool found_ret = false;
     for (int i = v.size()-1; i > ((int)(v.size()-500)) && i >= 0; i--) {
         depth_local ++;
         if (dst_tb->pc == v[i]) {
@@ -4596,21 +4610,28 @@ void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_fu
             // for each function addr w[i], corresponding a return address v[i] in the stack.
             v.erase(v.begin()+i, v.end());
             w.erase(w.begin()+i, w.end());
-            // found_ret = true;
+            found_ret = true;
             break;
         }
     }
 
-    if(depth != depth_local){
-        printf("%s: WARNING: depth different, callstack_instr: %d; local: %d\n",__FUNCTION__, depth, depth_local);
-        depth = depth_local;
-        // exit(-1);
+    if(found_ret){
+        printf("%s(before_block_exec): callstack_instr detect a ret from func: 0x" TARGET_FMT_lx ", to a target proc's block: tb->pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, from_func, dst_tb->pc);
+
+        if(depth != depth_local){
+            printf("%s: WARNING: depth different, callstack_instr: %d; local: %d\n",__FUNCTION__, depth, depth_local);
+            depth = depth_local;
+            // exit(-1);
+        }
+
+        printf("%s(before_block_exec): go up %d function call(s)\n", __FUNCTION__, depth);
+
+        GoUpCallChain(cpu, dst_tb, from_func, depth);
+
+    }else{
+        // a call not stored at 'handle_on_call', regarded as invalid.
+        return;
     }
-
-    printf("%s(before_block_exec): go up %d function call(s)\n", __FUNCTION__, depth);
-
-    GoUpCallChain(cpu, dst_tb, from_func, depth);
-
 }
 
 /**
@@ -4871,7 +4892,8 @@ int after_block_exec(CPUState *cpu, TranslationBlock *tb) {
         //printf("########### Now in %s, pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, tb-> pc);
         
         if (! gIsTargetBlock){
-            printf("%s: WARNING: target not detected at before_block_exec, but detected here, tb->pc: 0x " TARGET_FMT_lx ". ??" , __FUNCTION__, tb->pc);
+            printf("%s: WARNING: target not detected at before_block_exec, but detected here, tb->pc: 0x" TARGET_FMT_lx ". asid: 0x" TARGET_FMT_lx " ??" ,
+                __FUNCTION__, tb->pc, judge_asid);
 
             if (!judge_by_struct) {
                 // judged by asid when gProcFound is not set, regard as not accurate.
