@@ -841,6 +841,12 @@ std::tr1::unordered_map<target_ulong, int> gAsidToProcIndex;
 //store currentTargetDebugPath, this should be the same as gDebugFiles[gProcToDebugFileIndex[gProcToMonitor]]
 std::string gCurrentTargetDebugFile;
 
+// gCurrentFuncBlock and gFuncChanged 
+// gCurrentFuncBlock used to track the first block of the current func
+// gFuncChanged used to track 
+// TranslationBlock *gCurrentFuncBlock;
+// bool gFuncChanged;
+
 BlockNode * gCurrentTraceBlock;
 uint32_t gCurrentSlot;
 

@@ -530,6 +530,10 @@ VOID GoDownCallChain(CPUState *cpu, target_ulong callee){
 inline VOID GoUpCallChain(CPUState *cpu, TranslationBlock *dst_tb,  target_ulong from_func, int depth){
 // #ifdef IP_AND_CCT
     //assert(gCurrentContext->parent && "NULL PARENT CTXT");
+
+    // gCurrentFuncBlock = dst_tb;
+    // gFuncChanged = true;
+
     if (gCurrentContext == gRootContext){
         printf("%s: WARNING: RootContext got a return, don't change context node.\n",__FUNCTION__);
         return;
@@ -4474,18 +4478,18 @@ void handle_on_call(CPUState *cpu,TranslationBlock *src_tb, target_ulong dst_fun
 
     }else{
         if (! gIsTargetBlock){
-            printf("%s(after_block_exec): WARNING: target not detected at before_block_exec, but detected here, now check whether it's probably a cr3 overlap? ", __FUNCTION__);
+            printf("%s(after_block_exec): WARNING: target not detected at before_block_exec, but detected here, now only trust judge by struct\n", __FUNCTION__);
 
-            if (!judge_by_struct) {
-                // judged by asid, not accurate, regard as cr3 overlap.
-                printf(" might be. Judge by asid, don't trust\n");
-                return;
-            }else{
-                printf(" no. \n");
-            }
+            // if (!judge_by_struct) {
+            //     // judged by asid, not accurate, regard as cr3 overlap.
+            //     // printf(" might be. Judge by asid, don't trust\n");
+            //     return;
+            // }else{
+            //     // printf(" no. \n");
+            // }
 
-            printf("\tCongratulations!\n");    
-            printf("\t------- not cr3 overlap since judge by proc struct! must be a process switch??\n");
+            // printf("\tCongratulations!\n");    
+            // printf("\t------- judge by proc struct! must be a process switch??\n");
             // exit(-1);
             gIsTargetBlock = true;
         }
