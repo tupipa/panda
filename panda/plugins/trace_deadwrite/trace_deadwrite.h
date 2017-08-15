@@ -847,6 +847,13 @@ std::string gCurrentTargetDebugFile;
 // TranslationBlock *gCurrentFuncBlock;
 // bool gFuncChanged;
 
+// tracking call stack dynamically
+// stackid -> shadow stack
+std::map<target_ulong, std::vector<target_ulong>> gCallStacks;
+// stackid -> function entry points
+std::map<target_ulong, std::vector<target_ulong>> gFunctionStacks;
+
+
 BlockNode * gCurrentTraceBlock;
 uint32_t gCurrentSlot;
 

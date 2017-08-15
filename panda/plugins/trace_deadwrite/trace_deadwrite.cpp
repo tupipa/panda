@@ -4497,7 +4497,20 @@ void handle_on_call(CPUState *cpu,TranslationBlock *src_tb, target_ulong dst_fun
     
     printf("%s(after_block_exec): callstack_instr get a call from block tb->pc: 0x" TARGET_FMT_lx ", to func 0x" TARGET_FMT_lx " \n", __FUNCTION__, src_tb->pc, dst_func);
     
+    // printf("%s: (after_block_exe): update the dynamic stack...\n",__FUNCTION__);
     // 
+    target_ulong stack_entry = src_tb->pc + src_tb->size;
+
+    gCallStacks[judge_asid].push_back(stack_entry);
+
+    // // Also track the function that gets called
+    // target_ulong pc, cs_base;
+    // uint32_t flags;
+    // // This retrieves the pc in an architecture-neutral way
+    // cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
+    gFunctionStacks[judge_asid].push_back(pc);
+
+
     // gInitiatedCall = true;
 
     // Let GoDownCallChain do the work needed to setup pointers for child nodes.
@@ -4512,6 +4525,8 @@ void handle_on_call(CPUState *cpu,TranslationBlock *src_tb, target_ulong dst_fun
 
 */
 void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_func, int depth){
+
+    if(!gProcFound) return;
     // target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
     //  target_ulong asid_cur = panda_current_asid_proc_struct(env);
     //  if (asid_cur != gTargetAsid){
@@ -4519,60 +4534,78 @@ void handle_on_ret(CPUState *cpu, TranslationBlock *dst_tb, target_ulong from_fu
     //  }
 
     // printf("Now in %s(before_block_exec)\n", __FUNCTION__);
-    bool judge_by_struct;
-    target_ulong judge_asid;
-    OsiProc *judge_proc;
-    bool is_target = is_target_process_running(cpu, &judge_by_struct, &judge_asid, &judge_proc);
+    // bool judge_by_struct;
+    // target_ulong judge_asid;
+    // OsiProc *judge_proc;
+    // bool is_target = is_target_process_running(cpu, &judge_by_struct, &judge_asid, &judge_proc);
 
-    // // print judge metric, for debug
-    if(judge_by_struct){
+    // // // print judge metric, for debug
+    // if(judge_by_struct){
 
-        // printf("%s(before_block_exec): judge by struct. \n",
-        //     __FUNCTION__);
-        // printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
-        // //print full info of proc
-        // print_proc_info(judge_proc);
-    }else{
+    //     // printf("%s(before_block_exec): judge by struct. \n",
+    //     //     __FUNCTION__);
+    //     // printf("\tasid: (cpu->cr3): " TARGET_FMT_lx "\n", judge_asid);
+    //     // //print full info of proc
+    //     // print_proc_info(judge_proc);
+    // }else{
 
-        // printf("%s(before_block_exec): **** judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n; will not trust this here**** ",
-        //     __FUNCTION__, judge_asid, gTargetAsid);
-        // return ;
-    }
+    //     // printf("%s(before_block_exec): **** judge by asid: 0x" TARGET_FMT_lx ", target: 0x" TARGET_FMT_lx "\n; will not trust this here**** ",
+    //     //     __FUNCTION__, judge_asid, gTargetAsid);
+    //     // return ;
+    // }
     
-    if(!is_target){
-       return ;
-    }else{
-        if(!gIsTargetBlock){
-            gIsTargetBlock = true;
-            printf("%s(before_block_exec): set true to gIsTargetBlock\n", __FUNCTION__);
-        }
-    }
+    // if(!is_target){
+    //    return ;
+    // }else{
+    //     if(!gIsTargetBlock){
+    //         gIsTargetBlock = true;
+    //         printf("%s(before_block_exec): set true to gIsTargetBlock\n", __FUNCTION__);
+    //     }
+    // }
 
 
     printf("%s(before_block_exec): callstack_instr detect a ret from func: 0x" TARGET_FMT_lx ", to a target proc's block: tb->pc=0x" TARGET_FMT_lx "\n", __FUNCTION__, from_func, dst_tb->pc);
     
-    // 
-    // gInitiatedRet = true;
 
-    // detect the ret depth and call GoUpCallChain
-    // search up to 500 depth, according to callstack_instr.cpp
+    target_ulong asid_cur = panda_current_asid_proc_struct(cpu);
+   
+    // CPUArchState* env = (CPUArchState*)cpu->env_ptr;
 
-    // int i = 0;
-    // int depth = 0;
-    // target_ulong functions[500];
-    // int func_cnt = get_functions(functions, 500, cpu);
-    // for (i=0 ; i < func_cnt; i ++){
-    //     if (from_func == functions[i]){
-    //         break;
-    //     }
-    // }
+    std::vector<target_ulong> &v = gCallStacks[asid_cur];
+    std::vector<target_ulong> &w = gFunctionStacks[asid_cur];
 
-    // depth = i + 1;
+    //if no call stack; already on the root context node;
+    // just return it.
+    if (v.empty()) {
+        printf("%s: WARNING: ret but have no stack for this block: tb->pc: 0x" TARGET_FMT_lx "\n",
+            __FUNCTION__, dst_tb->pc);
+        return;
+    }
 
-    // if (depth > func_cnt){
-    //     printf("%s(before_block_exec): ERROR: BUG in callstack_instr: ret has no matching from functions in func stack\n", __FUNCTION__);
-    //     exit(-1);
-    // }
+    // ==> Lele: search up to 500 down
+    int depth_local = 0;
+    // bool found_ret = false;
+    for (int i = v.size()-1; i > ((int)(v.size()-500)) && i >= 0; i--) {
+        depth_local ++;
+        if (dst_tb->pc == v[i]) {
+            // printf("%s: Matched at depth %d\n",__FUNCTION__, (int) v.size()-i);
+            //v.erase(v.begin()+i, v.end());
+
+            // ret to address is the next ip of last call instruction, which is stored in callstack
+            // gFunctionStacks stored all call to function addresses.
+            // for each function addr w[i], corresponding a return address v[i] in the stack.
+            v.erase(v.begin()+i, v.end());
+            w.erase(w.begin()+i, w.end());
+            // found_ret = true;
+            break;
+        }
+    }
+
+    if(depth != depth_local){
+        printf("%s: WARNING: depth different, callstack_instr: %d; local: %d\n",__FUNCTION__, depth, depth_local);
+        depth = depth_local;
+        // exit(-1);
+    }
 
     printf("%s(before_block_exec): go up %d function call(s)\n", __FUNCTION__, depth);
 
