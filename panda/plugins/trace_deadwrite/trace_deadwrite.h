@@ -655,6 +655,27 @@ struct DebugFile{
 	}
 };
 
+struct KernelSym{
+    target_ulong address;
+    std::string type;
+    std::string function;
+    std::string module_name;
+
+	bool operator==(const KernelSym  & x) const{ 
+		if ( this->address == x.address && this->type == x.type && this->function == x.function){
+            return true;
+        }
+		return false; 
+	}
+
+	bool operator<(const KernelSym  & x) const{
+		if (this->address < x.address){
+            // different asid, compare according to asid.
+            return true;
+        }
+        return false;
+	}
+};
 
 // use asid, pid, ppid to distinguish proces
 // use proc->name only for assistance.
@@ -840,6 +861,11 @@ std::tr1::unordered_map<target_ulong, int> gAsidToProcIndex;
 
 //store currentTargetDebugPath, this should be the same as gDebugFiles[gProcToDebugFileIndex[gProcToMonitor]]
 std::string gCurrentTargetDebugFile;
+
+// System map, mapping kernel address to function names.
+// values read from /boot/System.map-(uname -r), or from /proc/kallsyms
+std::map<target_ulong, KernelSym> gSysMap;
+
 
 // gCurrentFuncBlock and gFuncChanged 
 // gCurrentFuncBlock used to track the first block of the current func

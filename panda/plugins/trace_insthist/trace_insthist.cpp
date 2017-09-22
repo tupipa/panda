@@ -46,11 +46,12 @@ uint64_t bbcount = 0;
 void init_capstone(CPUState *cpu) {
     cs_arch arch;
     cs_mode mode;
-    CPUArchState* env = (CPUArchState *) cpu->env_ptr;
 #ifdef TARGET_I386
+    CPUArchState* env = (CPUArchState *) cpu->env_ptr;
     arch = CS_ARCH_X86;
     mode = env->hflags & HF_LMA_MASK ? CS_MODE_64 : CS_MODE_32;
 #elif defined(TARGET_ARM)
+    CPUArchState* env = (CPUArchState *) cpu->env_ptr;
     arch = CS_ARCH_ARM;
     mode = env->thumb ? CS_MODE_THUMB : CS_MODE_ARM;
 #elif defined(TARGET_PPC)

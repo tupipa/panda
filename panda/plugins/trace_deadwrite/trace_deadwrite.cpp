@@ -3345,12 +3345,36 @@ inline target_ulong GetMeasurementBaseCount(){
 		return ip[slotNo];
 	}
     
+    /*
+    search ip in kernel symbol map file;
+        if found return true;
+        return false if not.
+    */
+
+    bool  search_kernel_map(ADDRINT ip, unsigned long *line, std::string *file, std::string *func){
+        if (gSysMap.count(ip)==0){
+            return false;
+        }else{
+            KernelSym ksym = gSysMap[ip];
+            *line = 0;
+            *file = "module: " + ksym.module_name + " - (" + ksym.type + ")";
+            *func = ksym.function;
+        }
+
+        return true;
+    }
+
     void  panda_GetSourceLocation(ADDRINT ip, unsigned long *line, std::string *file, std::string *func){
         //Lele: given IP, return the line number and file
         // printf("Now in %s for asid: 0x" TARGET_FMT_lx ", ip: 0x" TARGET_FMT_lx "\n",
         //     __FUNCTION__, target_asid, ip);
         
         // std::tr1::unordered_map<ADDRINT, std::tr1::unordered_map<ADDRINT, FileLineInfo *> *>::iterator asidMapIt = gAsidPCtoFileLine.find(target_asid);
+
+        // first search kernel space;
+        if (search_kernel_map(ip, line, file, func)){
+            return ;
+        }
 
         target_ulong target_asid = gTargetAsid;
         target_ulong target_asid_st = gTargetAsid_struct;
@@ -3377,6 +3401,8 @@ inline target_ulong GetMeasurementBaseCount(){
                     // __FUNCTION__, ip, func->c_str(), file->c_str(), (*line));
                 return;
             }
+            //asid map has no record for this ip. 
+
         }else if (gAsidPCtoFileLine.count(target_asid_st) != 0){
 
             asidMap = gAsidPCtoFileLine[target_asid_st];
@@ -5589,6 +5615,79 @@ void error_debug_symbol_info(const char* debug_list){
     exit(-1);
 }
 
+int readSysMap(std:: string sysmap_file){
+
+    std::ifstream fs_sysmap(sysmap_file.c_str());
+
+    if (!fs_sysmap) {
+        printf("Couldn't open %s; no strings to search for. Exiting.\n", sysmap_file.c_str());
+        exit(-1);
+    }
+
+    std::string line;
+    while(std::getline(fs_sysmap, line)) {
+        //
+        // get the address
+        std::size_t pos = line.find(" ");
+        std::string s_address = line.substr(0, pos);
+        // get the rest
+        std::string temp = line.substr(pos+1);
+
+        target_ulong address;
+        //convert string to hex value.
+        std::stringstream address_ss(s_address);
+        if ( !(address_ss >> std::hex >> address) ){//give the value to Result using the characters in the string
+            address = 0;//if that fails set Result to 0
+            printf("%s: cannot cast %s to number\n",__FUNCTION__, s_address.c_str());
+            exit(-1);
+        }
+
+        //find type
+        pos = temp.find(" ");
+        if (pos!= 1){
+            printf("%s: WARNING: type shoudl have one char.\n", __FUNCTION__);
+            exit(-1);
+        }
+        std::string type = temp.substr(0,pos);
+        if (type == "D"){
+            printf("%s: ignore type %s\n",__FUNCTION__, type.c_str());
+            continue;
+        }
+        printf("%s: read type %s\n",__FUNCTION__, type.c_str());
+
+        // get the rest, as func name
+        std::string funct_name = temp.substr(pos+1);
+
+        KernelSym ksym={address, type, funct_name, ""};
+        if (gSysMap.count(address)==0){
+            gSysMap[address] = ksym;
+        }else{
+
+            KernelSym oldksym=gSysMap[address];
+            printf("%s: WARNING: kernel sym read twice: 0x" TARGET_FMT_lx ", old func name: %s, new func name: %s\n",
+                __FUNCTION__, 
+                address,
+                oldksym.function.c_str(),
+                funct_name.c_str()
+            );
+
+            // exit(-1);
+            // combine the type and func name to one:
+
+            ksym.type = oldksym.type + "|" + ksym.type;
+            
+            ksym.function = oldksym.function + "|" + ksym.function;
+            
+            gSysMap[address]=ksym;
+            printf("%s: function combined to one\n", __FUNCTION__);
+            printf("\tfunc type: %s; name: %s\n", ksym.type.c_str(), ksym.function.c_str());
+
+        }
+            
+    }
+
+    return 0;
+}
 void parse_debug_symbol_info(const char * debug_list){
 
     // read the paths from the file
@@ -5675,7 +5774,16 @@ void parse_debug_symbol_info(const char * debug_list){
                 DebugFile df = {is_kernel, line_value, 0, 0};
                 
                 gDebugFiles.push_back(df);
-            
+
+            }else if (line_key == "sysmap"){
+                
+                printf("%s: get kernel space symbol file: %s: \n",
+                    __FUNCTION__, line_value.c_str());
+                
+                // read sysmap <addr, func name> from sys map file;
+                // store it in gSysMap;
+                readSysMap(line_value);
+                
             }else{
                 error_debug_symbol_info(debug_list);
             }
