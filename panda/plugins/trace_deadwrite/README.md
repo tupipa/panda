@@ -16,12 +16,12 @@ You might want to keep all your work saved at some place. So create a directory 
 
 Next, you are able to download the whole experimental environment with just one command:
 
-`docker run -t -i -p 5915:5915 --privileged --name panda -v **/home/test/panda-work**:/root/lab tupipa/panda-net`
+`docker run -t -i -p 5915:5915 --privileged --name panda -v /home/test/panda-work:/root/lab tupipa/panda-net`
 
 Some explainations: 
 `-p 5915:5915` forwards all the traffic to a port 5915 on host to oort 5915 on the container. This is used for VNC access of an qemu virtual machine. 
 `--privileged` allows the container to run qemu with network device, avoiding errors of QEMU's "-net tap" option.
-`-v **/home/test/panda-work**:/root/lab` will share the host directory /home/test/panda-work with directory `/root/lab` inside the container.
+`-v /home/test/panda-work:/root/lab` will share the host directory /home/test/panda-work with directory `/root/lab` inside the container.
 So that you can save files to /root/lab and keep it forever even when you remove your container. 
 If you didn't set up the work dir in setp 1.2, you can just ignore this option.
 
