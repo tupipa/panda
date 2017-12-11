@@ -130,19 +130,26 @@ Full Command
 
 Options:
 
-```
+`
 -net user -net nic -m 512  -monitor stdio
-```
-```
+`
+These are options whatever we use to run the guest vm for recording, but just ignores the image path.
+
+
+`
 -replay [record_file_name] 
-```
-```
--os linux-64-deb7x64 
--panda osi -panda osi_linux -panda asidstory -panda callstack_instr 
-```
-```
+`
+This option tells the PANDA to replay a recorded file.
+
+
+`
+-os linux-64-deb7x64 -panda osi -panda osi_linux -panda asidstory -panda callstack_instr 
+`
+This option enables the osi plugins, asidstory, and callstack_instr plugins. `-os linux-64-deb7x64` tells PANDA the replayed execution is for 'linux' with '64' bit, and its name is 'deb7x64' in the kernel info file `panda/plugins/osi_linux/kernelinfo.conf`.
+
+`
 -panda trace_deadwrite:symInfo="/root/lab/deadwriteBenchmark/ko_dead_array_test/symInfo.text",proc="insmod",is_kernel_module
-```
+`
 
 After finished replaying, the dead write report is written to file 'trace_deadwrite_test_deadwrite_kernel.txt' in the current directory.
 
