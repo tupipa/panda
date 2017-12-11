@@ -14,7 +14,7 @@ You might want to keep all your work saved at some place. So create a directory 
 
 ### 1.3 Run container:
 
-Next, you are able to download the whole experimental environment with just one command:
+Next, you are able to download and run the whole experimental environment with just one command:
 
 `docker run -t -i -p 5915:5915 --privileged --name panda -v /home/test/panda-work:/root/lab tupipa/panda-net`
 
