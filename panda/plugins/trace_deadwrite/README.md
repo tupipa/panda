@@ -44,7 +44,7 @@ wget https://people.debian.org/~aurel32/qemu/amd64/debian_wheezy_amd64_standard.
 
 ```
 cd /root/lab
-git pull https://github.com/panda
+git pull https://github.com/tupipa/panda
 cd panda/
 mkdir build/
 cd build/
