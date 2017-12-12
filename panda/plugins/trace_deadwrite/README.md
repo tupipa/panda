@@ -19,7 +19,7 @@ Next, you are able to download and run the whole experimental environment with j
 `docker run -t -i -p 5915:5915 --privileged --name panda -v /home/test/panda-work:/root/lab tupipa/panda-net`
 
 Some explainations: 
-`-p 5915:5915` forwards all the traffic to a port 5915 on host to oort 5915 on the container. This is used for VNC access of an qemu virtual machine. 
+`-p 5915:5915` forwards all the traffic to a port 5915 on host to port 5915 on the container. This is used for VNC access of an qemu virtual machine. 
 `--privileged` allows the container to run qemu with network device, avoiding errors of QEMU's "-net tap" option.
 `-v /home/test/panda-work:/root/lab` will share the host directory /home/test/panda-work with directory `/root/lab` inside the container.
 So that you can save files to /root/lab and keep it forever even when you remove your container. 
@@ -43,6 +43,7 @@ wget https://people.debian.org/~aurel32/qemu/amd64/debian_wheezy_amd64_standard.
 ### 2.2 download and compile the latest panda
 
 ```
+# inside container
 cd /root/lab
 git pull https://github.com/tupipa/panda
 cd panda/
@@ -57,6 +58,7 @@ You can run PANDA just like how to run QEMU.
 For example, after built, the QEMU executable will be available in /root/lab/panda/build/, 
 then you can run the downloaded Debian image with the following command:
 ```
+# inside container
 /root/lab/panda/build/x86_64-softmmu/qemu-system-x86_64 -net tap -net nic -m 512 /root/lab/images/debian_wheezy_amd64_standard.qcow2 -vnc :15 -monitor stdio
 ```
 
@@ -64,6 +66,7 @@ then you can run the downloaded Debian image with the following command:
 
 Once the QEMU started, it will promote to monitor command line interface:
 ```
+# inside container
 QEMU 2.8.50 monitor - type 'help' for more information
 (qemu) begin_record [record_file_name] //**this command starts recording, execution record will be written to [record_file_name]-rr-snp, and [record_file_name]-rr-nondet.log **
 (qemu)              // **now you can do something inside the Debian guest machine, everything inside will recorded.**
@@ -74,8 +77,10 @@ QEMU 2.8.50 monitor - type 'help' for more information
 
 You can access guest either by VNC viewer, or by ssh inside the container. 
 #### VNC access on host or container
+
 You can access the guest VM with 5915 port on your host. 
-For example, if your host is Ubuntu/Linux, you can run `vncviewer localhost:5
+
+For example, if your host is Ubuntu/Linux, you can run something like `vncviewer localhost:5915`
 
 #### SSH access
 Inside container, the guest VM has an ip address of 192.168.53.89. 
