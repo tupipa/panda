@@ -32,9 +32,9 @@ If you didn't set up the work dir in setp 1.2, you can just ignore this option.
 PANDA is an extension to QEMU, a virtual machine monitor. So to run it, you need to give PANDA a virtual machine image to run.
 For example, you can download Debian image from here: https://people.debian.org/~aurel32/qemu/amd64/.
 
-This plugin is tested under https://people.debian.org/~aurel32/qemu/amd64/debian_wheezy_amd64_standard.qcow2, you can get it via:
-wget by running inside container:
+This plugin is tested under https://people.debian.org/~aurel32/qemu/amd64/debian_wheezy_amd64_standard.qcow2, you can get it via `wget` by running **inside container**:
 ```
+# in container
 cd /root/lab/
 mkdir images
 wget https://people.debian.org/~aurel32/qemu/amd64/debian_wheezy_amd64_standard.qcow2 
@@ -45,7 +45,7 @@ wget https://people.debian.org/~aurel32/qemu/amd64/debian_wheezy_amd64_standard.
 ```
 # inside container
 cd /root/lab
-git pull https://github.com/tupipa/panda
+git clone https://github.com/tupipa/panda.git
 cd panda/
 mkdir build/
 cd build/
@@ -75,7 +75,7 @@ QEMU 2.8.50 monitor - type 'help' for more information
 
 ### 2.4 Access Guest VM Terminal
 
-You can access guest either by VNC viewer, or by ssh inside the container. 
+You can access guest either by VNC viewer on port 5915 of your host, or by using ssh client inside the container. The QEMU guest is running inside container, the QEMU guest has ip of 192.168.53.89 inside container's networks.
 #### VNC access on host or container
 
 You can access the guest VM with 5915 port on your host. 
