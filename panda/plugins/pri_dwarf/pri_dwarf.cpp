@@ -700,6 +700,7 @@ int die_get_type_size (Dwarf_Debug dbg, Dwarf_Die the_die){
                     return -1;
                 // continue enumerating type to get actual type
                 // just "skip" these types by continuing to descend type tree
+                case DW_TAG_restrict_type:
                 case DW_TAG_typedef:
                 case DW_TAG_volatile_type:
                 case DW_TAG_const_type:
@@ -783,7 +784,8 @@ void __dwarf_type_iter (CPUState *cpu, target_ulong base_addr, LocType loc_t,
            tag == DW_TAG_typedef       ||
            tag == DW_TAG_array_type    ||
            tag == DW_TAG_volatile_type ||
-           tag == DW_TAG_const_type)
+           tag == DW_TAG_const_type    ||
+           tag == DW_TAG_restrict_type)
     {
         rc = dwarf_attr (cur_die, DW_AT_type, &type_attr, &err);
         if (rc == DW_DLV_ERROR){
@@ -834,6 +836,17 @@ void __dwarf_type_iter (CPUState *cpu, target_ulong base_addr, LocType loc_t,
                         char *field_name;
                         while (1) // enumerate struct arguments
                         {
+                            do {
+                            Dwarf_Bool hasLocation;
+                            if (dwarf_hasattr(struct_child, DW_AT_bit_size, &hasLocation, &err) != DW_DLV_OK)
+                                die("Error determining bitsize attr\n");
+                            else if (hasLocation)
+                                break;
+                            if (dwarf_hasattr(struct_child, DW_AT_bit_offset, &hasLocation, &err) != DW_DLV_OK)
+                                die("Error determining bitoffset attr\n");
+                            else if (hasLocation)
+                                break;
+
                             rc = dwarf_diename(struct_child, &field_name, &err);
                             struct_offset = get_struct_member_offset(struct_child);
                             if (rc != DW_DLV_OK){
@@ -843,6 +856,8 @@ void __dwarf_type_iter (CPUState *cpu, target_ulong base_addr, LocType loc_t,
                             //printf(" struct: %s, offset: %llu\n", temp_name.c_str(), struct_offset);
                             __dwarf_type_iter(cpu, cur_base_addr + struct_offset, loc_t, dbg,
                                            struct_child, temp_name, cb, recursion_level - 1);
+                            } while (0);
+
                             rc = dwarf_siblingof(dbg, struct_child, &struct_child, &err);
                             if (rc == DW_DLV_ERROR) {
                                 die("Struct: Error getting sibling of DIE\n");
@@ -979,6 +994,7 @@ void __dwarf_type_iter (CPUState *cpu, target_ulong base_addr, LocType loc_t,
                     break;
                 // continue enumerating type to get actual type
                 case DW_TAG_typedef:
+                case DW_TAG_restrict_type:
                 // just "skip" these types by continuing to descend type tree
                 case DW_TAG_volatile_type:
                 case DW_TAG_const_type:
@@ -1028,7 +1044,8 @@ const char *dwarf_type_to_string ( DwarfVarType *var_ty ){
            tag == DW_TAG_typedef       ||
            tag == DW_TAG_array_type    ||
            tag == DW_TAG_volatile_type ||
-           tag == DW_TAG_const_type)
+           tag == DW_TAG_const_type    ||
+           tag == DW_TAG_restrict_type)
     {
         rc = dwarf_attr (cur_die, DW_AT_type, &type_attr, &err);
         if (rc == DW_DLV_ERROR){
@@ -1067,7 +1084,7 @@ const char *dwarf_type_to_string ( DwarfVarType *var_ty ){
                     if (dwarf_child(type_die, &struct_child, &err) != DW_DLV_OK)
                     {
                         //printf("  Couldn't parse struct for var: %s\n",argname.c_str() );
-                        return type_name.c_str();
+                        return strdup(type_name.c_str());
                     }
                     char *field_name;
                     while (1) // enumerate struct arguments
@@ -1083,7 +1100,7 @@ const char *dwarf_type_to_string ( DwarfVarType *var_ty ){
 
                         rc = dwarf_diename(struct_child, &field_name, &err);
                         if (rc != DW_DLV_OK)
-                            strncpy(field_name, "?\0", 2);
+                            field_name = (char *)std::string("?").c_str();
                         //printf("    [+] %s\n", field_name);
                     }
                     break;
@@ -1115,6 +1132,7 @@ const char *dwarf_type_to_string ( DwarfVarType *var_ty ){
                     break;
                 // just "skip" these types by continuing to descend type tree
                 case DW_TAG_typedef: // continue enumerating type to get actual type
+                case DW_TAG_restrict_type:
                 case DW_TAG_ptr_to_member_type: // what to do here?
                 case DW_TAG_imported_declaration:
                 case DW_TAG_unspecified_parameters:

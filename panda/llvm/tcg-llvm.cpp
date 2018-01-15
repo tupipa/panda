@@ -399,7 +399,6 @@ void TCGLLVMContextPrivate::initMemoryHelpers() {
 
 Value* TCGLLVMContextPrivate::getPtrForValue(int idx)
 {
-    //printf("getptrforvalue: %d\n", idx);
     TCGContext *s = m_tcgContext;
     TCGTemp &temp = s->temps[idx];
 
@@ -530,9 +529,6 @@ void TCGLLVMContextPrivate::setValue(int idx, Value *v)
 {
     delValue(idx);
     m_values[idx] = v;
-
-    //Checks that bitwidth of Value equals bitwidth of pointer we're storing to
-    assert(v->getType() == cast<PointerType>(getPtrForValue(idx)->getType())->getElementType());
 
     if(!v->hasName() && !isa<Constant>(v)) {
         if(idx < m_tcgContext->nb_globals)
@@ -1190,6 +1186,9 @@ int TCGLLVMContextPrivate::generateOperation(int opc, const TCGOp *op,
     __ARITH_OP(INDEX_op_and_i32, And, 32)
     __ARITH_OP(INDEX_op_or_i32,   Or, 32)
     __ARITH_OP(INDEX_op_xor_i32, Xor, 32)
+
+    __ARITH_OP_COMPUTE(INDEX_op_andc_i64, 64,
+            m_builder.CreateAnd(v1, m_builder.CreateNot(v2)))
 
     __ARITH_OP_COMPUTE(INDEX_op_andc_i32, 32,
             m_builder.CreateAnd(v1, m_builder.CreateNot(v2)))

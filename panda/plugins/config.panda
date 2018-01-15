@@ -1,5 +1,6 @@
 asidstory
 callstack_instr
+checkpoint_test
 libfi
 loaded
 osi
@@ -24,3 +25,5 @@ trace_deadwrite
 trace_insthist
 #trace_instr
 trace_instrblock
+unigrams
+textprinter

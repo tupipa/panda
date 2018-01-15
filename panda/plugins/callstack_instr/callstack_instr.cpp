@@ -186,20 +186,29 @@ static stackid get_stackid(CPUArchState* env) {
 
 
 void init_capstone(CPUState *cpu) {
-//     cs_arch arch;
-//     cs_mode mode;
-//     CPUArchState* env = (CPUArchState *) cpu->env_ptr;
-// #ifdef TARGET_I386
-//     arch = CS_ARCH_X86;
-//     mode = env->hflags & HF_LMA_MASK ? CS_MODE_64 : CS_MODE_32;
+
+
+// #if defined(TARGET_I386)
+//     if (cs_open(CS_ARCH_X86, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
+//         return false;
+// #if defined(TARGET_X86_64)
+//     if (cs_open(CS_ARCH_X86, CS_MODE_64, &cs_handle_64) != CS_ERR_OK)
+//         return false;
+// #endif
 // #elif defined(TARGET_ARM)
-//     arch = CS_ARCH_ARM;
-//     mode = env->thumb ? CS_MODE_THUMB : CS_MODE_ARM;
+//     if (cs_open(CS_ARCH_ARM, CS_MODE_ARM, &cs_handle_32) != CS_ERR_OK)
+//         return false;
+// #elif defined(TARGET_PPC)
+//     if (cs_open(CS_ARCH_PPC, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
+//         return false;
 // #endif
 
-//     if (cs_open(arch, mode, &handle) != CS_ERR_OK) {
-//         printf("ERROR initializing capstone\n");
-//     }
+//     // Need details in capstone to have instruction groupings
+//     cs_option(cs_handle_32, CS_OPT_DETAIL, CS_OPT_ON);
+// #if defined(TARGET_X86_64)
+//     cs_option(cs_handle_64, CS_OPT_DETAIL, CS_OPT_ON);
+// #endif
+
 
 #if defined(TARGET_I386)
     printf("callstack_instr: %s: i386 arch.\n", __FUNCTION__);
@@ -216,14 +225,14 @@ void init_capstone(CPUState *cpu) {
     if (cs_open(CS_ARCH_PPC, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
 #endif
     {
-    printf("ERROR initializing capstone\n");
-    return ;
+        printf("ERROR initializing capstone\n");
+        return ;
     }   
 
-    // Need details in capstone to have instruction groupings
-    // cs_option(cs_handle_32, CS_OPT_DETAIL, CS_OPT_ON);
+// Need details in capstone to have instruction groupings
+// cs_option(cs_handle_32, CS_OPT_DETAIL, CS_OPT_ON);
 
-    if (cs_option(cs_handle_32, CS_OPT_DETAIL, CS_OPT_ON) != CS_ERR_OK){
+if (cs_option(cs_handle_32, CS_OPT_DETAIL, CS_OPT_ON) != CS_ERR_OK){
         printf("ERROR cs_option 32 bit\n");
         return false;
     }
@@ -234,38 +243,6 @@ void init_capstone(CPUState *cpu) {
             return false;
     }
 #endif
-
-
-    // #if defined(TARGET_I386)
-    //     printf("%s: i386 arch.\n", __FUNCTION__);
-    //     if (cs_open(CS_ARCH_X86, CS_MODE_32, &csh_hd_32) != CS_ERR_OK)
-    //     #if defined(TARGET_X86_64)
-    //         printf("%s: x86_64 arch.\n", __FUNCTION__);
-    //         if (cs_open(CS_ARCH_X86, CS_MODE_64, &csh_hd_64) != CS_ERR_OK)
-    //     #endif
-    // #elif defined(TARGET_ARM)
-    //     printf("%s: ARM arch.\n", __FUNCTION__);
-    //     if (cs_open(CS_ARCH_ARM, CS_MODE_32, &csh_hd_32) != CS_ERR_OK)
-    // #elif defined(TARGET_PPC)
-    //     printf("%s: PPC arch.\n", __FUNCTION__);
-    //     if (cs_open(CS_ARCH_PPC, CS_MODE_32, &csh_hd_32) != CS_ERR_OK)
-    // #endif
-    //      {
-    //         printf("ERROR initializing capstone\n");
-    //         return ;
-    //      }   
-
-    //     // Need details in capstone to have instruction groupings
-    //     if (cs_option(csh_hd_32, CS_OPT_DETAIL, CS_OPT_ON) != CS_ERR_OK){
-    //         printf("ERROR cs_option 32 bit\n");
-    //         return ;
-    //     }
-    // #if defined(TARGET_X86_64)
-    //     if (cs_option(csh_hd_64, CS_OPT_DETAIL, CS_OPT_ON) != CS_ERR_OK){
-    //         printf("ERROR cs_optin for x86_64\n");
-    //         return ;
-    //     }
-    // #endif
 
     printf("callstack_instr: %s: done initializing capstone.\n", __FUNCTION__);
     init_capstone_done = true;
@@ -601,12 +578,13 @@ int get_capstone_handle(CPUArchState* env, csh *handle_ptr){
 #elif defined(TARGET_PPC)
     *handle_ptr = cs_handle_32;
 #endif
-
     return 0;
 }
 
 
 bool init_plugin(void *self) {
+
+// initialization of capstone is move to function "void init_capstone(CPUState *cpu)", Lele.
 
 // #if defined(TARGET_I386)
 //     if (cs_open(CS_ARCH_X86, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
