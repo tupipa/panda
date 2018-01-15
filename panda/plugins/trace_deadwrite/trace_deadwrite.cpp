@@ -5653,7 +5653,7 @@ int readSysMap(std:: string sysmap_file){
             printf("%s: ignore type %s\n",__FUNCTION__, type.c_str());
             continue;
         }
-        printf("%s: read type %s\n",__FUNCTION__, type.c_str());
+        //printf("%s: read type %s\n",__FUNCTION__, type.c_str());
 
         // get the rest, as func name
         std::string funct_name = temp.substr(pos+1);
